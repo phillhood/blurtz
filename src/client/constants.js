@@ -2,6 +2,7 @@
 export const CARD_DIMENSIONS = {
   HEIGHT: 140,
   WIDTH: 100,
+  HEIGHT_RATIO: 1.4,
 };
 
 export const PILE_TYPES = {

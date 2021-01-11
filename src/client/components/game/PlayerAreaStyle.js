@@ -1,17 +1,18 @@
 import styled from 'styled-components';
 
 export const Wrapper = styled.div`
-  height: 100%;
+  height: auto;
   display: grid;
   padding: 10px;
-  grid-template-columns: auto auto auto auto auto auto auto;
+  grid-template-columns: repeat(auto-fit, minmax(10%, 1%));
   background-colour: white;
   justify-content: space-evenly;
   align-content: center;
 `;
 
 export const TwoPlayerContainer = styled.div`
-  height: 32%;
+  height: auto;
+  padding: 10px;
   border: 4px solid black;
   border-radius: ${({ player }) => {
     switch (player) {

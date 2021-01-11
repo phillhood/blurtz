@@ -1,8 +1,12 @@
-import React, { memo } from 'react';
-import { Cardface } from './CardStyle';
+import React from 'react';
+import { Cardface, Value } from './CardStyle';
 
-const Card = ({ cardColour, cardText }) => {
-  return <Cardface colour={cardColour}>{cardText}</Cardface>;
+const Card = (props) => {
+  return (
+    <Cardface type={props.colour.type} colour={props.colour.code}>
+      <Value>{props.value}</Value>
+    </Cardface>
+  );
 };
 
-export default memo(Card);
+export default Card;

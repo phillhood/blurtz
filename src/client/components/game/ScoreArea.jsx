@@ -5,9 +5,9 @@ import Pile from './Pile.jsx';
 
 const { DUTCH } = PILE_TYPES;
 
-const generateDutchPiles = () => {
+const generateDutchPiles = (piles = 0) => {
   const dutchPiles = [];
-  for (let i = 0; i < 8; i++) {
+  for (let i = 0; i < piles; i++) {
     dutchPiles.push(<Pile type={DUTCH} key={`${DUTCH}-${i}`}></Pile>);
   }
   return dutchPiles;

@@ -10,12 +10,12 @@ export const Wrapper = styled.div`
 export const Title = styled.h1`
   text-align: center;
   font-family: 'Germania One', cursive;
-  font-size: 4em;
+  font-size: 3em;
   background: -webkit-linear-gradient(red, white, blue);
   -webkit-background-clip: text;
   -webkit-text-fill-color: transparent;
   -webkit-text-stroke: 2px black;
   text-align: center;
   width: 100%;
-  margin: 10px 0px 10px 0px;
+  margin: 0px 0px 0px 0px;
 `;

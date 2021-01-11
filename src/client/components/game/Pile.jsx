@@ -1,25 +1,31 @@
 import React from 'react';
 import { Wood, Blitz, Discard, Dutch } from './PileStyle';
+import Card from './Card.jsx';
 import { PILE_TYPES } from '../../constants';
 
 const { WOOD, BLITZ, DISCARD, DUTCH } = PILE_TYPES;
 
-const generatePile = (type) => {
+const generatePile = (type, cards) => {
   switch (type) {
     case WOOD:
-      return <Wood></Wood>;
+      return <Wood cards={cards}>{displayCard(cards)}</Wood>;
     case BLITZ:
-      return <Blitz></Blitz>;
+      return <Blitz cards={cards}>{displayCard(cards)}</Blitz>;
     case DISCARD:
-      return <Discard></Discard>;
+      return <Discard cards={cards}>{displayCard(cards)}</Discard>;
     case DUTCH:
-      return <Dutch></Dutch>;
+      return <Dutch cards={cards}>{displayCard(cards)}</Dutch>;
   }
 };
 
+const displayCard = (cards) => {
+  if (!cards.length) return <div></div>;
+  const card = cards[cards.length - 1];
+  return <Card colour={card.colour} value={card.value} faceUp={true}></Card>;
+};
+
 const Pile = (props) => {
-  const type = props.type;
-  return generatePile(type);
+  return generatePile(props.type, props.cards);
 };
 
 export default Pile;

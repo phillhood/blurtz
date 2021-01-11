@@ -2,40 +2,65 @@ import styled from 'styled-components';
 import { CARD_DIMENSIONS } from '../../constants';
 
 export const Discard = styled.div`
-  display: inline;
-  width: ${CARD_DIMENSIONS.WIDTH}px;
-  height: ${({ length }) => {
-    return CARD_DIMENSIONS.HEIGHT + (length > 1 ? length * 20 : 0);
-  }}px;
-  border: 2px solid black;
-  border-radius: 10px;
-  background: lime;
+  & {
+    display: flex;
+    border: 2px solid black;
+    border-radius: 10px;
+    background: lime;
+  }
+  &:before {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
+    padding-bottom: calc(14 / 10 * 100%);
+  }
 `;
 
 export const Wood = styled.div`
-  display: inline;
-  width: ${CARD_DIMENSIONS.WIDTH}px;
-  height: ${({ length }) => {
-    return CARD_DIMENSIONS.HEIGHT + (length > 1 ? length * 20 : 0);
-  }}px;
-  border: 2px solid black;
-  border-radius: 10px;
-  background: brown;
+  & {
+    display: flex;
+    border: 2px solid black;
+    border-radius: 10px;
+    background: brown;
+  }
+  &:before {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
+    padding-bottom: calc(14 / 10 * 100%);
+  }
 `;
 
 export const Blitz = styled.div`
-  display: inline;
-  border: 2px solid black;
-  border-radius: 10px;
-  background: gold;
-  width: ${CARD_DIMENSIONS.WIDTH}px;
-  height: ${CARD_DIMENSIONS.HEIGHT}px;
+  & {
+    display: flex;
+    border: 2px solid black;
+    border-radius: 10px;
+    background: gold;
+  }
+  &:before {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
+    padding-bottom: calc(14 / 10 * 100%);
+  }
 `;
 
 export const Dutch = styled.div`
-  display: inline;
-  border: 2px solid black;
-  border-radius: 10px;
-  width: ${CARD_DIMENSIONS.WIDTH}px;
-  height: ${CARD_DIMENSIONS.HEIGHT}px;
+  & {
+    display: flex;
+    border: 2px solid black;
+    border-radius: 10px;
+    background: white;
+  }
+  &:before {
+    content: '';
+    display: block;
+    height: 0;
+    width: 0;
+    padding-bottom: calc(14 / 10 * 100%);
+  }
 `;
