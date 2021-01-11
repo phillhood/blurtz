@@ -31,3 +31,11 @@ export const Blitz = styled.div`
   width: ${CARD_DIMENSIONS.WIDTH}px;
   height: ${CARD_DIMENSIONS.HEIGHT}px;
 `;
+
+export const Dutch = styled.div`
+  display: inline;
+  border: 2px solid black;
+  border-radius: 10px;
+  width: ${CARD_DIMENSIONS.WIDTH}px;
+  height: ${CARD_DIMENSIONS.HEIGHT}px;
+`;

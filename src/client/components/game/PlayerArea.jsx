@@ -1,4 +1,5 @@
 import React from 'react';
+
 import { PILE_TYPES } from '../../constants';
 import { Wrapper, TwoPlayerContainer } from './PlayerAreaStyle';
 import Pile from './Pile.jsx';

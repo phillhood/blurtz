@@ -1,13 +1,14 @@
 // Design Settings
 export const CARD_DIMENSIONS = {
-  HEIGHT: 160,
-  WIDTH: 110,
+  HEIGHT: 140,
+  WIDTH: 100,
 };
 
 export const PILE_TYPES = {
   WOOD: 'WOOD',
   BLITZ: 'BLITZ',
   DISCARD: 'DISCARD',
+  DUTCH: 'DUTCH',
 };
 
 // Card Settings
