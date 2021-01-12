@@ -6,12 +6,29 @@ const { WOOD, BLITZ, DISCARD } = PILE_TYPES;
 export const SinglePile = styled.div`
   & {
     display: flex;
-    border: 2px solid black;
-    border-radius: 10px;
+    position: relative;
+    ${'' /* border: 2px solid black; */}
+    border-radius: 15px;
+    left: ${({ type }) => {
+      switch (type) {
+        case DISCARD:
+          return '-10px';
+        default:
+          return;
+      }
+    }};
+    top: ${({ type }) => {
+      switch (type) {
+        case DISCARD:
+          return '-10px';
+        default:
+          return;
+      }
+    }};
     background: ${({ type }) => {
       switch (type) {
         case WOOD:
-          return 'gray';
+          return 'saddlebrown';
         case BLITZ:
           return 'gold';
         case DISCARD:
