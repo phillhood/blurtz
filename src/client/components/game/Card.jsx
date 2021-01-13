@@ -13,14 +13,14 @@ const Card = (props) => {
     <Cardface
       ref={drag}
       stack={props.stack}
-      type={props.colour.type}
-      colour={props.colour.code}
+      type={props.type}
+      colour={props.colour}
       opacity={isDragging ? 0.5 : 1}
     >
       <Value>{props.value}</Value>
     </Cardface>
   ) : (
-    <Cardback type={props.colour.type} colour={props.colour.code}></Cardback>
+    <Cardback type={props.type} colour={props.colour}></Cardback>
   );
 };
 
