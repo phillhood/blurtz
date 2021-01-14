@@ -1,0 +1,32 @@
+{
+    "useJoiTypesForThis??": {    
+        "player1": {
+            "wood": {
+                "cards": [],
+                "faceUp": []
+            },
+            "blitz": {
+                "cards": [],
+                "faceUp": []
+            },
+            "discard": {
+                "cards": [],
+                "faceUp": []
+            }
+        },
+        "player2": {
+            "wood": {
+                "cards": [],
+                "faceUp": []
+            },
+            "blitz": {
+                "cards": [],
+                "faceUp": []
+            },
+            "discard": {
+                    "cards": [],
+                    "faceUp": []
+            }
+        }
+    }
+}

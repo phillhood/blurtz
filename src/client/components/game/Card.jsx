@@ -4,9 +4,16 @@ import { Cardface, Cardback, Value } from './CardStyle';
 
 const Card = (props) => {
   const [{ isDragging }, drag] = useDrag({
-    item: { type: props.type },
+    item: { type: props.type, props: props },
+    end: (item, monitor) => {
+      const dropResult = monitor.getItem();
+      if (item && dropResult) {
+        console.log('Dropped  ', item, ' into ', dropResult.type);
+      }
+    },
     collect: (monitor) => ({
-      isDragging: !!monitor.isDragging(),
+      // isDragging: !!monitor.isDragging(),
+      card: monitor.getItem(),
     }),
   });
   return props.faceUp ? (

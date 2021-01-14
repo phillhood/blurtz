@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import _ from 'lodash';
 import { useDrop } from 'react-dnd';
 import { SinglePile } from './PileStyle';
 import Card from './Card.jsx';
 import { PILE_TYPES } from '../../constants';
+// import CardPile from '../../lib/cardpile';
 
 const { WOOD, DISCARD, BLITZ } = PILE_TYPES;
 
@@ -12,33 +14,32 @@ const displayCards = (type, cards) => {
   let stackCounter = 0;
   for (let i = cards.length - 1; i >= 0; i--) {
     const card = cards[i];
-    if (card.faceUp) {
-      shownCards.push(
-        <Card
-          key={`${type}-${i}`}
-          stack={stackCounter++}
-          colour={card.colour}
-          value={card.value}
-          faceUp={card.faceUp}
-          type={type}
-        ></Card>
-      );
-    }
+    shownCards.push(
+      <Card
+        key={`${type}-${i}`}
+        stack={stackCounter++}
+        colour={card.colour}
+        value={card.value}
+        faceUp={card.faceUp}
+        type={type}
+      ></Card>
+    );
   }
   return shownCards;
 };
 
-const updateCards = (type, cards) => {};
+const updateCards = (pile, card) => {
+  pile.push(card);
+};
 
 const Pile = (props) => {
-  const [cards, updateCards] = useState(props.cards);
-  const [{ isOver }, drop] = useDrop({
+  // const [cards, updateCards] = useState(props.cards);
+  const faceUp = _.remove(props.cards, (card) => card.faceUp);
+  const [collectedProps, drop] = useDrop({
     accept: [WOOD, DISCARD, BLITZ],
-    drop: (card, monitor) => {
-      updateCards(card);
-    },
-    collect: (monitor, props) => ({
-      isOver: !!monitor.isOver(),
+    collect: (monitor) => ({
+      // isOver: !!monitor.isOver(),
+      // card: monitor.getItem(),
     }),
   });
   return (
@@ -48,7 +49,7 @@ const Pile = (props) => {
       type={props.type}
       cards={props.cards}
     >
-      {displayCards(props.type, cards)}
+      {displayCards(props.type, faceUp)}
     </SinglePile>
   );
 };

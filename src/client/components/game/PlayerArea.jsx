@@ -3,7 +3,7 @@ import _ from 'lodash';
 import { PILE_TYPES } from '../../constants';
 import { Wrapper, TwoPlayerContainer } from './PlayerAreaStyle';
 import Pile from './Pile.jsx';
-
+import { observe } from '../../lib/game';
 const { WOOD, BLITZ, DISCARD } = PILE_TYPES;
 
 // const init = (deck) => {};
@@ -48,6 +48,7 @@ const distributeCards = (deck) => {
 };
 
 const PlayerArea = (props) => {
+  // const { piles, updateCards } = useState();
   const { wood, blitz, discard } = distributeCards(props.deck);
   return (
     <TwoPlayerContainer player={props.player}>

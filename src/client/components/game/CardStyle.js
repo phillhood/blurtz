@@ -13,7 +13,7 @@ export const Cardface = styled.div`
   font-weight: bold;
   text-align: center;
   vertical-align: middle;
-  ${'' /* box-shadow: 0 0 15pt -5pt black; */}
+  box-shadow: 0 0 3px 0 #000;
   width: 100%;
   height: 100%;
   opacity: ${({ opacity }) => {
