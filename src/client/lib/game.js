@@ -1,5 +1,6 @@
 let observers = [];
 const cardPiles = [];
+
 function emitChange() {
   observers.forEach((o) => o && o(cardPiles));
 }

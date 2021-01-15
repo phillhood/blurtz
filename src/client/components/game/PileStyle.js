@@ -17,14 +17,16 @@ export const SinglePile = styled.div`
           return;
       }
     }};
-    top: ${({ type }) => {
+    ${
+      '' /* top: ${({ type }) => {
       switch (type) {
         case DISCARD:
           return '-10px';
         default:
           return;
       }
-    }};
+    }}; */
+    }
     background: ${({ type }) => {
       switch (type) {
         case WOOD:

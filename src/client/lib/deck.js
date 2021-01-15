@@ -1,4 +1,5 @@
 import _ from 'lodash';
+import { Card } from './card';
 import { COLOURS, CARD_VALUES } from './../constants';
 
 export class Deck {
@@ -18,18 +19,6 @@ export class Deck {
       this.cards[randomIndex] = this.cards[i];
       this.cards[i] = swapSource;
     }
-  }
-}
-
-class Card {
-  constructor(colour, value) {
-    this.colour = colour;
-    this.value = value;
-    this.faceUp = false;
-  }
-
-  flip() {
-    this.faceUp = !this.faceUp;
   }
 }
 

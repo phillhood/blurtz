@@ -4,18 +4,27 @@ import { useDrop } from 'react-dnd';
 import { SinglePile } from './PileStyle';
 import Card from './Card.jsx';
 import { PILE_TYPES } from '../../constants';
-// import CardPile from '../../lib/cardpile';
+import { CardPile } from '../../lib/cardpile';
 
 const { WOOD, DISCARD, BLITZ } = PILE_TYPES;
 
-const displayCards = (type, cards) => {
+const displayCards = (type, cardState, updateCardState) => {
+  const { cards } = cardState;
   if (!cards.length) return <div></div>;
   const shownCards = [];
   let stackCounter = 0;
-  for (let i = cards.length - 1; i >= 0; i--) {
-    const card = cards[i];
+  let card;
+  for (let i in cards) {
+    card = cards[i];
+    // if (card.faceUp) {
     shownCards.push(
       <Card
+        card={card}
+        pickCard={() => {
+          cardState.pickCard();
+          const newState = new CardPile(cardState.cards);
+          updateCardState(newState);
+        }}
         key={`${type}-${i}`}
         stack={stackCounter++}
         colour={card.colour}
@@ -24,32 +33,33 @@ const displayCards = (type, cards) => {
         type={type}
       ></Card>
     );
+    // }
   }
   return shownCards;
 };
 
-const updateCards = (pile, card) => {
-  pile.push(card);
-};
+// const dropCard = (pile, card) => {
+//   console.log(pile, card);
+//   pile.push(card);
+//   return pile;
+// };
 
-const Pile = (props) => {
-  // const [cards, updateCards] = useState(props.cards);
-  const faceUp = _.remove(props.cards, (card) => card.faceUp);
+const Pile = ({ type, cardPile }) => {
+  const [cardState, updateCardState] = useState(cardPile);
+  console.log(cardState);
   const [collectedProps, drop] = useDrop({
     accept: [WOOD, DISCARD, BLITZ],
-    collect: (monitor) => ({
-      // isOver: !!monitor.isOver(),
-      // card: monitor.getItem(),
-    }),
+    drop: (item) => {
+      const newCardState = new CardPile(cardState.cards);
+      newCardState.dropCard(item.props.card);
+      updateCardState(newCardState);
+      console.log(newCardState);
+    },
   });
+  const cards = displayCards(type, cardState, updateCardState);
   return (
-    <SinglePile
-      ref={drop}
-      key={`${props.type}-PILE`}
-      type={props.type}
-      cards={props.cards}
-    >
-      {displayCards(props.type, faceUp)}
+    <SinglePile ref={drop} key={`${type}-PILE`} type={type} cards={cardState}>
+      {cards}
     </SinglePile>
   );
 };

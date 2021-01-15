@@ -3,31 +3,32 @@ import { useDrag } from 'react-dnd';
 import { Cardface, Cardback, Value } from './CardStyle';
 
 const Card = (props) => {
+  const { faceUp, stack, type, colour, value, pickCard } = props;
   const [{ isDragging }, drag] = useDrag({
-    item: { type: props.type, props: props },
+    item: { type: type, props: props },
     end: (item, monitor) => {
-      const dropResult = monitor.getItem();
-      if (item && dropResult) {
-        console.log('Dropped  ', item, ' into ', dropResult.type);
+      const dropResult = monitor.didDrop();
+      if (item && monitor.didDrop()) {
+        pickCard();
       }
     },
     collect: (monitor) => ({
-      // isDragging: !!monitor.isDragging(),
+      isDragging: !!monitor.isDragging(),
       card: monitor.getItem(),
     }),
   });
-  return props.faceUp ? (
+  return faceUp ? (
     <Cardface
       ref={drag}
-      stack={props.stack}
-      type={props.type}
-      colour={props.colour}
+      stack={stack}
+      type={type}
+      colour={colour}
       opacity={isDragging ? 0.5 : 1}
     >
-      <Value>{props.value}</Value>
+      <Value>{value}</Value>
     </Cardface>
   ) : (
-    <Cardback type={props.type} colour={props.colour}></Cardback>
+    <Cardback type={type} colour={colour}></Cardback>
   );
 };
 

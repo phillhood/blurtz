@@ -68,8 +68,61 @@ export const Cardface = styled.div`
 `;
 
 export const Cardback = styled.div`
-  background: black;
-  border-radius: 5px;
+  display: none;
+  ${
+    '' /* background-color: #e5e5f7;
+  opacity: 0.4;
+  background-image: linear-gradient(
+      30deg,
+      #444cf7 12%,
+      transparent 12.5%,
+      transparent 87%,
+      #444cf7 87.5%,
+      #444cf7
+    ),
+    linear-gradient(
+      150deg,
+      #444cf7 12%,
+      transparent 12.5%,
+      transparent 87%,
+      #444cf7 87.5%,
+      #444cf7
+    ),
+    linear-gradient(
+      30deg,
+      #444cf7 12%,
+      transparent 12.5%,
+      transparent 87%,
+      #444cf7 87.5%,
+      #444cf7
+    ),
+    linear-gradient(
+      150deg,
+      #444cf7 12%,
+      transparent 12.5%,
+      transparent 87%,
+      #444cf7 87.5%,
+      #444cf7
+    ),
+    linear-gradient(
+      60deg,
+      #444cf777 25%,
+      transparent 25.5%,
+      transparent 75%,
+      #444cf777 75%,
+      #444cf777
+    ),
+    linear-gradient(
+      60deg,
+      #444cf777 25%,
+      transparent 25.5%,
+      transparent 75%,
+      #444cf777 75%,
+      #444cf777
+    );
+  background-size: 40px 70px;
+  background-position: 0 0, 0 0, 20px 35px, 20px 35px, 0 0, 20px 35px;
+  border-radius: 15px;
   box-sizing: border-box;
   font-size: 72px;
   font-family: 'Germania One';
@@ -78,10 +131,10 @@ export const Cardback = styled.div`
   font-weight: bold;
   text-align: center;
   vertical-align: middle;
-  outline: none;
-  width: 90%;
-  height: 90%;
-  margin: auto;
+  box-shadow: 0 0 3px 0 #000;
+  width: 100%;
+  height: 100%; */
+  }
 `;
 
 export const Value = styled.div`
