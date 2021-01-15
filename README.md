@@ -7,8 +7,8 @@ Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all f
 #### Basic PoC Demo
 
 - [x] Basic UI Components
-- [ ] Design Gamestate
-- [ ] Drag and Drop modifies GameState
+- [x] Design Gamestate
+- [x] Drag and Drop modifies GameState
 - [ ] Move validation
 
 ### Lengthy Goals:
