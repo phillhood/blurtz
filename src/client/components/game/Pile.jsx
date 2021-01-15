@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import _ from 'lodash';
 import { useDrop } from 'react-dnd';
+import useEventListener from '@use-it/event-listener';
 import { SinglePile } from './PileStyle';
 import Card from './Card.jsx';
 import { PILE_TYPES } from '../../constants';
@@ -8,35 +9,58 @@ import { CardPile } from '../../lib/cardpile';
 
 const { WOOD, DISCARD, BLITZ } = PILE_TYPES;
 
-const displayCards = (type, cardState, updateCardState) => {
-  const { cards } = cardState;
+const displayCards = (type, pile, updatePile) => {
+  const { cards } = pile;
   if (!cards.length) return <div></div>;
   const shownCards = [];
-  let stackCounter = 0;
+  let stackCounter = -1;
   let card;
   for (let i in cards) {
     card = cards[i];
-    // if (card.faceUp) {
-    shownCards.push(
-      <Card
-        card={card}
-        pickCard={() => {
-          cardState.pickCard();
-          const newState = new CardPile(cardState.cards);
-          updateCardState(newState);
-        }}
-        key={`${type}-${i}`}
-        stack={stackCounter++}
-        colour={card.colour}
-        value={card.value}
-        faceUp={card.faceUp}
-        type={type}
-      ></Card>
-    );
-    // }
+    if (card.faceUp) {
+      stackCounter++;
+      shownCards.push(
+        <Card
+          card={card}
+          pickCard={() => {
+            pile.pickCard();
+            updatePile(new CardPile(pile.cards));
+          }}
+          key={`${type}-${i}`}
+          stack={stackCounter}
+          colour={card.colour}
+          value={card.value}
+          faceUp={card.faceUp}
+          type={type}
+        ></Card>
+      );
+    }
   }
+  // return type === DISCARD ? shownCards.reverse() : shownCards;
   return shownCards;
 };
+
+const dealHand = ({ cards }) => {
+  const newPile = new CardPile(cards);
+  let numToDeal = 3;
+  let index = cards.length - 1;
+  if (!newPile.faceDown.length) {
+    newPile.cards.forEach((card) => {
+      card.flip();
+      console.log('flip');
+    });
+  } else {
+    while (numToDeal && index > -1) {
+      if (!newPile.cards[index].faceUp) {
+        newPile.cards[index].flip();
+        numToDeal--;
+      }
+      index--;
+    }
+  }
+  return newPile;
+};
+// const
 
 // const dropCard = (pile, card) => {
 //   console.log(pile, card);
@@ -44,21 +68,25 @@ const displayCards = (type, cardState, updateCardState) => {
 //   return pile;
 // };
 
-const Pile = ({ type, cardPile }) => {
-  const [cardState, updateCardState] = useState(cardPile);
-  console.log(cardState);
-  const [collectedProps, drop] = useDrop({
-    accept: [WOOD, DISCARD, BLITZ],
+const Pile = ({ player, type, cardPile }) => {
+  const [pile, updatePile] = useState(cardPile);
+  const [c, drop] = useDrop({
+    accept: type === WOOD ? [WOOD, DISCARD, BLITZ] : '',
     drop: (item) => {
-      const newCardState = new CardPile(cardState.cards);
-      newCardState.dropCard(item.props.card);
-      updateCardState(newCardState);
-      console.log(newCardState);
+      const newpile = new CardPile(pile.cards);
+      newpile.dropCard(item.props.card);
+      updatePile(newpile);
     },
   });
-  const cards = displayCards(type, cardState, updateCardState);
+  const cards = displayCards(type, pile, updatePile);
+  if (type === DISCARD && player === 1)
+    useEventListener('keydown', ({ key }) => {
+      if (key === ' ') {
+        updatePile(dealHand(pile));
+      }
+    });
   return (
-    <SinglePile ref={drop} key={`${type}-PILE`} type={type} cards={cardState}>
+    <SinglePile ref={drop} key={`${type}-PILE`} type={type} cards={pile}>
       {cards}
     </SinglePile>
   );

@@ -38,13 +38,13 @@ const PlayerArea = (props) => {
   return (
     <TwoPlayerContainer player={props.player}>
       <Wrapper>
-        <Pile type={DISCARD} cardPile={discard}></Pile>
-        <Pile type={WOOD} cardPile={wood[0]}></Pile>
-        <Pile type={WOOD} cardPile={wood[1]}></Pile>
-        <Pile type={WOOD} cardPile={wood[2]}></Pile>
-        <Pile type={WOOD} cardPile={wood[3]}></Pile>
-        <Pile type={WOOD} cardPile={wood[4]}></Pile>
-        <Pile type={BLITZ} cardPile={blitz}></Pile>
+        <Pile player={props.player} type={DISCARD} cardPile={discard}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood[0]}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood[1]}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood[2]}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood[3]}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood[4]}></Pile>
+        <Pile player={props.player} type={BLITZ} cardPile={blitz}></Pile>
       </Wrapper>
     </TwoPlayerContainer>
   );

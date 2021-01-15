@@ -3,7 +3,7 @@ import styled from 'styled-components';
 export const Wrapper = styled.div`
   height: auto;
   display: grid;
-  padding: 10px;
+  ${'' /* padding: 10px; */}
   grid-template-columns: repeat(auto-fit, minmax(10%, 1%));
   background-colour: white;
   justify-content: space-evenly;

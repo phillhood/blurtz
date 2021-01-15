@@ -7,8 +7,10 @@ export const SinglePile = styled.div`
   & {
     display: flex;
     position: relative;
+    ${'' /* padding: 4px; */}
     ${'' /* border: 2px solid black; */}
     border-radius: 15px;
+    ${'' /* box-shadow: 0 30px 40px rgba(0, 0, 0, 0.1); */}
     left: ${({ type }) => {
       switch (type) {
         case DISCARD:
