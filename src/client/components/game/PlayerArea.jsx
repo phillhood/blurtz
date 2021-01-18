@@ -9,10 +9,10 @@ const { WOOD, BLITZ, DISCARD } = PILE_TYPES;
 
 const distributeCards = (deck) => {
   const woodPiles = [];
-  const blitz = new CardPile();
+  const blitz = new CardPile(BLITZ);
 
   for (let i = 0; i < 5; i++) {
-    if (!woodPiles[i]) woodPiles[i] = new CardPile();
+    if (!woodPiles[i]) woodPiles[i] = new CardPile(WOOD);
     const card = deck.cards.shift();
     card.flip();
     woodPiles[i].dropCard(card);
@@ -24,7 +24,7 @@ const distributeCards = (deck) => {
     blitz.dropCard(card);
   }
 
-  const discard = new CardPile(_.map(deck.cards));
+  const discard = new CardPile(DISCARD, _.map(deck.cards));
 
   return {
     wood: woodPiles,

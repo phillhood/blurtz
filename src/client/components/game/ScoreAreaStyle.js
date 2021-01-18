@@ -6,11 +6,9 @@ export const ScoreAreaContainer = styled.div`
   height: auto;
   min-height: 80px;
   padding: 10px;
-  margin-top: 1%;
-  margin-bottom: 1%;
-  ${'' /* background-color: white; */}
+  margin-top: 10%;
+  margin-bottom: 10%;
   border-radius: 25px;
-  ${'' /* border: 4px solid black; */}
   grid-template-columns: repeat(8, minmax(10%, 1%));
   justify-content: space-evenly;
   align-content: center;

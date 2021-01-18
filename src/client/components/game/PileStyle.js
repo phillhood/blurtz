@@ -1,14 +1,17 @@
 import styled from 'styled-components';
 import { PILE_TYPES } from '../../constants';
 
-const { WOOD, BLITZ, DISCARD } = PILE_TYPES;
+const { WOOD, BLITZ, DUTCH, DISCARD } = PILE_TYPES;
 
 export const SinglePile = styled.div`
   & {
     display: flex;
     position: relative;
     ${'' /* padding: 4px; */}
-    ${'' /* border: 2px solid black; */}
+    border: ${({ type, cards }) =>
+      (!cards.cards.length && type === DUTCH) || type === DISCARD
+        ? '2px solid black'
+        : ''};
     border-radius: 15px;
     ${'' /* box-shadow: 0 30px 40px rgba(0, 0, 0, 0.1); */}
     left: ${({ type }) => {
