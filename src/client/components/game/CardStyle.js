@@ -36,14 +36,14 @@ export const Cardface = styled.div`
     }
   }};
   left: ${({ type, stack }) => {
-    if (stack > 0 && type === PILE_TYPES.DISCARD) {
+    if (stack > 0 && type === PILE_TYPES.WOOD) {
       return `${(stack % 3) * 10}px`;
     } else {
       return '0';
     }
   }};
   right: ${({ type, stack }) => {
-    if (stack > 0 && type === PILE_TYPES.DISCARD) {
+    if (stack > 0 && type === PILE_TYPES.WOOD) {
       return `${stack * 10}px`;
     } else {
       return '0';

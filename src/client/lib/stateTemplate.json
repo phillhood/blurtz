@@ -1,7 +1,7 @@
 {
     "useJoiTypesForThis??": {    
         "player1": {
-            "wood": {
+            "post": {
                 "cards": [],
                 "faceUp": []
             },
@@ -9,13 +9,13 @@
                 "cards": [],
                 "faceUp": []
             },
-            "discard": {
+            "wood": {
                 "cards": [],
                 "faceUp": []
             }
         },
         "player2": {
-            "wood": {
+            "post": {
                 "cards": [],
                 "faceUp": []
             },
@@ -23,7 +23,7 @@
                 "cards": [],
                 "faceUp": []
             },
-            "discard": {
+            "wood": {
                     "cards": [],
                     "faceUp": []
             }

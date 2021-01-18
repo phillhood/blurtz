@@ -1,7 +1,7 @@
 import _ from 'lodash';
 import { PILE_TYPES } from '../constants';
 
-const { DISCARD } = PILE_TYPES;
+const { WOOD } = PILE_TYPES;
 
 export class CardPile {
   constructor(type, cards = []) {
@@ -15,7 +15,7 @@ export class CardPile {
 
   _updateCards() {
     let cardsCopy = this.cards.slice();
-    if (this.type === DISCARD) {
+    if (this.type === WOOD) {
       cardsCopy.reverse();
     }
     this.faceUp = _.filter(cardsCopy, (card) => {

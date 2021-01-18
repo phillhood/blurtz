@@ -6,9 +6,9 @@ import { SinglePile } from './PileStyle';
 import Card from './Card.jsx';
 import { PILE_TYPES } from '../../constants';
 import { CardPile } from '../../lib/cardpile';
-import { allowWoodDrop, allowDutchDrop } from '../../lib/game';
+import { allowPostDrop, allowDutchDrop } from '../../lib/game';
 
-const { WOOD, DISCARD, DUTCH, BLITZ } = PILE_TYPES;
+const { POST, WOOD, DUTCH, BLITZ } = PILE_TYPES;
 
 const displayCards = (type, pile, updatePile) => {
   const { cards, faceUp } = pile;
@@ -58,8 +58,8 @@ const dealHand = ({ type, cards }) => {
 
 const allowDrop = (type, pile, card) => {
   switch (type) {
-    case WOOD:
-      return allowWoodDrop(pile, card);
+    case POST:
+      return allowPostDrop(pile, card);
     case DUTCH:
       return allowDutchDrop(pile, card);
   }
@@ -67,13 +67,13 @@ const allowDrop = (type, pile, card) => {
 
 const acceptDrop = (type) => {
   switch (type) {
-    case WOOD:
-      return [WOOD, DISCARD, BLITZ];
+    case POST:
+      return [POST, WOOD, BLITZ];
     case DUTCH:
-      return [WOOD, DISCARD, BLITZ];
+      return [POST, WOOD, BLITZ];
     case BLITZ:
       return '';
-    case DISCARD:
+    case WOOD:
       return '';
   }
 };
@@ -91,7 +91,7 @@ const Pile = ({ player, type, cardPile }) => {
       updatePile(newpile);
     },
   });
-  if (type === DISCARD && player === 1)
+  if (type === WOOD && player === 1)
     useEventListener('keydown', ({ key }) => {
       if (key === ' ') {
         updatePile(dealHand(pile));

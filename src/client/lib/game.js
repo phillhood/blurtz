@@ -1,4 +1,4 @@
-export const allowWoodDrop = (pile, card) => {
+export const allowPostDrop = (pile, card) => {
   if (!pile.faceUp.length) {
     if (card.type === 'BLITZ') {
       return true;

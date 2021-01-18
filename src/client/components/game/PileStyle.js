@@ -1,44 +1,32 @@
 import styled from 'styled-components';
 import { PILE_TYPES } from '../../constants';
 
-const { WOOD, BLITZ, DUTCH, DISCARD } = PILE_TYPES;
+const { POST, BLITZ, DUTCH, WOOD } = PILE_TYPES;
 
 export const SinglePile = styled.div`
   & {
     display: flex;
     position: relative;
-    ${'' /* padding: 4px; */}
     border: ${({ type, cards }) =>
-      (!cards.cards.length && type === DUTCH) || type === DISCARD
+      (!cards.cards.length && type === DUTCH) || type === WOOD
         ? '2px solid black'
         : ''};
     border-radius: 15px;
-    ${'' /* box-shadow: 0 30px 40px rgba(0, 0, 0, 0.1); */}
     left: ${({ type }) => {
       switch (type) {
-        case DISCARD:
+        case WOOD:
           return '-10px';
         default:
           return;
       }
     }};
-    ${
-      '' /* top: ${({ type }) => {
-      switch (type) {
-        case DISCARD:
-          return '-10px';
-        default:
-          return;
-      }
-    }}; */
-    }
     background: ${({ type }) => {
       switch (type) {
-        case WOOD:
+        case POST:
           return 'saddlebrown';
         case BLITZ:
           return 'gold';
-        case DISCARD:
+        case WOOD:
           return 'lime';
       }
     }};

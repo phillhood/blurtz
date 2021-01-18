@@ -5,17 +5,17 @@ import { Wrapper, TwoPlayerContainer } from './PlayerAreaStyle';
 import Pile from './Pile.jsx';
 // import { observe } from '../../lib/game';
 import { CardPile } from '../../lib/cardpile';
-const { WOOD, BLITZ, DISCARD } = PILE_TYPES;
+const { POST, BLITZ, WOOD } = PILE_TYPES;
 
 const distributeCards = (deck) => {
-  const woodPiles = [];
+  const postPiles = [];
   const blitz = new CardPile(BLITZ);
 
   for (let i = 0; i < 5; i++) {
-    if (!woodPiles[i]) woodPiles[i] = new CardPile(WOOD);
+    if (!postPiles[i]) postPiles[i] = new CardPile(POST);
     const card = deck.cards.shift();
     card.flip();
-    woodPiles[i].dropCard(card);
+    postPiles[i].dropCard(card);
   }
 
   for (let i = 0; i < 10; i++) {
@@ -24,26 +24,26 @@ const distributeCards = (deck) => {
     blitz.dropCard(card);
   }
 
-  const discard = new CardPile(DISCARD, _.map(deck.cards));
+  const wood = new CardPile(WOOD, _.map(deck.cards));
 
   return {
-    wood: woodPiles,
+    post: postPiles,
     blitz: blitz,
-    discard: discard,
+    wood: wood,
   };
 };
 
 const PlayerArea = (props) => {
-  const { wood, blitz, discard } = distributeCards(props.deck);
+  const { post, blitz, wood } = distributeCards(props.deck);
   return (
     <TwoPlayerContainer player={props.player}>
       <Wrapper>
-        <Pile player={props.player} type={DISCARD} cardPile={discard}></Pile>
-        <Pile player={props.player} type={WOOD} cardPile={wood[0]}></Pile>
-        <Pile player={props.player} type={WOOD} cardPile={wood[1]}></Pile>
-        <Pile player={props.player} type={WOOD} cardPile={wood[2]}></Pile>
-        <Pile player={props.player} type={WOOD} cardPile={wood[3]}></Pile>
-        <Pile player={props.player} type={WOOD} cardPile={wood[4]}></Pile>
+        <Pile player={props.player} type={WOOD} cardPile={wood}></Pile>
+        <Pile player={props.player} type={POST} cardPile={post[0]}></Pile>
+        <Pile player={props.player} type={POST} cardPile={post[1]}></Pile>
+        <Pile player={props.player} type={POST} cardPile={post[2]}></Pile>
+        <Pile player={props.player} type={POST} cardPile={post[3]}></Pile>
+        <Pile player={props.player} type={POST} cardPile={post[4]}></Pile>
         <Pile player={props.player} type={BLITZ} cardPile={blitz}></Pile>
       </Wrapper>
     </TwoPlayerContainer>

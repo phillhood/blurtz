@@ -6,9 +6,9 @@ export const CARD_DIMENSIONS = {
 };
 
 export const PILE_TYPES = {
-  WOOD: 'WOOD',
+  POST: 'POST',
   BLITZ: 'BLITZ',
-  DISCARD: 'DISCARD',
+  WOOD: 'WOOD',
   DUTCH: 'DUTCH',
 };
 
