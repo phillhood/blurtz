@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { PILE_TYPES } from '../../constants';
+import { PILE_TYPES } from '../../lib/constants';
 
 const { POST, BLITZ, DUTCH, WOOD } = PILE_TYPES;
 

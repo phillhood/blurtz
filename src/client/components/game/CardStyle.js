@@ -1,5 +1,5 @@
 import styled from 'styled-components';
-import { PILE_TYPES } from '../../constants';
+import { PILE_TYPES } from '../../lib/constants';
 
 export const Cardface = styled.div`
   background-color: ${({ colour }) => colour.code};
@@ -19,7 +19,6 @@ export const Cardface = styled.div`
   opacity: ${({ opacity }) => {
     opacity;
   }};
-  ${'' /* margin: auto; */}
   position: ${({ stack }) => {
     if (stack > 0) {
       return 'absolute';

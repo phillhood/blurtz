@@ -3,7 +3,7 @@ import { useDrag } from 'react-dnd';
 import { Cardface, Cardback, Value } from './CardStyle';
 
 const Card = (props) => {
-  const { faceUp, stack, type, colour, value, pickCard } = props;
+  const { draggable, faceUp, stack, type, colour, value, pickCard } = props;
   const [{ isDragging }, drag] = useDrag({
     item: { type: type, props: props },
     end: (item, monitor) => {
@@ -19,7 +19,7 @@ const Card = (props) => {
   });
   return faceUp ? (
     <Cardface
-      ref={drag}
+      ref={draggable ? drag : () => {}}
       stack={stack}
       type={type}
       colour={colour}

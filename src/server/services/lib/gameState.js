@@ -1,6 +1,6 @@
 import _ from 'lodash';
 
-import Player from './player';
+import Player from './player.js';
 
 export default class GameState {
   constructor(playerIds) {

@@ -1,8 +1,8 @@
 import React from 'react';
 import { Game } from '../../components';
 
-const GameContainer = () => {
-  return <Game />;
+const GameContainer = ({ data }) => {
+  return <Game data={data} />;
 };
 
 export default GameContainer;

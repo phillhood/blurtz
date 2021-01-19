@@ -1,8 +1,8 @@
 import _ from 'lodash';
-import { Deck } from './lib/deck';
-import { Pile } from './lib/pile';
-import { PILE_TYPES } from './lib/constants';
-import GameState from './lib/gameState';
+import { Deck } from './lib/deck.js';
+import { Pile } from './lib/pile.js';
+import { PILE_TYPES } from './lib/constants.js';
+import GameState from './lib/gameState.js';
 
 const { POST, BLITZ, WOOD } = PILE_TYPES;
 
@@ -32,10 +32,12 @@ const distributeCards = (deck) => {
   };
 };
 
-export const newGame = (players) => {
+const newGame = (players) => {
   const newGame = new GameState(players);
   for (const player of newGame.players) {
     player.setDeck(distributeCards(new Deck()));
   }
   return newGame;
 };
+
+export default newGame;

@@ -16,9 +16,9 @@ export const TwoPlayerContainer = styled.div`
   border: 4px solid black;
   border-radius: ${({ player }) => {
     switch (player) {
-      case 1:
+      case '1':
         return '25px 25px 10px 10px';
-      case 2:
+      case '2':
         return '10px 10px 25px 25px';
       default:
         return '25px';
@@ -27,9 +27,9 @@ export const TwoPlayerContainer = styled.div`
   }
   background-image: ${({ player }) => {
     switch (player) {
-      case 1:
+      case '1':
         return 'linear-gradient(white, blue)';
-      case 2:
+      case '2':
         return 'linear-gradient(red, white)';
       default:
         return 'linear-gradient(red, blue)';

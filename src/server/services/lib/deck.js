@@ -1,6 +1,6 @@
 import _ from 'lodash';
-import { Card } from './card';
-import { COLOURS, CARD_VALUES } from './constants';
+import { Card } from './card.js';
+import { COLOURS, CARD_VALUES } from './constants.js';
 
 export class Deck {
   constructor(cards = generateDeck()) {

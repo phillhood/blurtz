@@ -4,13 +4,17 @@ import { useDrop } from 'react-dnd';
 import useEventListener from '@use-it/event-listener';
 import { SinglePile } from './PileStyle';
 import Card from './Card.jsx';
-import { PILE_TYPES } from '../../constants';
+import { PILE_TYPES } from '../../lib/constants';
 import { CardPile } from '../../lib/cardpile';
 import { allowPostDrop, allowDutchDrop } from '../../lib/game';
 
 const { POST, WOOD, DUTCH, BLITZ } = PILE_TYPES;
 
-const displayCards = (type, pile, updatePile) => {
+const checkPlayer1 = (player) => {
+  return player === '1';
+};
+
+const displayCards = (player, type, pile, updatePile) => {
   const { cards, faceUp } = pile;
   if (!cards.length) return <div></div>;
   const shownCards = [];
@@ -22,6 +26,7 @@ const displayCards = (type, pile, updatePile) => {
     shownCards.push(
       <Card
         card={card}
+        draggable={checkPlayer1(player)}
         pickCard={() => {
           pile.pickCard();
           updatePile(new CardPile(type, pile.cards));
@@ -91,13 +96,14 @@ const Pile = ({ player, type, cardPile }) => {
       updatePile(newpile);
     },
   });
-  if (type === WOOD && player === 1)
+  if (type === WOOD && player === '1')
     useEventListener('keydown', ({ key }) => {
+      console.log('SPESSSSBRRRRRR');
       if (key === ' ') {
         updatePile(dealHand(pile));
       }
     });
-  const cards = displayCards(type, pile, updatePile);
+  const cards = displayCards(player, type, pile, updatePile);
   return (
     <SinglePile ref={drop} key={`${type}-PILE`} type={type} cards={pile}>
       {cards}

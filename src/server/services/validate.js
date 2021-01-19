@@ -1,4 +1,4 @@
-import { PILE_TYPES } from './constants';
+import { PILE_TYPES } from './lib/constants.js';
 
 const { BLITZ } = PILE_TYPES;
 

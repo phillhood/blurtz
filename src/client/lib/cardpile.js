@@ -1,5 +1,5 @@
 import _ from 'lodash';
-import { PILE_TYPES } from '../constants';
+import { PILE_TYPES } from './constants';
 
 const { WOOD } = PILE_TYPES;
 

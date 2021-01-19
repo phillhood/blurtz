@@ -1,6 +1,6 @@
 import React from 'react';
 import { ScoreAreaContainer } from './ScoreAreaStyle';
-import { PILE_TYPES } from '../../constants';
+import { PILE_TYPES } from '../../lib/constants';
 import Pile from './Pile.jsx';
 import { CardPile } from '../../lib/cardpile';
 
