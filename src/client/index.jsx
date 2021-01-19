@@ -1,12 +1,11 @@
 import React from 'react';
 import ReactDOM from 'react-dom';
-// import { Provider } from "react-redux";
-// import store from "./store";
+import { Auth0Provider } from '@auth0/auth0-react';
 import App from './App';
 
 ReactDOM.render(
-  // <Provider store={store}>
-  <App />,
-  // </Provider>,
+  <Auth0Provider domain="" clientId="" redirectUri={window.location.origin}>
+    <App />
+  </Auth0Provider>,
   document.getElementById('root')
 );

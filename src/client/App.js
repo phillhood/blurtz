@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import socketIOClient from 'socket.io-client';
 import { Wrapper, Title } from './AppStyle';
 import { GameContainer } from './containers';
+import { SettingsContainer } from './containers';
 
 const ENDPOINT = 'http://localhost:8080';
 
@@ -25,6 +26,7 @@ function App() {
         <span>NederBlutz!</span>
       </Title>
       <GameContainer data={gameState} />
+      <SettingsContainer />
     </Wrapper>
   );
 }

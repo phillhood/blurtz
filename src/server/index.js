@@ -6,13 +6,16 @@ import newGame from './services/newGame.js';
 const app = express();
 const server = http.createServer(app);
 const io = new Server(server, {
-  // stuff
+  cors: {
+    origin: 'http://localhost:3000',
+    methods: ['GET', 'POST'],
+  },
 });
 
 app.use(express.static('dist'));
 
 io.on('connection', (socket) => {
-  console.log('new connection: ', socket);
+  console.log('new connection: ', socket.sockets);
 });
 
 server.listen(process.env.PORT || 8080, () =>
