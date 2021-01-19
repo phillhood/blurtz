@@ -6,18 +6,16 @@ import { Deck } from './../../lib/deck';
 import PlayerArea from './PlayerArea.jsx';
 import ScoreArea from './ScoreArea.jsx';
 
-const deck1 = new Deck();
-const deck2 = new Deck();
+const deck1 = new Deck(); // get Player Deck
+const deck2 = new Deck(); // get Opponnent Deck
 
 const Game = ({ onRightClickBoard }) => {
   return (
     <DndProvider backend={HTML5Backend}>
       <Wrapper onContextMenu={onRightClickBoard}>
-        {/* <Container> */}
         <PlayerArea player={2} deck={deck2}></PlayerArea>
-        <ScoreArea></ScoreArea>
+        <ScoreArea />
         <PlayerArea player={1} deck={deck1}></PlayerArea>
-        {/* </Container> */}
       </Wrapper>
     </DndProvider>
   );

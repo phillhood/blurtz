@@ -1,13 +1,18 @@
-const express = require("express");
-const os = require("os");
+const express = require('express');
+const socketIO = require('socket.io');
 
 const app = express();
 
-app.use(express.static("dist"));
-app.get("/api/getUsername", (req, res) =>
-  res.send({ username: os.userInfo().username })
-);
+app.use(express.static('dist'));
 
-app.listen(process.env.PORT || 8080, () =>
+const server = app.listen(process.env.PORT || 8080, () =>
   console.log(`Listening on port ${process.env.PORT || 8080}!`)
 );
+
+const io = socketIO.listen(server);
+
+io.on('connection', (socket) => {
+  socket.on('event', (message) => {
+    socket.broadcast.emit('event', message);
+  });
+});

@@ -1,11 +1,10 @@
 import React from 'react';
-import { useDrop } from 'react-dnd';
 import { ScoreAreaContainer } from './ScoreAreaStyle';
 import { PILE_TYPES } from '../../constants';
 import Pile from './Pile.jsx';
 import { CardPile } from '../../lib/cardpile';
 
-const { POST, WOOD, DUTCH, BLITZ } = PILE_TYPES;
+const { DUTCH } = PILE_TYPES;
 
 const generateDutchPiles = (piles) => {
   const dutchPiles = [];
@@ -23,12 +22,6 @@ const generateDutchPiles = (piles) => {
 
 const ScoreArea = () => {
   const numPiles = 8;
-  const [cardProps, drop] = useDrop({
-    accept: [POST, WOOD, BLITZ],
-    drop: (item) => {
-      // const newPile = new CardPile(DUTCH, [item.card]);
-    },
-  });
   const piles = generateDutchPiles(numPiles);
   return <ScoreAreaContainer>{piles}</ScoreAreaContainer>;
 };

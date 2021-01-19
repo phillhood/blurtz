@@ -15,7 +15,7 @@ Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all f
 
 #### Gamestate handled by server:
 
-- [ ] Server Gamestate API
+- [WIP] Server Gamestate API
 - [ ] Multiplayer (initially 2)
 - [ ] User profiles/logins
 - [ ] Score tracking across games
