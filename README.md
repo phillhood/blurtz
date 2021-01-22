@@ -1,6 +1,6 @@
 # NederBlutz!
 
-Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all full-stack project to teach myself new skills and bursh up on old skills. The goals and scope will probably increase overtime as I figure out what I'm doing ;)
+Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all full-stack project to teach myself new skills and brush up on old skills. The goals and scope will probably increase overtime as I figure out what I'm doing ;)
 
 ## Progress Checklist:
 
