@@ -1,6 +1,6 @@
 # NederBlutz!
 
-Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all full-stack project to teach myself new and relearn old skills. The goals and scope will probably increase overtime as I figure out what I'm doing ;)
+Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all full-stack project to teach myself new skills and bursh up on old skills. The goals and scope will probably increase overtime as I figure out what I'm doing ;)
 
 ## Progress Checklist:
 
@@ -15,7 +15,7 @@ Nederblutz is a simple clone of dutch blitz, made for fun! This is a catch-all f
 
 #### Gamestate handled by server:
 
-- [WIP] Server Gamestate API
+ [WIP] Server Gamestate API
 - [ ] Multiplayer (initially 2)
 - [ ] User profiles/logins
 - [ ] Score tracking across games
