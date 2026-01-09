@@ -1,0 +1,93 @@
+services:
+  client:
+    build:
+      context: .
+      dockerfile: ./client/Dockerfile
+    ports:
+      - "3030:3000"
+    depends_on:
+      server:
+        condition: service_healthy
+    networks:
+      - blurtz-network
+    env_file:
+      - .env
+    environment:
+      - NODE_ENV=development
+    volumes:
+      - ./client/src:/app/src
+      - ./client/package.json:/app/package.json
+      - ./client/tsconfig.json:/app/tsconfig.json
+      - ./client/vite.config.ts:/app/vite.config.ts
+      - ./client/index.html:/app/index.html
+
+  server:
+    build:
+      context: .
+      dockerfile: ./server/Dockerfile
+    ports:
+      - "3031:3001"
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    env_file:
+      - .env
+    environment:
+      - REDIS_URL=redis://redis:6379
+    networks:
+      - blurtz-network
+    volumes:
+      - ./server/src:/app/src
+      - ./server/prisma:/app/prisma
+      - ./server/package.json:/app/package.json
+      - ./server/tsconfig.json:/app/tsconfig.json
+      - ./server/nest-cli.json:/app/nest-cli.json
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3001/api/health/live"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+  db:
+    image: postgres:16-alpine
+    ports:
+      - "5442:5432"
+    volumes:
+      - blurtz_data:/var/lib/postgresql/data
+    environment:
+      - POSTGRES_DB=blurtz
+      - POSTGRES_USER=blurtz
+      - POSTGRES_PASSWORD=blurtz
+    networks:
+      - blurtz-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U blurtz -d blurtz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    networks:
+      - blurtz-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    command: redis-server --appendonly yes
+
+networks:
+  blurtz-network:
+    driver: bridge
+
+volumes:
+  blurtz_data:
+  redis_data:

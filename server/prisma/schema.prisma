@@ -1,0 +1,71 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model User {
+  id          String   @id @default(uuid())
+  username    String   @unique
+  password    String
+  gamesPlayed Int      @default(0)
+  gamesWon    Int      @default(0)
+  players     Player[]
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Game {
+  id         String       @id @default(uuid())
+  name       String
+  alias      String       @unique
+  maxPlayers Int          @default(2) @map("max_players")
+  isPrivate  Boolean      @default(false) @map("is_private")
+  status     GameStatus   @default(waiting)
+  gameState  Json?        @map("game_state")
+  winnerId   String?      @map("winner_id")
+  hostId     String       @map("host_id")
+  players    Player[]
+  snapshots  GameSnapshot[]
+  createdAt  DateTime     @default(now()) @map("created_at")
+  updatedAt  DateTime     @updatedAt @map("updated_at")
+
+  @@map("games")
+}
+
+model Player {
+  id             String  @id @default(uuid())
+  userId         String  @map("user_id")
+  gameId         String  @map("game_id")
+  isReady        Boolean @default(false) @map("is_ready")
+  score          Int     @default(0)
+  bankPileCount Int     @default(0) @map("bank_pile_count")
+  deck           Json?
+  user           User    @relation(fields: [userId], references: [id])
+  game           Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+
+  @@map("players")
+}
+
+model GameSnapshot {
+  id        String   @id @default(uuid())
+  gameId    String   @map("game_id")
+  round     Int
+  state     Json
+  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  @@map("game_snapshots")
+}
+
+enum GameStatus {
+  waiting
+  starting
+  playing
+  paused
+  finished
+}

@@ -1,0 +1,13 @@
+:root {
+  --font-germania: "Germania One", cursive;
+  --font-primary: "Germania One", -apple-system, BlinkMacSystemFont, sans-serif;
+}
+
+.germania-font {
+  font-family: var(--font-germania);
+}
+
+.heading-font {
+  font-family: var(--font-germania);
+  font-weight: 400;
+}
