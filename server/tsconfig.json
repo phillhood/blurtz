@@ -1,5 +1,6 @@
 {
   "compilerOptions": {
+    "types": ["node"],
     "module": "commonjs",
     "lib": ["ES2020", "DOM"],
     "declaration": true,
@@ -44,6 +45,6 @@
       "@redis/*": ["./src/redis/*"]
     }
   },
-  "include": ["src/**/*"],
+  "include": ["src/**/*", "prisma.config.ts"],
   "exclude": ["node_modules", "dist", "test", "**/*spec.ts"]
 }
