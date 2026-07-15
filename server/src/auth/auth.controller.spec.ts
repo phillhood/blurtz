@@ -1,7 +1,12 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { AuthController } from "./auth.controller";
 import { AuthService } from "./auth.service";
-import { HttpException, HttpStatus } from "@nestjs/common";
+import {
+  ConflictException,
+  HttpStatus,
+  NotFoundException,
+  UnauthorizedException,
+} from "@nestjs/common";
 
 describe("AuthController", () => {
   let controller: AuthController;
@@ -59,28 +64,24 @@ describe("AuthController", () => {
       expect(authService.register).toHaveBeenCalledWith(registerDto);
     });
 
-    it("should throw 409 Conflict if username already exists", async () => {
+    it("propagates the service's 409 Conflict when username already exists", async () => {
       authService.register.mockRejectedValue(
-        new Error("Username already exists")
+        new ConflictException("Username already exists")
       );
 
       await expect(controller.register(registerDto)).rejects.toThrow(
-        HttpException
+        ConflictException
       );
       await expect(controller.register(registerDto)).rejects.toMatchObject({
         status: HttpStatus.CONFLICT,
       });
     });
 
-    it("should throw 400 Bad Request for other errors", async () => {
-      authService.register.mockRejectedValue(new Error("Some other error"));
+    it("propagates unexpected errors from the service unchanged", async () => {
+      const err = new Error("Some other error");
+      authService.register.mockRejectedValue(err);
 
-      await expect(controller.register(registerDto)).rejects.toThrow(
-        HttpException
-      );
-      await expect(controller.register(registerDto)).rejects.toMatchObject({
-        status: HttpStatus.BAD_REQUEST,
-      });
+      await expect(controller.register(registerDto)).rejects.toBe(err);
     });
   });
 
@@ -96,22 +97,24 @@ describe("AuthController", () => {
       expect(authService.login).toHaveBeenCalledWith(loginDto);
     });
 
-    it("should throw 401 Unauthorized for invalid credentials", async () => {
-      authService.login.mockRejectedValue(new Error("Invalid credentials"));
+    it("propagates the service's 401 Unauthorized for invalid credentials", async () => {
+      authService.login.mockRejectedValue(
+        new UnauthorizedException("Invalid credentials")
+      );
 
-      await expect(controller.login(loginDto)).rejects.toThrow(HttpException);
+      await expect(controller.login(loginDto)).rejects.toThrow(
+        UnauthorizedException
+      );
       await expect(controller.login(loginDto)).rejects.toMatchObject({
         status: HttpStatus.UNAUTHORIZED,
       });
     });
 
-    it("should throw 400 Bad Request for other errors", async () => {
-      authService.login.mockRejectedValue(new Error("Some other error"));
+    it("propagates unexpected errors from the service unchanged", async () => {
+      const err = new Error("Some other error");
+      authService.login.mockRejectedValue(err);
 
-      await expect(controller.login(loginDto)).rejects.toThrow(HttpException);
-      await expect(controller.login(loginDto)).rejects.toMatchObject({
-        status: HttpStatus.BAD_REQUEST,
-      });
+      await expect(controller.login(loginDto)).rejects.toBe(err);
     });
   });
 
@@ -133,22 +136,18 @@ describe("AuthController", () => {
       authService.findById.mockResolvedValue(null);
 
       await expect(controller.getProfile(mockRequest)).rejects.toThrow(
-        HttpException
+        NotFoundException
       );
       await expect(controller.getProfile(mockRequest)).rejects.toMatchObject({
         status: HttpStatus.NOT_FOUND,
       });
     });
 
-    it("should throw 500 Internal Server Error for unexpected errors", async () => {
-      authService.findById.mockRejectedValue(new Error("Database error"));
+    it("propagates unexpected errors from findById unchanged", async () => {
+      const err = new Error("Database error");
+      authService.findById.mockRejectedValue(err);
 
-      await expect(controller.getProfile(mockRequest)).rejects.toThrow(
-        HttpException
-      );
-      await expect(controller.getProfile(mockRequest)).rejects.toMatchObject({
-        status: HttpStatus.INTERNAL_SERVER_ERROR,
-      });
+      await expect(controller.getProfile(mockRequest)).rejects.toBe(err);
     });
   });
 

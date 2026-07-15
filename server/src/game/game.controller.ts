@@ -18,7 +18,6 @@ import {
 import { GameService } from "./game.service";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { ApiResponse } from "@types";
-import { getErrorMessage } from "@utils/error-handler";
 import { CreateGameDto, JoinGameByIdDto, JoinGameByCodeDto, GameIdParamDto } from "./dto";
 
 @ApiTags("game")
@@ -32,37 +31,23 @@ export class GameController {
   @ApiOperation({ summary: "Get available games to join" })
   @SwaggerResponse({ status: 200, description: "List of available games" })
   async getGames(): Promise<ApiResponse> {
-    try {
-      const games = await this.gameService.getAvailableGames();
-      return {
-        success: true,
-        data: games,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const games = await this.gameService.getAvailableGames();
+    return {
+      success: true,
+      data: games,
+    };
   }
 
   @Get("active")
   @ApiOperation({ summary: "Get games the current user is participating in" })
   @SwaggerResponse({ status: 200, description: "List of active games for user" })
   async getActiveGames(@Request() req): Promise<ApiResponse> {
-    try {
-      const userId = req.user.sub;
-      const games = await this.gameService.getActiveGames(userId);
-      return {
-        success: true,
-        data: games,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const userId = req.user.sub;
+    const games = await this.gameService.getActiveGames(userId);
+    return {
+      success: true,
+      data: games,
+    };
   }
 
   @Post()
@@ -73,25 +58,18 @@ export class GameController {
     @Body() createGameDto: CreateGameDto,
     @Request() req
   ): Promise<ApiResponse> {
-    try {
-      const { name, maxPlayers, isPrivate } = createGameDto;
-      const game = await this.gameService.createGame(
-        name,
-        req.user.sub,
-        maxPlayers,
-        isPrivate
-      );
-      return {
-        success: true,
-        data: game,
-        message: "Game created successfully",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const { name, maxPlayers, isPrivate } = createGameDto;
+    const game = await this.gameService.createGame(
+      name,
+      req.user.sub,
+      maxPlayers,
+      isPrivate
+    );
+    return {
+      success: true,
+      data: game,
+      message: "Game created successfully",
+    };
   }
 
   @Post("joinById")
@@ -102,21 +80,14 @@ export class GameController {
     @Body() joinGameDto: JoinGameByIdDto,
     @Request() req
   ): Promise<ApiResponse> {
-    try {
-      const userId = req.user.sub;
-      const { id } = joinGameDto;
-      const game = await this.gameService.joinGame(id, userId);
-      return {
-        success: true,
-        message: `Joined game with id ${id} successfully`,
-        data: game,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const userId = req.user.sub;
+    const { id } = joinGameDto;
+    const game = await this.gameService.joinGame(id, userId);
+    return {
+      success: true,
+      message: `Joined game with id ${id} successfully`,
+      data: game,
+    };
   }
 
   @Post("joinByCode")
@@ -127,25 +98,18 @@ export class GameController {
     @Body() joinGameDto: JoinGameByCodeDto,
     @Request() req
   ): Promise<ApiResponse> {
-    try {
-      const userId = req.user.sub;
-      const { alias } = joinGameDto;
-      const game = await this.gameService.findGameByAlias(alias);
-      if (!game) {
-        throw new NotFoundException(`Game with alias ${alias} not found`);
-      }
-      await this.gameService.joinGame(game.id, userId);
-      return {
-        success: true,
-        message: `Joined game with alias ${alias} successfully`,
-        data: game,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
+    const userId = req.user.sub;
+    const { alias } = joinGameDto;
+    const game = await this.gameService.findGameByAlias(alias);
+    if (!game) {
+      throw new NotFoundException(`Game with alias ${alias} not found`);
     }
+    await this.gameService.joinGame(game.id, userId);
+    return {
+      success: true,
+      message: `Joined game with alias ${alias} successfully`,
+      data: game,
+    };
   }
 
   @Delete(":id/leave")
@@ -157,18 +121,11 @@ export class GameController {
     @Request() req
   ): Promise<ApiResponse> {
     const { id: gameId } = params;
-    try {
-      await this.gameService.leaveGame(gameId, req.user.sub);
-      return {
-        success: true,
-        message: "Left game successfully",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    await this.gameService.leaveGame(gameId, req.user.sub);
+    return {
+      success: true,
+      message: "Left game successfully",
+    };
   }
 
   @Post(":id/start")
@@ -177,19 +134,12 @@ export class GameController {
   @SwaggerResponse({ status: 400, description: "Cannot start game" })
   async startGame(@Param() params: GameIdParamDto): Promise<ApiResponse> {
     const { id: gameId } = params;
-    try {
-      const gameState = await this.gameService.startGame(gameId);
-      return {
-        success: true,
-        data: gameState,
-        message: "Game started successfully",
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const gameState = await this.gameService.startGame(gameId);
+    return {
+      success: true,
+      data: gameState,
+      message: "Game started successfully",
+    };
   }
 
   @Get(":id/state")
@@ -198,17 +148,10 @@ export class GameController {
   @SwaggerResponse({ status: 404, description: "Game not found" })
   async getGameState(@Param() params: GameIdParamDto): Promise<ApiResponse> {
     const { id: gameId } = params;
-    try {
-      const gameState = await this.gameService.getGameState(gameId);
-      return {
-        success: true,
-        data: gameState,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const gameState = await this.gameService.getGameState(gameId);
+    return {
+      success: true,
+      data: gameState,
+    };
   }
 }

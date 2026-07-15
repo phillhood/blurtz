@@ -5,8 +5,7 @@ import {
   Get,
   UseGuards,
   Request,
-  HttpStatus,
-  HttpException,
+  NotFoundException,
 } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
@@ -26,24 +25,7 @@ export class AuthController {
   @ApiResponse({ status: 400, description: "Bad request" })
   @Throttle({ short: { limit: 1, ttl: 1000 }, medium: { limit: 5, ttl: 60000 } }) // 1/sec, 5/min
   async register(@Body() registerData: RegisterDto) {
-    try {
-      const result = await this.authService.register(registerData);
-      return result;
-    } catch (error) {
-      if (
-        error.message.includes("already exists") ||
-        error.message.includes("duplicate")
-      ) {
-        throw new HttpException(
-          error.message || "User already exists",
-          HttpStatus.CONFLICT
-        );
-      }
-      throw new HttpException(
-        error.message || "Registration failed",
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    return this.authService.register(registerData);
   }
 
   @Post("login")
@@ -52,22 +34,7 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Invalid credentials" })
   @Throttle({ short: { limit: 1, ttl: 1000 }, medium: { limit: 10, ttl: 60000 } }) // 1/sec, 10/min
   async login(@Body() loginData: LoginDto) {
-    try {
-      const result = await this.authService.login(loginData);
-      return result;
-    } catch (error) {
-      // TODO - fix jank with proper error types
-      if (
-        error.message.includes("Invalid credentials") ||
-        error.message.includes("not found")
-      ) {
-        throw new HttpException("Invalid credentials", HttpStatus.UNAUTHORIZED);
-      }
-      throw new HttpException(
-        error.message || "Login failed",
-        HttpStatus.BAD_REQUEST
-      );
-    }
+    return this.authService.login(loginData);
   }
 
   @Get("profile")
@@ -78,21 +45,11 @@ export class AuthController {
   @ApiResponse({ status: 401, description: "Unauthorized" })
   @ApiResponse({ status: 404, description: "User not found" })
   async getProfile(@Request() req) {
-    try {
-      const user = await this.authService.findById(req.user.sub);
-      if (!user) {
-        throw new HttpException("User not found", HttpStatus.NOT_FOUND);
-      }
-      return user;
-    } catch (error) {
-      if (error.status) {
-        throw error;
-      }
-      throw new HttpException(
-        error.message || "Profile fetch failed",
-        HttpStatus.INTERNAL_SERVER_ERROR
-      );
+    const user = await this.authService.findById(req.user.sub);
+    if (!user) {
+      throw new NotFoundException("User not found");
     }
+    return user;
   }
 
   @Post("logout")
