@@ -369,6 +369,10 @@ export class GameService {
       throw new NotFoundException("Game not found");
     }
 
+    if (game.status !== "waiting") {
+      throw new BadRequestException("Game has already started");
+    }
+
     if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
       throw new BadRequestException("Not enough players to start the game");
     }
@@ -451,6 +455,10 @@ export class GameService {
 
     if (!game) {
       throw new NotFoundException("Game not found");
+    }
+
+    if (game.status !== "playing") {
+      throw new BadRequestException("Game is not in progress");
     }
 
     const player = game.players.find((p) => p.id === playerId);
@@ -599,6 +607,10 @@ export class GameService {
 
     if (!game) {
       throw new NotFoundException("Game not found");
+    }
+
+    if (game.status !== "playing") {
+      throw new BadRequestException("Game is not in progress");
     }
 
     const player = game.players.find((p) => p.id === playerId);
