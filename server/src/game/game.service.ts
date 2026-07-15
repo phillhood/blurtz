@@ -784,9 +784,11 @@ export class GameService {
     const cardIndex = fromPile.cards.findIndex((c) => c.id === cardId);
     if (cardIndex === -1) return;
 
-    // For work piles, move the card and all cards above it (stack move)
-    // For other piles, just move the single card
-    const cardsToMove = fromPile.type === "work"
+    // A stack move (card + everything above it) only applies work-to-work.
+    // Any move that lands on a non-work pile (e.g. a bank pile) moves just
+    // the single card, even if the source is a work pile.
+    const isStackMove = fromPile.type === "work" && toPile.type === "work";
+    const cardsToMove = isStackMove
       ? fromPile.cards.splice(cardIndex) // Remove from cardIndex to end
       : fromPile.cards.splice(cardIndex, 1); // Remove just the one card
 
@@ -797,11 +799,6 @@ export class GameService {
     if (fromPile.type === "blurtz" && fromPile.cards.length > 0) {
       const nextCard = fromPile.cards[fromPile.cards.length - 1];
       nextCard.faceUp = true;
-    }
-
-    // If a bank pile reaches 10 (complete), clear it for reuse
-    if (toPile.type === "bank" && toPile.cards.length === 10) {
-      toPile.cards = [];
     }
   }
 
