@@ -9,12 +9,14 @@ import { UserModule } from "@user/user.module";
 import { HealthModule } from "./health/health.module";
 import { PrismaModule } from "@prisma";
 import { RedisModule } from "@redis";
+import { validate } from "./config/env.validation";
 
 @Module({
   imports: [
     ConfigModule.forRoot({
       isGlobal: true,
       envFilePath: ".env",
+      validate,
     }),
     LoggerModule.forRoot({
       pinoHttp: {
