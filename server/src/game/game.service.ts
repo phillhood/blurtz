@@ -266,12 +266,12 @@ export class GameService {
     });
 
     if (!game) {
-      throw new Error("Game not found");
+      throw new NotFoundException("Game not found");
     }
 
     const player = game.players.find((p) => p.user.id === userId);
     if (!player) {
-      throw new Error("Player not found in this game");
+      throw new NotFoundException("Player not found in this game");
     }
 
     // If game is playing, this is a forfeit
@@ -311,16 +311,16 @@ export class GameService {
     });
 
     if (!game) {
-      throw new Error("Game not found");
+      throw new NotFoundException("Game not found");
     }
 
     if (game.status !== "playing") {
-      throw new Error("Cannot forfeit - game is not in progress");
+      throw new BadRequestException("Cannot forfeit - game is not in progress");
     }
 
     const player = game.players.find((p) => p.id === playerId);
     if (!player) {
-      throw new Error("Player not found in this game");
+      throw new NotFoundException("Player not found in this game");
     }
 
     const remainingPlayers = game.players.filter((p) => p.id !== playerId);
