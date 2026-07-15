@@ -1,6 +1,12 @@
 import React from "react";
 import { Card, Button, ErrorMessage, SuccessMessage } from "@styles";
-import { Notification } from "@hooks";
+
+type NotificationType = "success" | "error" | "info";
+
+interface Notification {
+  type: NotificationType;
+  message: string;
+}
 
 interface QuickActionsCardProps {
   onCreateGame: () => void;

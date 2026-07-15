@@ -22,7 +22,6 @@ export default defineConfig({
       "@contexts": getAliasPath("contexts"),
       "@styles": getAliasPath("styles"),
       "@views": getAliasPath("views"),
-      "@pages": getAliasPath("pages"),
       "@hooks": getAliasPath("hooks"),
       "@services": getAliasPath("services"),
       "@utils": getAliasPath("utils"),

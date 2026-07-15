@@ -88,7 +88,6 @@ export const useGameStore = create<GameStore>()(
                 userJoined: false,
                 userLeft: false,
               });
-              sessionStorage.removeItem("currentGameId");
             }
           },
 
@@ -102,11 +101,9 @@ export const useGameStore = create<GameStore>()(
               userLeft: false,
               error: null,
             });
-            sessionStorage.setItem("currentGameId", newGameState.id);
           },
 
           onGameLeft: (_gameId: string) => {
-            sessionStorage.removeItem("currentGameId");
             set({
               gameState: null,
               currentGameId: null,
@@ -237,7 +234,6 @@ export const useGameStore = create<GameStore>()(
 
         try {
           const gameId = currentGameId;
-          sessionStorage.removeItem("currentGameId");
 
           set({
             userLeft: true,
