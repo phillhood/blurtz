@@ -20,8 +20,7 @@ import { DragData } from "./components/Card";
 const Game: React.FC = () => {
   const { user } = useAuthContext();
   const { gameId } = useParams<{ gameId: string }>();
-  const gameIdRef = useRef<string | null>(gameId);
-  const hasJoinedRef = useRef<boolean>(false);
+  const joinedGameIdRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const {
@@ -56,24 +55,21 @@ const Game: React.FC = () => {
   );
 
   useEffect(() => {
-    if (connected && gameIdRef.current && !hasJoinedRef.current) {
-      hasJoinedRef.current = true;
-      joinGame(gameIdRef.current);
+    // Join whenever we're connected and haven't already joined this gameId -
+    // this re-runs (and re-joins) when navigating from one game to another
+    // without a remount, since gameId is a real dependency here.
+    if (connected && gameId && joinedGameIdRef.current !== gameId) {
+      joinedGameIdRef.current = gameId;
+      joinGame(gameId);
     }
     // Reset on disconnect so we rejoin on reconnect
     if (!connected) {
-      hasJoinedRef.current = false;
+      joinedGameIdRef.current = null;
     }
-  }, [gameIdRef, connected]);
+  }, [gameId, connected]);
 
   // Check if error is fatal (should block the game) or transient (show toast)
   const isFatalError = error?.includes("not found") || error?.includes("does not exist");
-
-  useEffect(() => {
-    if (isFatalError) {
-      navigate("/dashboard");
-    }
-  }, [isFatalError, navigate]);
 
   // Clear pending move cards when game state updates
   useEffect(() => {
