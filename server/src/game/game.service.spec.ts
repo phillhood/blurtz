@@ -24,6 +24,10 @@ describe("GameService", () => {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
         update: jest.fn(),
+        create: jest.fn(),
+      },
+      user: {
+        findUnique: jest.fn(),
       },
       gameSnapshot: {
         create: jest.fn(),
@@ -414,6 +418,78 @@ describe("GameService", () => {
       ).rejects.toThrow(BadRequestException);
 
       expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("joinGame private-game access", () => {
+    const GAME_ID = "game-1";
+    const USER_ID = "user-outsider";
+
+    // A waiting, non-full game with one player already in it.
+    function privateGame(isPrivate: boolean) {
+      return {
+        id: GAME_ID,
+        status: "waiting",
+        isPrivate,
+        maxPlayers: 4,
+        players: [{ id: "player-host", userId: "user-host" }],
+      };
+    }
+
+    it("rejects joining a private game when only its id is known", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        privateGame(true)
+      );
+
+      await expect(service.joinGame(GAME_ID, USER_ID)).rejects.toThrow(
+        ForbiddenException
+      );
+      // The crux: no Player row may be created for the outsider.
+      expect(prismaService.player.create).not.toHaveBeenCalled();
+    });
+
+    it("allows joining a private game via the invite-code path", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        privateGame(true)
+      );
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValue({
+        id: USER_ID,
+        username: "outsider",
+      });
+
+      await service.joinGame(GAME_ID, USER_ID, { allowPrivate: true });
+
+      expect(prismaService.player.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ userId: USER_ID, gameId: GAME_ID }),
+        })
+      );
+    });
+
+    it("still allows joining a public game by id", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        privateGame(false)
+      );
+      (prismaService.user.findUnique as jest.Mock).mockResolvedValue({
+        id: USER_ID,
+        username: "outsider",
+      });
+
+      await service.joinGame(GAME_ID, USER_ID);
+
+      expect(prismaService.player.create).toHaveBeenCalled();
+    });
+
+    it("lets an existing player rejoin a private game by id", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        ...privateGame(true),
+        players: [{ id: "player-1", userId: USER_ID }],
+      });
+
+      await expect(
+        service.joinGame(GAME_ID, USER_ID)
+      ).resolves.toBeDefined();
+      expect(prismaService.player.create).not.toHaveBeenCalled();
     });
   });
 });

@@ -198,12 +198,25 @@ export class GameService {
 
     this.logger.log(`Game created: ${savedGame.id} (${alias}) by user ${userId}`);
 
-    await this.joinGame(savedGame.id, userId);
+    // The host is always allowed into their own game, private or not.
+    await this.joinGame(savedGame.id, userId, { allowPrivate: true });
 
     return savedGame;
   }
 
-  async joinGame(gameId: string, userId: string) {
+  /**
+   * Add a user to a game.
+   *
+   * `allowPrivate` gates joining a game marked private. Knowing a private
+   * game's id is not permission to enter it - only its invite code is, so
+   * only the join-by-code path passes true. Players already in the game are
+   * always let back in, so this cannot lock anyone out of a rejoin.
+   */
+  async joinGame(
+    gameId: string,
+    userId: string,
+    options: { allowPrivate?: boolean } = {}
+  ) {
     const game = await this.prisma.game.findUnique({
       where: { id: gameId },
       include: {
@@ -224,6 +237,12 @@ export class GameService {
 
     if (game.status !== "waiting") {
       throw new BadRequestException("Game is not accepting new players");
+    }
+
+    if (game.isPrivate && !options.allowPrivate) {
+      throw new ForbiddenException(
+        "This game is private - join it with its invite code"
+      );
     }
 
     if (game.players.length >= game.maxPlayers) {

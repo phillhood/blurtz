@@ -104,7 +104,8 @@ export class GameController {
     if (!game) {
       throw new NotFoundException(`Game with alias ${alias} not found`);
     }
-    await this.gameService.joinGame(game.id, userId);
+    // Presenting a valid invite code is what grants access to a private game.
+    await this.gameService.joinGame(game.id, userId, { allowPrivate: true });
     return {
       success: true,
       message: `Joined game with alias ${alias} successfully`,
