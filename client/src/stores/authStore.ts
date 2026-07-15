@@ -2,6 +2,7 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { User } from "@types";
 import { authService } from "@services/auth.service";
+import { ApiError } from "@services/api.service";
 
 interface AuthState {
   user: User | null;
@@ -70,8 +71,8 @@ export const useAuthStore = create<AuthStore>()(
           try {
             const userData = await authService.getProfile();
             set({ user: userData, loading: false, error: null });
-          } catch (error: any) {
-            if (error.message?.includes("401") || error.message?.includes("403")) {
+          } catch (error) {
+            if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
               localStorage.removeItem("token");
               set({ user: null, loading: false, error: null });
             } else {

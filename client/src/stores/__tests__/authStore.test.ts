@@ -1,6 +1,18 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAuthStore } from "../authStore";
 import { authService } from "@services/auth.service";
+import { ApiError } from "@services/api.service";
+
+// ApiError's default message is `API Error: ${status}`, which would contain
+// the digits "401"/"403" and coincidentally satisfy a substring check like
+// `error.message.includes("401")`. Real server error bodies carry a message
+// like "Unauthorized" (no digits), so build errors that way here too -
+// otherwise a revert of the `instanceof ApiError` check wouldn't fail this test.
+const makeApiError = (status: number, message: string) => {
+  const err = new ApiError(status, { statusCode: status, message });
+  err.message = message;
+  return err;
+};
 
 // Mock the auth service
 vi.mock("@services/auth.service", () => ({
@@ -176,7 +188,7 @@ describe("authStore", () => {
     it("should clear user on 401 error", async () => {
       localStorageMock.getItem.mockReturnValue("expired-token");
       vi.mocked(authService.getProfile).mockRejectedValue(
-        new Error("401 Unauthorized")
+        makeApiError(401, "Unauthorized")
       );
 
       await useAuthStore.getState().fetchUserProfile();
@@ -184,6 +196,32 @@ describe("authStore", () => {
       const state = useAuthStore.getState();
       expect(state.user).toBeNull();
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("token");
+    });
+
+    it("should clear user on 403 error", async () => {
+      localStorageMock.getItem.mockReturnValue("some-token");
+      vi.mocked(authService.getProfile).mockRejectedValue(
+        makeApiError(403, "Forbidden")
+      );
+
+      await useAuthStore.getState().fetchUserProfile();
+
+      const state = useAuthStore.getState();
+      expect(state.user).toBeNull();
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("token");
+    });
+
+    it("should NOT clear the token on a non-auth error (e.g. 500)", async () => {
+      localStorageMock.getItem.mockReturnValue("still-valid-token");
+      vi.mocked(authService.getProfile).mockRejectedValue(
+        new Error("Server error. Please try again later.")
+      );
+
+      await useAuthStore.getState().fetchUserProfile();
+
+      expect(localStorageMock.removeItem).not.toHaveBeenCalled();
+      const state = useAuthStore.getState();
+      expect(state.loading).toBe(false);
     });
   });
 
