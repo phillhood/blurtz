@@ -18,6 +18,11 @@ export interface SocketCallbacks {
   onPlayerJoined?: (data: { gameState?: GameState; userId: string }) => void;
   onPlayerLeft?: (data: { gameState?: GameState; userId: string }) => void;
   onCardMoved?: (gameState: GameState) => void;
+  /**
+   * The server refused this client's move. Carries state, so the board can be
+   * reconciled rather than left mid-move.
+   */
+  onMoveRejected?: (data: { gameState: GameState; reason: string }) => void;
   onCardFlipped?: (gameState: GameState) => void;
   onBlitzCalled?: (data: { playerId: string }) => void;
 }
@@ -129,6 +134,13 @@ class SocketService {
       SOCKET_EVENTS.CARD_MOVED,
       (data: { gameState: GameState }) => {
         this.callbacks.onCardMoved?.(data.gameState);
+      }
+    );
+
+    this.socket.on(
+      SOCKET_EVENTS.MOVE_REJECTED,
+      (data: { gameState: GameState; reason: string }) => {
+        this.callbacks.onMoveRejected?.(data);
       }
     );
 

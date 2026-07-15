@@ -37,6 +37,8 @@ export const SOCKET_EVENTS = {
   GAME_STARTED: "game_started",
   GAME_STATE_UPDATED: "game_state_updated",
   CARD_MOVED: "card_moved",
+  // Keep in sync with server/src/utils/constants.ts.
+  MOVE_REJECTED: "move_rejected",
   CARD_FLIPPED: "card_flipped",
   BLITZ_CALLED: "blitz_called",
   GAME_ENDED: "game_ended",

@@ -141,6 +141,14 @@ export const useGameStore = create<GameStore>()(
             set({ gameState: newGameState, error: null });
           },
 
+          // A refused move still swaps gameState. That new object identity is
+          // what tells the board the move resolved - without it the card the
+          // player dragged stays hidden on the pile it never left. The reason
+          // rides along as a transient error, which surfaces as a toast.
+          onMoveRejected: (data: { gameState: GameState; reason: string }) => {
+            set({ gameState: data.gameState, error: data.reason });
+          },
+
           onCardFlipped: (newGameState: GameState) => {
             set({ gameState: newGameState, error: null });
           },

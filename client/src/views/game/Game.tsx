@@ -16,6 +16,7 @@ import {
   GameToast,
 } from "./components";
 import { DragData } from "./components/Card";
+import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -36,7 +37,7 @@ const Game: React.FC = () => {
 
   const [showForfeitDialog, setShowForfeitDialog] = useState(false);
   const [activeCards, setActiveCards] = useState<Card[]>([]);
-  const [pendingMoveCardIds, setPendingMoveCardIds] = useState<Set<string>>(new Set());
+  const { pendingMoveCardIds, markPending } = usePendingMoveCards(gameState);
 
   // Configure sensors for @dnd-kit
   const sensors = useSensors(
@@ -70,13 +71,6 @@ const Game: React.FC = () => {
 
   // Check if error is fatal (should block the game) or transient (show toast)
   const isFatalError = error?.includes("not found") || error?.includes("does not exist");
-
-  // Clear pending move cards when game state updates
-  useEffect(() => {
-    if (pendingMoveCardIds.size > 0) {
-      setPendingMoveCardIds(new Set());
-    }
-  }, [gameState]);
 
   const handleLeave = () => {
     if (gameState?.status === "playing") {
@@ -186,14 +180,14 @@ const Game: React.FC = () => {
       const bankPileIndex = gameState?.bankPiles.findIndex(p => p.id === dropData.pileId) ?? -1;
       if (bankPileIndex >= 0 && canDropOnBankPile(bankPileIndex, dragData.card)) {
         const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-        setPendingMoveCardIds(new Set(movingIds));
+        markPending(movingIds);
         makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
         return;
       }
       // Check if it's a Work pile (empty work piles accept any card)
       if (isCurrentPlayerWorkPile(dropData.pileId)) {
         const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-        setPendingMoveCardIds(new Set(movingIds));
+        markPending(movingIds);
         makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
         return;
       }
@@ -209,7 +203,7 @@ const Game: React.FC = () => {
         const pileIndex = gameState?.bankPiles.findIndex(p => p.id === targetPileId) ?? -1;
         if (pileIndex >= 0 && canDropOnBankPile(pileIndex, dragData.card)) {
           const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-          setPendingMoveCardIds(new Set(movingIds));
+          markPending(movingIds);
           makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
         }
       }
@@ -217,7 +211,7 @@ const Game: React.FC = () => {
       else if (isCurrentPlayerWorkPile(targetPileId)) {
         if (canDropOnWorkPile(targetPileId, dragData.card, dragData.fromPileId)) {
           const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-          setPendingMoveCardIds(new Set(movingIds));
+          markPending(movingIds);
           makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
         }
       }
