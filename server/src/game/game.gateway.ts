@@ -7,7 +7,8 @@ import {
   OnGatewayConnection,
   OnGatewayDisconnect,
 } from "@nestjs/websockets";
-import { Logger } from "@nestjs/common";
+import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/common";
+import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
 import { SOCKET_EVENTS, validateWsPayload } from "@utils";
@@ -23,7 +24,14 @@ import {
   ForfeitGameDto,
 } from "./dto";
 
-interface AuthenticatedSocket extends Socket {
+/**
+ * Per-socket state, stored in Socket.IO's official `data` bag.
+ *
+ * `userId` is set once, at connect, from the verified JWT. It is the ONLY
+ * source of caller identity in this gateway - identity is never read from a
+ * message payload, because a payload is attacker-controlled.
+ */
+interface SocketData {
   userId?: string;
   gameId?: string;
 }
@@ -40,41 +48,101 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
   private readonly logger = new Logger(GameGateway.name);
 
-  // socketId -> userId
-  private connectedUsers = new Map<string, string>();
+  constructor(
+    private gameService: GameService,
+    private jwtService: JwtService
+  ) {}
 
-  constructor(private gameService: GameService) {}
+  /**
+   * Authenticate the handshake. A socket that cannot prove who it is never
+   * gets to send a single message.
+   */
+  async handleConnection(client: Socket) {
+    try {
+      const token = client.handshake?.auth?.token;
 
-  handleConnection(_client: AuthenticatedSocket) {}
+      if (!token || typeof token !== "string") {
+        throw new UnauthorizedException("No authentication token provided");
+      }
 
-  handleDisconnect(client: AuthenticatedSocket) {
-    if (client.gameId && client.userId) {
-      this.logger.log(`Socket disconnected: user ${client.userId} from game ${client.gameId}`);
-      client.leave(client.gameId);
+      const payload = await this.jwtService.verifyAsync(token);
+      const userId = payload?.sub;
 
-      this.server.to(client.gameId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
-        userId: client.userId,
+      if (!userId) {
+        throw new UnauthorizedException("Token payload is missing a subject");
+      }
+
+      (client.data as SocketData).userId = userId;
+      this.logger.log(`Socket connected: user ${userId} (${client.id})`);
+    } catch (error) {
+      // Never throw out of handleConnection - just refuse the socket.
+      this.logger.warn(
+        `Rejected socket ${client.id}: ${getErrorMessage(error)}`
+      );
+      client.disconnect(true);
+    }
+  }
+
+  handleDisconnect(client: Socket) {
+    const { userId, gameId } = client.data as SocketData;
+
+    if (gameId && userId) {
+      this.logger.log(`Socket disconnected: user ${userId} from game ${gameId}`);
+      client.leave(gameId);
+
+      this.server.to(gameId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
+        userId,
         timestamp: new Date(),
       });
     }
+  }
 
-    this.connectedUsers.delete(client.id);
+  /**
+   * The authenticated user id for this socket. Sockets that failed
+   * authentication are disconnected at connect, so this is defensive.
+   */
+  private requireUserId(client: Socket): string {
+    const { userId } = client.data as SocketData;
+
+    if (!userId) {
+      throw new UnauthorizedException("Not authenticated");
+    }
+
+    return userId;
+  }
+
+  /**
+   * Resolve the caller's Player id in `gameId`, rejecting users who are not
+   * players in that game.
+   *
+   * `gameId` comes from the payload, so membership is always re-checked
+   * against the database - `client.data.gameId` is a convenience, not a
+   * permission.
+   */
+  private async requirePlayerId(client: Socket, gameId: string): Promise<string> {
+    const userId = this.requireUserId(client);
+    const playerId = await this.gameService.getPlayerIdForUser(gameId, userId);
+
+    if (!playerId) {
+      throw new ForbiddenException("You are not a player in this game");
+    }
+
+    return playerId;
   }
 
   @SubscribeMessage(SOCKET_EVENTS.JOIN_ROOM)
-  async handleJoinGame(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleJoinGame(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, userId } = await validateWsPayload(JoinRoomDto, data);
+      const { gameId } = await validateWsPayload(JoinRoomDto, data);
+      const userId = this.requireUserId(client);
 
-      client.userId = userId;
-      client.gameId = gameId;
-      this.connectedUsers.set(client.id, userId);
+      // Join the game BEFORE joining the room: if joinGame rejects (full,
+      // private, not accepting players) the socket must not end up in the room
+      // receiving every broadcast.
+      await this.gameService.joinGame(gameId, userId);
 
       await client.join(gameId);
-      await this.gameService.joinGame(gameId, userId);
+      (client.data as SocketData).gameId = gameId;
 
       const gameState = await this.gameService.getGameState(gameId);
 
@@ -98,18 +166,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.LEAVE_ROOM)
-  async handleLeaveGame(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleLeaveGame(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, userId } = await validateWsPayload(LeaveRoomDto, data);
+      const { gameId } = await validateWsPayload(LeaveRoomDto, data);
+      const userId = this.requireUserId(client);
+      await this.requirePlayerId(client, gameId);
 
-      await client.leave(gameId);
       await this.gameService.leaveGame(gameId, userId);
 
-      client.userId = undefined;
-      client.gameId = undefined;
+      await client.leave(gameId);
+      (client.data as SocketData).gameId = undefined;
 
       client.emit(SOCKET_EVENTS.ROOM_LEFT, {
         gameId,
@@ -140,14 +206,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.START_GAME)
-  async handleStartGame(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleStartGame(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
       const { gameId } = await validateWsPayload(StartGameDto, data);
+      const userId = this.requireUserId(client);
+      await this.requirePlayerId(client, gameId);
 
-      const gameState = await this.gameService.startGame(gameId);
+      // The host check and the readiness check live in GameService.startGame.
+      const gameState = await this.gameService.startGame(gameId, userId);
 
       this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STARTED, {
         gameState,
@@ -163,13 +229,13 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.MOVE_CARD)
-  async handleMoveCard(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleMoveCard(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, playerId, cardId, fromPileId, toPileId } =
-        await validateWsPayload(MoveCardDto, data);
+      const { gameId, cardId, fromPileId, toPileId } = await validateWsPayload(
+        MoveCardDto,
+        data
+      );
+      const playerId = await this.requirePlayerId(client, gameId);
 
       const success = await this.gameService.moveCard(
         gameId,
@@ -203,15 +269,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.FLIP_CARD)
-  async handleFlipCard(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleFlipCard(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, playerId, pileId } = await validateWsPayload(
-        FlipCardDto,
-        data
-      );
+      const { gameId, pileId } = await validateWsPayload(FlipCardDto, data);
+      const playerId = await this.requirePlayerId(client, gameId);
 
       await this.gameService.flipDrawPile(gameId, playerId);
 
@@ -232,12 +293,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.CALL_BLITZ)
-  async handleCallBlitz(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleCallBlitz(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, playerId } = await validateWsPayload(CallBlitzDto, data);
+      const { gameId } = await validateWsPayload(CallBlitzDto, data);
+      const playerId = await this.requirePlayerId(client, gameId);
 
       // Validate Blitz call and calculate scores
       const result = await this.gameService.callBlitz(gameId, playerId);
@@ -272,15 +331,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.PLAYER_READY)
-  async handlePlayerReady(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handlePlayerReady(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, playerId, isReady } = await validateWsPayload(
-        PlayerReadyDto,
-        data
-      );
+      const { gameId, isReady } = await validateWsPayload(PlayerReadyDto, data);
+      const playerId = await this.requirePlayerId(client, gameId);
+
       await this.gameService.setPlayerReady(gameId, playerId, isReady);
 
       const gameState = await this.gameService.getGameState(gameId);
@@ -298,15 +353,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   }
 
   @SubscribeMessage(SOCKET_EVENTS.FORFEIT_GAME)
-  async handleForfeitGame(
-    @ConnectedSocket() client: AuthenticatedSocket,
-    @MessageBody() data: unknown
-  ) {
+  async handleForfeitGame(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
-      const { gameId, playerId } = await validateWsPayload(
-        ForfeitGameDto,
-        data
-      );
+      const { gameId } = await validateWsPayload(ForfeitGameDto, data);
+      const playerId = await this.requirePlayerId(client, gameId);
 
       const gameState = await this.gameService.forfeitGame(gameId, playerId);
 
@@ -325,6 +375,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       }
 
       client.leave(gameId);
+      (client.data as SocketData).gameId = undefined;
       client.emit(SOCKET_EVENTS.ROOM_LEFT, {
         gameId,
         timestamp: new Date(),

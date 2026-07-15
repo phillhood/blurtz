@@ -1,5 +1,5 @@
 import { Test, TestingModule } from "@nestjs/testing";
-import { BadRequestException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException } from "@nestjs/common";
 import { GameService } from "./game.service";
 import { PrismaService } from "@prisma";
 import { CARD_COLORS } from "@utils";
@@ -22,7 +22,11 @@ describe("GameService", () => {
       },
       player: {
         findUnique: jest.fn(),
+        findFirst: jest.fn(),
         update: jest.fn(),
+      },
+      gameSnapshot: {
+        create: jest.fn(),
       },
     };
 
@@ -249,14 +253,148 @@ describe("GameService", () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
         status: "playing",
+        hostId: "host-user",
         players: [{ id: "p1" }, { id: "p2" }],
       });
 
-      await expect(service.startGame("game-1")).rejects.toThrow(
+      await expect(service.startGame("game-1", "host-user")).rejects.toThrow(
         BadRequestException
       );
 
       expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+
+    // -------------------------------------------------------------------
+    // Task 4 item 5: only the host may start, and only when everyone is
+    // ready. `hostId` is a User id, not a Player id.
+    // -------------------------------------------------------------------
+    it("throws ForbiddenException when a non-host tries to start the game", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        hostId: "host-user",
+        players: [
+          { id: "p1", userId: "host-user", isReady: true },
+          { id: "p2", userId: "other-user", isReady: true },
+        ],
+      });
+
+      await expect(service.startGame("game-1", "other-user")).rejects.toThrow(
+        ForbiddenException
+      );
+
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+    });
+
+    it("throws BadRequestException when the host starts with a player not ready", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        hostId: "host-user",
+        players: [
+          { id: "p1", userId: "host-user", isReady: true },
+          { id: "p2", userId: "other-user", isReady: false },
+        ],
+      });
+
+      await expect(service.startGame("game-1", "host-user")).rejects.toThrow(
+        "All players must be ready to start the game"
+      );
+
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+    });
+
+    it("throws BadRequestException when the host starts below the minimum player count", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        hostId: "host-user",
+        players: [{ id: "p1", userId: "host-user", isReady: true }],
+      });
+
+      await expect(service.startGame("game-1", "host-user")).rejects.toThrow(
+        "Not enough players to start the game"
+      );
+
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+
+    it("starts the game when the host starts with every player ready", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        name: "Test Game",
+        alias: "ABC123",
+        maxPlayers: 2,
+        status: "waiting",
+        hostId: "host-user",
+        winnerId: null,
+        gameState: { bankPiles: [], currentTurn: 0 },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        players: [
+          {
+            id: "p1",
+            userId: "host-user",
+            isReady: true,
+            score: 0,
+            bankPileCount: 0,
+            deck: null,
+            user: { id: "host-user", username: "host" },
+          },
+          {
+            id: "p2",
+            userId: "other-user",
+            isReady: true,
+            score: 0,
+            bankPileCount: 0,
+            deck: null,
+            user: { id: "other-user", username: "guest" },
+          },
+        ],
+      });
+      (prismaService.player.update as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+      (prismaService.gameSnapshot.create as jest.Mock).mockResolvedValue({});
+
+      const result = await service.startGame("game-1", "host-user");
+
+      expect(result.id).toBe("game-1");
+      // Each player is dealt a deck, and the game is flipped to `playing`.
+      expect(prismaService.player.update).toHaveBeenCalledTimes(2);
+      expect(prismaService.game.update).toHaveBeenCalledWith({
+        where: { id: "game-1" },
+        data: { status: "playing" },
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Task 4 item 3: the gateway resolves identity through this, instead of
+  // trusting a playerId sent over the socket.
+  // ---------------------------------------------------------------------
+  describe("getPlayerIdForUser", () => {
+    it("returns the player id for a user who is in the game", async () => {
+      (prismaService.player.findFirst as jest.Mock).mockResolvedValue({
+        id: "player-1",
+      });
+
+      const result = await service.getPlayerIdForUser("game-1", "user-1");
+
+      expect(result).toBe("player-1");
+      expect(prismaService.player.findFirst).toHaveBeenCalledWith({
+        where: { gameId: "game-1", userId: "user-1" },
+        select: { id: true },
+      });
+    });
+
+    it("returns null for a user who is not a player in the game", async () => {
+      (prismaService.player.findFirst as jest.Mock).mockResolvedValue(null);
+
+      const result = await service.getPlayerIdForUser("game-1", "outsider");
+
+      expect(result).toBeNull();
     });
   });
 

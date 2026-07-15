@@ -26,6 +26,9 @@ import { JwtStrategy } from "./strategies/jwt.strategy";
   ],
   controllers: [AuthController],
   providers: [AuthService, JwtStrategy],
-  exports: [AuthService],
+  // JwtModule is re-exported so importers (e.g. GameModule's socket gateway)
+  // get a JwtService already configured with JWT_SECRET, rather than
+  // registering the secret in a second place.
+  exports: [AuthService, JwtModule],
 })
 export class AuthModule {}

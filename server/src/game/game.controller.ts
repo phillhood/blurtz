@@ -132,9 +132,12 @@ export class GameController {
   @ApiOperation({ summary: "Start a game" })
   @SwaggerResponse({ status: 200, description: "Game started successfully" })
   @SwaggerResponse({ status: 400, description: "Cannot start game" })
-  async startGame(@Param() params: GameIdParamDto): Promise<ApiResponse> {
+  async startGame(
+    @Param() params: GameIdParamDto,
+    @Request() req
+  ): Promise<ApiResponse> {
     const { id: gameId } = params;
-    const gameState = await this.gameService.startGame(gameId);
+    const gameState = await this.gameService.startGame(gameId, req.user.sub);
     return {
       success: true,
       data: gameState,

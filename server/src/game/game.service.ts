@@ -1,6 +1,7 @@
 import {
   Injectable,
   BadRequestException,
+  ForbiddenException,
   NotFoundException,
   Logger,
 } from "@nestjs/common";
@@ -251,6 +252,28 @@ export class GameService {
     return game;
   }
 
+  /**
+   * Resolve the Player row id for a (game, user) pair.
+   *
+   * This is the single place that answers "is this user actually a player in
+   * this game, and if so which player are they?". The socket gateway relies on
+   * it to derive identity from the authenticated connection instead of
+   * trusting a playerId sent over the wire.
+   *
+   * Returns null when the user is not a player in the game.
+   */
+  async getPlayerIdForUser(
+    gameId: string,
+    userId: string
+  ): Promise<string | null> {
+    const player = await this.prisma.player.findFirst({
+      where: { gameId, userId },
+      select: { id: true },
+    });
+
+    return player?.id ?? null;
+  }
+
   async leaveGame(gameId: string, userId: string): Promise<GameState> {
     const game = await this.prisma.game.findUnique({
       where: { id: gameId },
@@ -351,7 +374,14 @@ export class GameService {
     return this.getGameState(gameId);
   }
 
-  async startGame(gameId: string): Promise<GameState> {
+  /**
+   * Start a game.
+   *
+   * `userId` is a User id (matching `Game.hostId`, which `createGame` sets from
+   * the creating user), NOT a Player id. Only the host may start, and only once
+   * every player has readied up.
+   */
+  async startGame(gameId: string, userId: string): Promise<GameState> {
     const game = await this.prisma.game.findUnique({
       where: { id: gameId },
       include: {
@@ -373,8 +403,16 @@ export class GameService {
       throw new BadRequestException("Game has already started");
     }
 
+    if (game.hostId !== userId) {
+      throw new ForbiddenException("Only the host can start the game");
+    }
+
     if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
       throw new BadRequestException("Not enough players to start the game");
+    }
+
+    if (!game.players.every((p) => p.isReady)) {
+      throw new BadRequestException("All players must be ready to start the game");
     }
 
     for (const player of game.players) {
