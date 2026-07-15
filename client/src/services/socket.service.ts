@@ -164,28 +164,27 @@ class SocketService {
     }
   }
 
-  joinGame(gameId: string, userId: string) {
+  joinGame(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId });
   }
 
-  leaveGame(gameId: string, userId: string) {
+  leaveGame(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { gameId });
   }
 
-  forfeitGame(gameId: string, playerId: string): void {
+  forfeitGame(gameId: string): void {
     if (!this.socket) {
       throw new Error("Socket not connected");
     }
 
     this.socket.emit(SOCKET_EVENTS.FORFEIT_GAME, {
       gameId,
-      playerId,
     });
   }
 
@@ -198,7 +197,6 @@ class SocketService {
 
   moveCard(
     gameId: string,
-    playerId: string,
     cardId: string,
     fromPileId: string,
     toPileId: string
@@ -208,40 +206,39 @@ class SocketService {
     }
     this.socket.emit(SOCKET_EVENTS.MOVE_CARD, {
       gameId,
-      playerId,
       cardId,
       fromPileId,
       toPileId,
     });
   }
 
-  flipCard(gameId: string, playerId: string, pileId: string) {
+  flipCard(gameId: string, pileId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.FLIP_CARD, { gameId, playerId, pileId });
+    this.socket.emit(SOCKET_EVENTS.FLIP_CARD, { gameId, pileId });
   }
 
-  callBlitz(gameId: string, playerId: string) {
+  callBlitz(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.CALL_BLITZ, { gameId, playerId });
+    this.socket.emit(SOCKET_EVENTS.CALL_BLITZ, { gameId });
   }
 
-  playerReady(gameId: string, playerId: string, isReady: boolean) {
+  playerReady(gameId: string, isReady: boolean) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.PLAYER_READY, { gameId, playerId, isReady });
+    this.socket.emit(SOCKET_EVENTS.PLAYER_READY, { gameId, isReady });
   }
 
-  autoRejoinGame(gameId: string, userId: string) {
+  autoRejoinGame(gameId: string) {
     if (!this.socket?.connected) {
       console.warn("Cannot auto-rejoin - socket not connected");
       return;
     }
-    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId });
   }
 
   // Utility methods

@@ -60,7 +60,7 @@ export const useGameContext = () => {
   const makeMove = useCallback(
     (cardId: string, fromPileId: string, toPileId: string) => {
       if (currentPlayer?.id) {
-        storeMakeMove(currentPlayer.id, cardId, fromPileId, toPileId);
+        storeMakeMove(cardId, fromPileId, toPileId);
       }
     },
     [currentPlayer?.id, storeMakeMove]
@@ -69,7 +69,7 @@ export const useGameContext = () => {
   const flipCard = useCallback(
     (pileId: string) => {
       if (currentPlayer?.id) {
-        storeFlipCard(currentPlayer.id, pileId);
+        storeFlipCard(pileId);
       }
     },
     [currentPlayer?.id, storeFlipCard]
@@ -83,14 +83,14 @@ export const useGameContext = () => {
 
   const callBlitz = useCallback(() => {
     if (currentPlayer?.id) {
-      storeCallBlitz(currentPlayer.id);
+      storeCallBlitz();
     }
   }, [currentPlayer?.id, storeCallBlitz]);
 
   const playerReady = useCallback(
     (isReady: boolean) => {
       if (currentPlayer?.id) {
-        storePlayerReady(currentPlayer.id, isReady);
+        storePlayerReady(isReady);
       }
     },
     [currentPlayer?.id, storePlayerReady]

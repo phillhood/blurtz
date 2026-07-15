@@ -30,17 +30,14 @@ interface GameStoreActions {
     userId: string
   ) => Promise<Game | null>;
   leaveGame: (userId: string, forfeit?: boolean) => void;
-  // Game actions
-  makeMove: (
-    playerId: string,
-    cardId: string,
-    fromPileId: string,
-    toPileId: string
-  ) => void;
-  flipCard: (playerId: string, pileId: string) => void;
+  // Game actions.
+  // The server derives the acting player from the socket's authenticated
+  // connection, so these no longer take (and must not send) a playerId.
+  makeMove: (cardId: string, fromPileId: string, toPileId: string) => void;
+  flipCard: (pileId: string) => void;
   flipDrawPile: (playerId: string) => void;
-  callBlitz: (playerId: string) => void;
-  playerReady: (playerId: string, isReady: boolean) => void;
+  callBlitz: () => void;
+  playerReady: (isReady: boolean) => void;
   startGame: () => void;
   // Util
   clearError: () => void;
@@ -213,7 +210,7 @@ export const useGameStore = create<GameStore>()(
             userLeft: false,
             error: null,
           });
-          socketService.joinGame(gameId, userId);
+          socketService.joinGame(gameId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to join game",
@@ -245,12 +242,9 @@ export const useGameStore = create<GameStore>()(
           queryClient.invalidateQueries({ queryKey: gameKeys.all });
 
           if (forfeit) {
-            const player = gameState?.players?.find((p) => p.user.id === userId);
-            if (player) {
-              socketService.forfeitGame(gameId, player.id);
-            }
+            socketService.forfeitGame(gameId);
           } else {
-            socketService.leaveGame(gameId, userId);
+            socketService.leaveGame(gameId);
           }
         } catch (error) {
           set({
@@ -259,17 +253,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      makeMove: (
-        playerId: string,
-        cardId: string,
-        fromPileId: string,
-        toPileId: string
-      ) => {
+      makeMove: (cardId: string, fromPileId: string, toPileId: string) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.moveCard(gameState.id, playerId, cardId, fromPileId, toPileId);
+          socketService.moveCard(gameState.id, cardId, fromPileId, toPileId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to make move",
@@ -277,12 +266,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      flipCard: (playerId: string, pileId: string) => {
+      flipCard: (pileId: string) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.flipCard(gameState.id, playerId, pileId);
+          socketService.flipCard(gameState.id, pileId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to flip card",
@@ -290,6 +279,8 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
+      // playerId is still needed here to look the player's own draw pile id up
+      // out of the local game state - it is not sent to the server.
       flipDrawPile: (playerId: string) => {
         const { gameState } = get();
         if (!gameState) return;
@@ -297,15 +288,15 @@ export const useGameStore = create<GameStore>()(
         const player = gameState.players?.find((p) => p.id === playerId);
         if (!player?.deck?.drawPile?.id) return;
 
-        get().flipCard(playerId, player.deck.drawPile.id);
+        get().flipCard(player.deck.drawPile.id);
       },
 
-      callBlitz: (playerId: string) => {
+      callBlitz: () => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.callBlitz(gameState.id, playerId);
+          socketService.callBlitz(gameState.id);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to call blitz",
@@ -313,12 +304,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      playerReady: (playerId: string, isReady: boolean) => {
+      playerReady: (isReady: boolean) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.playerReady(gameState.id, playerId, isReady);
+          socketService.playerReady(gameState.id, isReady);
         } catch (error) {
           set({
             error:
