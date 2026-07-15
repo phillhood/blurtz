@@ -83,6 +83,20 @@ export interface GameState extends GameListing {
 // Alias for backwards compatibility
 export type Game = GameListing;
 
+/**
+ * The outcome of a move attempt.
+ *
+ * A rejected move carries state too. Without it the client has no object to
+ * swap in, so its "this move is in flight" bookkeeping never clears and the
+ * card it was moving stays invisible on a pile it never left.
+ *
+ * `state` is UNREDACTED internal state, built inside the move's transaction.
+ * Hiding opponents' face-down cards is the gateway's job, not this type's.
+ */
+export type MoveResult =
+  | { ok: true; state: GameState }
+  | { ok: false; state: GameState; reason: string };
+
 // Game events
 export type GameAction =
   | "MOVE_CARD"

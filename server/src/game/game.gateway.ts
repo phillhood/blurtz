@@ -237,7 +237,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
       const playerId = await this.requirePlayerId(client, gameId);
 
-      const success = await this.gameService.moveCard(
+      // The state comes back from the move itself, read inside the same
+      // transaction that made it. Going back to the service for it would race
+      // the next player's move and could broadcast a state this move never
+      // produced.
+      const result = await this.gameService.moveCard(
         gameId,
         playerId,
         cardId,
@@ -245,17 +249,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         toPileId
       );
 
-      if (success) {
-        const gameState = await this.gameService.getGameState(gameId);
-
-        this.server.to(gameId).emit(SOCKET_EVENTS.CARD_MOVED, {
-          gameState,
+      // `=== false` rather than `!result.ok`: this project compiles with
+      // strictNullChecks off, and without it TypeScript will not narrow a
+      // union by a boolean discriminant's truthiness - only by comparison.
+      if (result.ok === false) {
+        // Only the mover hears about this - the board did not change for
+        // anyone else. The state is what lets them un-hide the card they
+        // moved; a bare ERROR would leave it invisible on the pile it never
+        // left.
+        client.emit(SOCKET_EVENTS.MOVE_REJECTED, {
+          gameState: result.state,
+          reason: result.reason,
           move: { cardId, fromPileId, toPileId, playerId },
           timestamp: new Date(),
         });
       } else {
-        client.emit(SOCKET_EVENTS.ERROR, {
-          message: "Invalid move",
+        this.server.to(gameId).emit(SOCKET_EVENTS.CARD_MOVED, {
+          gameState: result.state,
+          move: { cardId, fromPileId, toPileId, playerId },
           timestamp: new Date(),
         });
       }

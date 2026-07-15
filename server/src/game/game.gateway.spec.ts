@@ -67,6 +67,15 @@ function lastErrorMessage(socket: MockSocket): string | undefined {
   return errorCalls[errorCalls.length - 1]?.[1]?.message;
 }
 
+/** The payload of the last event of `name` emitted to a socket. */
+function lastEmit(socket: MockSocket, name: string) {
+  const calls = socket.emit.mock.calls.filter((call) => call[0] === name);
+  return calls[calls.length - 1]?.[1];
+}
+
+/** A move result as GameService now returns it. */
+const acceptedMove = { ok: true, state: { id: GAME_ID } } as never;
+
 describe("GameGateway", () => {
   let gateway: GameGateway;
   let gameService: jest.Mocked<GameService>;
@@ -216,7 +225,7 @@ describe("GameGateway", () => {
     it("moves the card as the CONNECTION's player, not any id from the payload", async () => {
       const client = createAuthedSocket();
       gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
-      gameService.moveCard.mockResolvedValue(true);
+      gameService.moveCard.mockResolvedValue(acceptedMove);
       gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
 
       await gateway.handleMoveCard(asSocket(client), {
@@ -247,7 +256,7 @@ describe("GameGateway", () => {
     it("rejects a payload that tries to smuggle someone else's playerId", async () => {
       const client = createAuthedSocket();
       gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
-      gameService.moveCard.mockResolvedValue(true);
+      gameService.moveCard.mockResolvedValue(acceptedMove);
 
       await gateway.handleMoveCard(asSocket(client), {
         gameId: GAME_ID,
@@ -276,6 +285,88 @@ describe("GameGateway", () => {
       expect(gameService.getPlayerIdForUser).not.toHaveBeenCalled();
       expect(gameService.moveCard).not.toHaveBeenCalled();
       expect(lastErrorMessage(client)).toBe("Not authenticated");
+    });
+
+    // -------------------------------------------------------------------
+    // Task 5 item 3: broadcast the state the move itself returned. Going
+    // back to the service for it would race the next player's move.
+    // -------------------------------------------------------------------
+    it("broadcasts the state the move returned, without re-reading it", async () => {
+      const client = createAuthedSocket();
+      const movedState = { id: GAME_ID, status: "playing" };
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockResolvedValue({
+        ok: true,
+        state: movedState,
+      } as never);
+
+      await gateway.handleMoveCard(asSocket(client), {
+        gameId: GAME_ID,
+        cardId: CARD_ID,
+        fromPileId: FROM_PILE_ID,
+        toPileId: TO_PILE_ID,
+      });
+
+      expect(gameService.getGameState).not.toHaveBeenCalled();
+      expect(serverEmit).toHaveBeenCalledWith(
+        SOCKET_EVENTS.CARD_MOVED,
+        expect.objectContaining({ gameState: movedState })
+      );
+    });
+
+    // -------------------------------------------------------------------
+    // Task 5 item 4: a rejected move gets MOVE_REJECTED *with state*, to
+    // the mover only. A bare ERROR left the client's gameState identity
+    // unchanged, so the card it had hidden stayed invisible forever.
+    // -------------------------------------------------------------------
+    describe("when the service rejects the move", () => {
+      const rejectedState = { id: GAME_ID, status: "playing" };
+
+      beforeEach(() => {
+        gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+        gameService.moveCard.mockResolvedValue({
+          ok: false,
+          state: rejectedState,
+          reason: "That card no longer fits on that bank pile",
+        } as never);
+      });
+
+      async function rejectMove(client: MockSocket) {
+        await gateway.handleMoveCard(asSocket(client), {
+          gameId: GAME_ID,
+          cardId: CARD_ID,
+          fromPileId: FROM_PILE_ID,
+          toPileId: TO_PILE_ID,
+        });
+      }
+
+      it("emits MOVE_REJECTED with state and a reason", async () => {
+        const client = createAuthedSocket();
+
+        await rejectMove(client);
+
+        const payload = lastEmit(client, SOCKET_EVENTS.MOVE_REJECTED);
+        expect(payload).toBeDefined();
+        expect(payload.gameState).toBe(rejectedState);
+        expect(payload.reason).toBe("That card no longer fits on that bank pile");
+      });
+
+      it("does NOT emit a bare ERROR", async () => {
+        const client = createAuthedSocket();
+
+        await rejectMove(client);
+
+        expect(lastErrorMessage(client)).toBeUndefined();
+      });
+
+      it("tells only the mover - nothing changed for the room", async () => {
+        const client = createAuthedSocket();
+
+        await rejectMove(client);
+
+        expect(serverEmit).not.toHaveBeenCalled();
+        expect(client.roomEmit).not.toHaveBeenCalled();
+      });
     });
   });
 

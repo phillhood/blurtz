@@ -43,6 +43,11 @@ export const SOCKET_EVENTS = {
   GAME_STARTED: "game_started",
   GAME_STATE_UPDATED: "game_state_updated",
   CARD_MOVED: "card_moved",
+  // Sent only to the player whose move was refused, and always with state:
+  // nothing changed for anyone else, but the mover needs an object to
+  // reconcile against or the card they moved stays hidden.
+  // Keep in sync with client/src/utils/constants.utils.ts.
+  MOVE_REJECTED: "move_rejected",
   CARD_FLIPPED: "card_flipped",
   BLITZ_CALLED: "blitz_called",
   GAME_ENDED: "game_ended",

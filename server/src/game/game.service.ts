@@ -2,20 +2,61 @@ import {
   Injectable,
   BadRequestException,
   ForbiddenException,
+  InternalServerErrorException,
   NotFoundException,
   Logger,
 } from "@nestjs/common";
 import { v4 as uuidv4 } from "uuid";
 import { PrismaService } from "@prisma";
-import { GameListing, GameState, Card, Pile, PlayerDeck } from "@types";
+import {
+  GameListing,
+  GameState,
+  Card,
+  MoveResult,
+  Pile,
+  PlayerDeck,
+} from "@types";
+import { PlayerDeckSchema } from "@schemas";
 import { CARD_COLORS, CARD_VALUES, GAME_CONSTANTS, PILE_RULES } from "@utils";
 import { generateAlias, generateAliasWithNumber } from "@utils";
+import { DbClient, GameRepository } from "./game.repository";
 
 @Injectable()
 export class GameService {
   private readonly logger = new Logger(GameService.name);
 
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private gameRepository: GameRepository
+  ) {}
+
+  /**
+   * Guard the JSON→domain boundary for a deck read out of the database.
+   *
+   * `Player.deck` is an opaque JSON blob; nothing at the type level stops it
+   * from being half-written, hand-edited, or left behind by an older shape.
+   * A corrupt deck must fail loudly here rather than be silently half-played
+   * into a game - a `cards: undefined` slipping through turns one bad row
+   * into a cascade of wrong moves.
+   *
+   * The validated original is returned, not Zod's parsed clone: these are the
+   * domain types in `@types`, and the schema's job is to police the boundary,
+   * not to redefine them.
+   */
+  private parseDeck(playerId: string, deck: unknown): PlayerDeck {
+    const result = PlayerDeckSchema.safeParse(deck);
+
+    if (!result.success) {
+      this.logger.error(
+        `Corrupt deck for player ${playerId}: ${result.error.message}`
+      );
+      throw new InternalServerErrorException(
+        `Stored deck for player ${playerId} is not a valid deck`
+      );
+    }
+
+    return deck as unknown as PlayerDeck;
+  }
 
   async generateUniqueAlias(maxAttempts: number = 5): Promise<string> {
     for (let attempt = 0; attempt < maxAttempts; attempt++) {
@@ -211,64 +252,70 @@ export class GameService {
    * game's id is not permission to enter it - only its invite code is, so
    * only the join-by-code path passes true. Players already in the game are
    * always let back in, so this cannot lock anyone out of a rejoin.
+   *
+   * Runs under the game lock: the membership check and the seat it claims are
+   * check-then-create, so without it two joins racing the last seat both see
+   * room and both take it.
    */
   async joinGame(
     gameId: string,
     userId: string,
     options: { allowPrivate?: boolean } = {}
   ) {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: {
-        players: {
-          select: { id: true, userId: true },
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: {
+          players: {
+            select: { id: true, userId: true },
+          },
         },
-      },
-    });
+      });
 
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
 
-    const existingPlayer = game.players.find((p) => p.userId === userId);
-    if (existingPlayer) {
+      const existingPlayer = game.players.find((p) => p.userId === userId);
+      if (existingPlayer) {
+        return game;
+      }
+
+      if (game.status !== "waiting") {
+        throw new BadRequestException("Game is not accepting new players");
+      }
+
+      if (game.isPrivate && !options.allowPrivate) {
+        throw new ForbiddenException(
+          "This game is private - join it with its invite code"
+        );
+      }
+
+      if (game.players.length >= game.maxPlayers) {
+        throw new BadRequestException("Game is full");
+      }
+
+      const user = await tx.user.findUnique({
+        where: { id: userId },
+        select: { id: true, username: true },
+      });
+      if (!user) {
+        throw new NotFoundException("User not found");
+      }
+
+      await tx.player.create({
+        data: {
+          userId,
+          gameId,
+          deck: null,
+          isReady: false,
+          score: 0,
+        },
+      });
+
+      this.logger.log(`Player ${userId} joined game ${gameId}`);
       return game;
-    }
-
-    if (game.status !== "waiting") {
-      throw new BadRequestException("Game is not accepting new players");
-    }
-
-    if (game.isPrivate && !options.allowPrivate) {
-      throw new ForbiddenException(
-        "This game is private - join it with its invite code"
-      );
-    }
-
-    if (game.players.length >= game.maxPlayers) {
-      throw new BadRequestException("Game is full");
-    }
-
-    const user = await this.prisma.user.findUnique({
-      where: { id: userId },
-      select: { id: true, username: true },
     });
-    if (!user) {
-      throw new NotFoundException("User not found");
-    }
-
-    await this.prisma.player.create({
-      data: {
-        userId,
-        gameId,
-        deck: null,
-        isReady: false,
-        score: 0,
-      },
-    });
-
-    this.logger.log(`Player ${userId} joined game ${gameId}`);
-    return game;
   }
 
   /**
@@ -399,63 +446,88 @@ export class GameService {
    * `userId` is a User id (matching `Game.hostId`, which `createGame` sets from
    * the creating user), NOT a Player id. Only the host may start, and only once
    * every player has readied up.
+   *
+   * Runs under the game lock: dealing writes every player's deck AND flips the
+   * game to `playing`. Half of that landing - dealt decks in a game still
+   * `waiting`, or a `playing` game with empty decks - is not a state the rules
+   * have an answer for.
    */
   async startGame(gameId: string, userId: string): Promise<GameState> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: {
-        players: {
-          include: {
-            user: {
-              select: { id: true, username: true },
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: {
+          players: {
+            include: {
+              user: {
+                select: { id: true, username: true },
+              },
             },
           },
         },
-      },
-    });
-
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
-    if (game.status !== "waiting") {
-      throw new BadRequestException("Game has already started");
-    }
-
-    if (game.hostId !== userId) {
-      throw new ForbiddenException("Only the host can start the game");
-    }
-
-    if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
-      throw new BadRequestException("Not enough players to start the game");
-    }
-
-    if (!game.players.every((p) => p.isReady)) {
-      throw new BadRequestException("All players must be ready to start the game");
-    }
-
-    for (const player of game.players) {
-      const deck = this.dealCards(game.players.length);
-      await this.prisma.player.update({
-        where: { id: player.id },
-        data: { deck: JSON.parse(JSON.stringify(deck)) },
       });
-    }
 
-    await this.prisma.game.update({
-      where: { id: gameId },
-      data: { status: "playing" },
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      if (game.status !== "waiting") {
+        throw new BadRequestException("Game has already started");
+      }
+
+      if (game.hostId !== userId) {
+        throw new ForbiddenException("Only the host can start the game");
+      }
+
+      if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
+        throw new BadRequestException("Not enough players to start the game");
+      }
+
+      if (!game.players.every((p) => p.isReady)) {
+        throw new BadRequestException(
+          "All players must be ready to start the game"
+        );
+      }
+
+      for (const player of game.players) {
+        const deck = this.dealCards(game.players.length);
+        await tx.player.update({
+          where: { id: player.id },
+          data: { deck: JSON.parse(JSON.stringify(deck)) },
+        });
+      }
+
+      await tx.game.update({
+        where: { id: gameId },
+        data: { status: "playing" },
+      });
+
+      // Create initial snapshot when game starts
+      await this.createSnapshot(tx, gameId, 0);
+
+      this.logger.log(
+        `Game ${gameId} started with ${game.players.length} players`
+      );
+      return this.readGameState(tx, gameId);
     });
-
-    // Create initial snapshot when game starts
-    await this.createSnapshot(gameId, 0);
-
-    this.logger.log(`Game ${gameId} started with ${game.players.length} players`);
-    return this.getGameState(gameId);
   }
 
+  /**
+   * Read the full game state through the pooled client.
+   *
+   * Callers already inside `withGameLock` must use `readGameState(tx, ...)`
+   * instead - this one would read on another connection, outside their
+   * transaction, and could not see their own uncommitted writes.
+   */
   async getGameState(gameId: string): Promise<GameState> {
-    const game = await this.prisma.game.findUnique({
+    return this.readGameState(this.prisma, gameId);
+  }
+
+  private async readGameState(
+    client: DbClient,
+    gameId: string
+  ): Promise<GameState> {
+    const game = await client.game.findUnique({
       where: { id: gameId },
       include: {
         players: {
@@ -501,59 +573,58 @@ export class GameService {
     };
   }
 
-  async flipDrawPile(
-    gameId: string,
-    playerId: string
-  ): Promise<PlayerDeck> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: { players: true },
+  async flipDrawPile(gameId: string, playerId: string): Promise<PlayerDeck> {
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
+
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      if (game.status !== "playing") {
+        throw new BadRequestException("Game is not in progress");
+      }
+
+      const player = game.players.find((p) => p.id === playerId);
+      if (!player) {
+        throw new NotFoundException("Player not found");
+      }
+
+      const playerDeck = this.parseDeck(playerId, player.deck);
+      const drawCards = playerDeck.drawPile.cards;
+
+      // Array structure: [draw pile (face-down at front)][active pile (face-up at end)]
+      // Count face-down cards at front (draw pile)
+      let drawCount = 0;
+      for (const c of drawCards) {
+        if (!c.faceUp) drawCount++;
+        else break;
+      }
+
+      if (drawCount === 0) {
+        // Reset: turn all cards face-down (preserves order for cycling)
+        drawCards.forEach((c) => (c.faceUp = false));
+        drawCount = drawCards.length;
+      }
+
+      // Flip up to 3 cards: remove from front, turn face-up, append to end
+      const numToFlip = Math.min(3, drawCount);
+      if (numToFlip > 0) {
+        const toFlip = drawCards.splice(0, numToFlip);
+        toFlip.forEach((c) => (c.faceUp = true));
+        drawCards.push(...toFlip);
+      }
+
+      await tx.player.update({
+        where: { id: playerId },
+        data: { deck: JSON.parse(JSON.stringify(playerDeck)) },
+      });
+
+      return playerDeck;
     });
-
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
-    if (game.status !== "playing") {
-      throw new BadRequestException("Game is not in progress");
-    }
-
-    const player = game.players.find((p) => p.id === playerId);
-    if (!player) {
-      throw new NotFoundException("Player not found");
-    }
-
-    const playerDeck = player.deck as unknown as PlayerDeck;
-    const drawCards = playerDeck.drawPile.cards;
-
-    // Array structure: [draw pile (face-down at front)][active pile (face-up at end)]
-    // Count face-down cards at front (draw pile)
-    let drawCount = 0;
-    for (const c of drawCards) {
-      if (!c.faceUp) drawCount++;
-      else break;
-    }
-
-    if (drawCount === 0) {
-      // Reset: turn all cards face-down (preserves order for cycling)
-      drawCards.forEach((c) => (c.faceUp = false));
-      drawCount = drawCards.length;
-    }
-
-    // Flip up to 3 cards: remove from front, turn face-up, append to end
-    const numToFlip = Math.min(3, drawCount);
-    if (numToFlip > 0) {
-      const toFlip = drawCards.splice(0, numToFlip);
-      toFlip.forEach((c) => (c.faceUp = true));
-      drawCards.push(...toFlip);
-    }
-
-    await this.prisma.player.update({
-      where: { id: playerId },
-      data: { deck: JSON.parse(JSON.stringify(playerDeck)) },
-    });
-
-    return playerDeck;
   }
 
   async setPlayerReady(
@@ -581,137 +652,176 @@ export class GameService {
     });
   }
 
+  /**
+   * Runs under the game lock: scoring reads every player's `bankPileCount`,
+   * which in-flight moves are still incrementing. Without the lock a move
+   * committing mid-scoring means the scores handed to one player disagree
+   * with the ones written to the database.
+   */
   async callBlitz(
     gameId: string,
     playerId: string
-  ): Promise<{ success: boolean; winnerId: string | null; scores: Record<string, number> }> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: { players: true },
-    });
-
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
-    if (game.status !== "playing") {
-      throw new BadRequestException("Game is not in progress");
-    }
-
-    const callingPlayer = game.players.find((p) => p.id === playerId);
-    if (!callingPlayer) {
-      throw new NotFoundException("Player not found");
-    }
-
-    const callingPlayerDeck = callingPlayer.deck as unknown as PlayerDeck;
-
-    // Validate that the calling player's Blitz pile is empty
-    if (callingPlayerDeck.blurtzPile.cards.length > 0) {
-      throw new BadRequestException(
-        "Cannot call Blitz - your Blitz pile is not empty"
-      );
-    }
-
-    // Calculate scores for all players
-    const scores: Record<string, number> = {};
-    let highestScore = -Infinity;
-    let winnerId: string | null = null;
-
-    for (const player of game.players) {
-      const deck = player.deck as unknown as PlayerDeck;
-      const blurtzRemaining = deck.blurtzPile.cards.length;
-      // Score = cards played to Dutch piles - (2 * remaining Blitz cards)
-      const finalScore = player.bankPileCount - 2 * blurtzRemaining;
-      scores[player.id] = finalScore;
-
-      // Update player score in database
-      await this.prisma.player.update({
-        where: { id: player.id },
-        data: { score: finalScore },
+  ): Promise<{
+    success: boolean;
+    winnerId: string | null;
+    scores: Record<string, number>;
+  }> {
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
       });
 
-      if (finalScore > highestScore) {
-        highestScore = finalScore;
-        winnerId = player.id;
+      if (!game) {
+        throw new NotFoundException("Game not found");
       }
-    }
 
-    // End the game
-    await this.prisma.game.update({
-      where: { id: gameId },
-      data: {
-        status: "finished",
-        winnerId,
-      },
+      if (game.status !== "playing") {
+        throw new BadRequestException("Game is not in progress");
+      }
+
+      const callingPlayer = game.players.find((p) => p.id === playerId);
+      if (!callingPlayer) {
+        throw new NotFoundException("Player not found");
+      }
+
+      const callingPlayerDeck = this.parseDeck(playerId, callingPlayer.deck);
+
+      // Validate that the calling player's Blitz pile is empty
+      if (callingPlayerDeck.blurtzPile.cards.length > 0) {
+        throw new BadRequestException(
+          "Cannot call Blitz - your Blitz pile is not empty"
+        );
+      }
+
+      // Calculate scores for all players
+      const scores: Record<string, number> = {};
+      let highestScore = -Infinity;
+      let winnerId: string | null = null;
+
+      for (const player of game.players) {
+        const deck = player.deck as unknown as PlayerDeck;
+        const blurtzRemaining = deck.blurtzPile.cards.length;
+        // Score = cards played to Dutch piles - (2 * remaining Blitz cards)
+        const finalScore = player.bankPileCount - 2 * blurtzRemaining;
+        scores[player.id] = finalScore;
+
+        // Update player score in database
+        await tx.player.update({
+          where: { id: player.id },
+          data: { score: finalScore },
+        });
+
+        if (finalScore > highestScore) {
+          highestScore = finalScore;
+          winnerId = player.id;
+        }
+      }
+
+      // End the game
+      await tx.game.update({
+        where: { id: gameId },
+        data: {
+          status: "finished",
+          winnerId,
+        },
+      });
+
+      this.logger.log(
+        `Blitz called by ${playerId} in game ${gameId} - winner: ${winnerId}`
+      );
+      return { success: true, winnerId, scores };
     });
-
-    this.logger.log(`Blitz called by ${playerId} in game ${gameId} - winner: ${winnerId}`);
-    return { success: true, winnerId, scores };
   }
 
   // Gameplay
+
+  /**
+   * Play a card, or explain why it cannot be played.
+   *
+   * This is the method the whole locking story is about. Every player plays at
+   * once and they are all racing for the same bank piles, so "two moves at the
+   * same instant" is the normal case. The read, the validation, the deck write
+   * and the gameState write all happen inside one `withGameLock` transaction,
+   * which is what makes the loser of a race see the winner's card already
+   * sitting on the pile and correctly reject.
+   *
+   * The returned state is read inside that same transaction, so the caller
+   * never has to go back to the database for it - a re-read after commit would
+   * be a fresh race of its own, and could show a state this move never
+   * produced.
+   */
   async moveCard(
     gameId: string,
     playerId: string,
     cardId: string,
     fromPileId: string,
     toPileId: string
-  ): Promise<boolean> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: { players: true },
+  ): Promise<MoveResult> {
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
+
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      if (game.status !== "playing") {
+        throw new BadRequestException("Game is not in progress");
+      }
+
+      const player = game.players.find((p) => p.id === playerId);
+      if (!player) {
+        throw new NotFoundException("Player not found");
+      }
+
+      const playerDeck = this.parseDeck(playerId, player.deck);
+      const gameState = game.gameState as any;
+
+      // Validate the move
+      const rejection = this.validateMove(
+        playerDeck,
+        cardId,
+        fromPileId,
+        toPileId,
+        gameState
+      );
+
+      if (rejection) {
+        // A rejection still carries state, read under the same lock: the
+        // client needs a fresh object to reconcile the move it optimistically
+        // hid, and the reason it lost the race is in that state.
+        return {
+          ok: false as const,
+          state: await this.readGameState(tx, gameId),
+          reason: rejection,
+        };
+      }
+
+      this.executeMove(playerDeck, gameState, cardId, fromPileId, toPileId);
+
+      // Check if this was a move to a Bank pile (for scoring)
+      const isBankPileMove = gameState.bankPiles?.some(
+        (p: Pile) => p.id === toPileId
+      );
+
+      await tx.player.update({
+        where: { id: playerId },
+        data: {
+          deck: JSON.parse(JSON.stringify(playerDeck)),
+          // Increment bank pile count if moved to bank pile
+          ...(isBankPileMove && { bankPileCount: { increment: 1 } }),
+        },
+      });
+      await tx.game.update({
+        where: { id: gameId },
+        data: { gameState },
+      });
+
+      return { ok: true as const, state: await this.readGameState(tx, gameId) };
     });
-
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
-    if (game.status !== "playing") {
-      throw new BadRequestException("Game is not in progress");
-    }
-
-    const player = game.players.find((p) => p.id === playerId);
-    if (!player) {
-      throw new NotFoundException("Player not found");
-    }
-
-    const playerDeck = player.deck as unknown as PlayerDeck;
-    const gameState = game.gameState as any;
-
-    // Validate the move
-    const isValidMove = this.validateMove(
-      playerDeck,
-      cardId,
-      fromPileId,
-      toPileId,
-      gameState
-    );
-
-    if (!isValidMove) {
-      return false;
-    }
-
-    this.executeMove(playerDeck, gameState, cardId, fromPileId, toPileId);
-
-    // Check if this was a move to a Bank pile (for scoring)
-    const isBankPileMove = gameState.bankPiles?.some(
-      (p: Pile) => p.id === toPileId
-    );
-
-    await this.prisma.player.update({
-      where: { id: playerId },
-      data: {
-        deck: JSON.parse(JSON.stringify(playerDeck)),
-        // Increment bank pile count if moved to bank pile
-        ...(isBankPileMove && { bankPileCount: { increment: 1 } }),
-      },
-    });
-    await this.prisma.game.update({
-      where: { id: gameId },
-      data: { gameState },
-    });
-
-    return true;
   }
 
   private dealCards(numPlayers: number): PlayerDeck {
@@ -751,45 +861,67 @@ export class GameService {
     }
   }
 
+  /**
+   * Validate a move, returning null when it is legal, or a reason when it is
+   * not.
+   *
+   * The reason travels back to the player who tried the move. "Someone beat
+   * you to that pile" is the single most common outcome in a game built on
+   * racing for shared piles, and it deserves to be distinguishable from
+   * "that card isn't yours to move".
+   */
   private validateMove(
     playerDeck: PlayerDeck,
     cardId: string,
     fromPileId: string,
     toPileId: string,
     gameState: any
-  ): boolean {
+  ): string | null {
     // Find the card
     const card = this.findCard(playerDeck, cardId);
-    if (!card) return false;
+    if (!card) return "That card is not in your deck";
 
     // Check if card is face up and can be moved
-    if (!card.faceUp) return false;
+    if (!card.faceUp) return "That card is face down";
 
     // Get source and destination piles
     const fromPile = this.findPile(playerDeck, gameState, fromPileId);
     const toPile = this.findPile(playerDeck, gameState, toPileId);
 
-    if (!fromPile || !toPile) return false;
+    if (!fromPile) return "Source pile not found";
+    if (!toPile) return "Destination pile not found";
 
     // Check if card can be moved from source pile
     // For draw pile, the top playable card is the last face-up card
     if (fromPile.type === "draw") {
       const faceUpCards = fromPile.cards.filter((c) => c.faceUp);
       const topFaceUpCard = faceUpCards[faceUpCards.length - 1];
-      if (topFaceUpCard?.id !== cardId) return false;
+      if (topFaceUpCard?.id !== cardId) {
+        return "Only the top card of the draw pile can be played";
+      }
     } else if (fromPile.type === "work") {
       // Post piles allow moving any face-up card (with all cards above it)
       // Card just needs to exist in the pile and be face up (already checked above)
       const cardIndex = fromPile.cards.findIndex((c) => c.id === cardId);
-      if (cardIndex === -1) return false;
+      if (cardIndex === -1) return "That card is not in the source pile";
     } else {
       // Blitz pile - only top card can be moved
       const topCard = fromPile.cards[fromPile.cards.length - 1];
-      if (topCard?.id !== cardId) return false;
+      if (topCard?.id !== cardId) {
+        return "Only the top card of the blurtz pile can be played";
+      }
     }
 
     // Validate move based on pile types
-    return this.isValidPlacement(toPile, card);
+    if (!this.isValidPlacement(toPile, card)) {
+      // The bank piles are shared, so a placement that was legal when the
+      // player picked the card up may have been taken in the meantime.
+      return toPile.type === "bank"
+        ? "That card no longer fits on that bank pile"
+        : "That card cannot be placed there";
+    }
+
+    return null;
   }
 
   private findCard(playerDeck: PlayerDeck, cardId: string): Card | null {
@@ -872,10 +1004,20 @@ export class GameService {
   }
 
   // Snapshot management
-  async createSnapshot(gameId: string, round: number = 0): Promise<void> {
-    const gameState = await this.getGameState(gameId);
 
-    await this.prisma.gameSnapshot.create({
+  /**
+   * `client` is explicit because the only caller is `startGame`, which is
+   * inside a lock - the snapshot has to be written on that transaction, or it
+   * captures a state its own transaction has not committed yet.
+   */
+  async createSnapshot(
+    client: DbClient,
+    gameId: string,
+    round: number = 0
+  ): Promise<void> {
+    const gameState = await this.readGameState(client, gameId);
+
+    await client.gameSnapshot.create({
       data: {
         gameId,
         round,
