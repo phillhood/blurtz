@@ -46,7 +46,11 @@ export class GameService {
       where: { alias },
       include: {
         players: {
-          include: { user: true },
+          include: {
+            user: {
+              select: { id: true, username: true },
+            },
+          },
         },
       },
     });
@@ -252,7 +256,11 @@ export class GameService {
       where: { id: gameId },
       include: {
         players: {
-          include: { user: true },
+          include: {
+            user: {
+              select: { id: true, username: true },
+            },
+          },
         },
       },
     });
@@ -293,7 +301,11 @@ export class GameService {
       where: { id: gameId },
       include: {
         players: {
-          include: { user: true },
+          include: {
+            user: {
+              select: { id: true, username: true },
+            },
+          },
         },
       },
     });
@@ -344,7 +356,11 @@ export class GameService {
       where: { id: gameId },
       include: {
         players: {
-          include: { user: true },
+          include: {
+            user: {
+              select: { id: true, username: true },
+            },
+          },
         },
       },
     });
