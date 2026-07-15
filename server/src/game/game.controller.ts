@@ -211,44 +211,4 @@ export class GameController {
       };
     }
   }
-
-  @Get(":id/snapshots")
-  @ApiOperation({ summary: "Get game state snapshots" })
-  @SwaggerResponse({ status: 200, description: "Snapshots retrieved" })
-  @SwaggerResponse({ status: 404, description: "Game not found" })
-  async getSnapshots(@Param() params: GameIdParamDto): Promise<ApiResponse> {
-    const { id: gameId } = params;
-    try {
-      const snapshots = await this.gameService.getSnapshots(gameId);
-      return {
-        success: true,
-        data: snapshots,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
-  }
-
-  @Get(":id/snapshots/latest")
-  @ApiOperation({ summary: "Get latest game snapshot" })
-  @SwaggerResponse({ status: 200, description: "Latest snapshot retrieved" })
-  @SwaggerResponse({ status: 404, description: "Game or snapshot not found" })
-  async getLatestSnapshot(@Param() params: GameIdParamDto): Promise<ApiResponse> {
-    const { id: gameId } = params;
-    try {
-      const snapshot = await this.gameService.getLatestSnapshot(gameId);
-      return {
-        success: true,
-        data: snapshot,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
-  }
 }
