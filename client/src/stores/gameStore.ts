@@ -12,6 +12,23 @@ interface GameStoreState {
   gameState: GameState | null;
   currentGameId: string | null;
   connected: boolean;
+  /**
+   * The socket dropped and is being retried. Distinct from `!connected`, which
+   * is also true before the first connect ever succeeds and after a close that
+   * will never be retried - a board must not promise a reconnection nobody is
+   * attempting.
+   */
+  reconnecting: boolean;
+  /**
+   * Which users hold a socket in this game right now, or `null` while the server
+   * has not said yet. Not part of `gameState`: presence is connection state and
+   * arrives on its own event.
+   *
+   * `null` means unknown, and unknown must read as present - showing a player as
+   * dropped because a frame has not landed yet is a worse lie than showing them
+   * as fine a moment too long.
+   */
+  connectedUserIds: string[] | null;
   socketInitialized: boolean;
   /**
    * Something went wrong with the connection, the room, or a request. Fatality
@@ -78,6 +95,8 @@ export const useGameStore = create<GameStore>()(
       gameState: null,
       currentGameId: null,
       connected: false,
+      reconnecting: false,
+      connectedUserIds: null,
       socketInitialized: false,
       error: null,
       moveRejection: null,
@@ -91,11 +110,14 @@ export const useGameStore = create<GameStore>()(
 
         const callbacks: SocketCallbacks = {
           onConnect: () => {
-            set({ connected: true, error: null });
+            set({ connected: true, reconnecting: false, error: null });
           },
 
-          onDisconnect: () => {
-            set({ connected: false });
+          // <Game>'s join effect re-joins the room on the next `connected`, so
+          // the board keeps its state here and the server replaces it with a
+          // fresh one on the way back in.
+          onDisconnect: (_reason: string, willReconnect: boolean) => {
+            set({ connected: false, reconnecting: willReconnect });
           },
 
           // Only a fatal code drops the room bookkeeping. A transient failure
@@ -107,6 +129,7 @@ export const useGameStore = create<GameStore>()(
             if (isFatalErrorCode(error.code)) {
               set({
                 currentGameId: null,
+                connectedUserIds: null,
                 userJoined: false,
                 userLeft: false,
               });
@@ -130,6 +153,7 @@ export const useGameStore = create<GameStore>()(
             set({
               gameState: null,
               currentGameId: null,
+              connectedUserIds: null,
               userJoined: false,
               userLeft: true,
               moveRejection: null,
@@ -154,6 +178,14 @@ export const useGameStore = create<GameStore>()(
             if (data.gameState) {
               set({ gameState: data.gameState });
             }
+          },
+
+          // Presence for a room this client is not looking at must not land on
+          // the board: nothing makes a socket leave its old room when the player
+          // navigates from one game to another.
+          onPresenceUpdated: (data) => {
+            if (data.gameId !== get().currentGameId) return;
+            set({ connectedUserIds: data.connectedUserIds });
           },
 
           // Swap the state in, exactly like every other event here. It arrives
@@ -214,7 +246,7 @@ export const useGameStore = create<GameStore>()(
 
       disconnectSocket: () => {
         socketService.disconnect();
-        set({ connected: false, socketInitialized: false });
+        set({ connected: false, reconnecting: false, socketInitialized: false });
       },
 
       // Connection actions
@@ -260,6 +292,7 @@ export const useGameStore = create<GameStore>()(
         try {
           set({
             currentGameId: gameId,
+            connectedUserIds: null,
             userJoined: false,
             userLeft: false,
             error: null,
@@ -290,6 +323,7 @@ export const useGameStore = create<GameStore>()(
             userJoined: false,
             currentGameId: null,
             gameState: null,
+            connectedUserIds: null,
             moveRejection: null,
           });
 

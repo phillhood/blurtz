@@ -52,6 +52,8 @@ describe("gameStore", () => {
       gameState: null,
       currentGameId: null,
       connected: false,
+      reconnecting: false,
+      connectedUserIds: null,
       socketInitialized: false,
       error: null,
       moveRejection: null,
@@ -172,6 +174,78 @@ describe("gameStore", () => {
     });
   });
 
+  describe("onPresenceUpdated", () => {
+    it("records who the server says is connected", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ currentGameId: "game-1" });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      expect(useGameStore.getState().connectedUserIds).toEqual([
+        "user-1",
+        "user-2",
+      ]);
+    });
+
+    it("replaces the whole set rather than merging it", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-1",
+        connectedUserIds: ["user-1"],
+      });
+
+      // user-2 dropping is the ONLY thing this frame says. Merging would make a
+      // player who left permanently present.
+      expect(useGameStore.getState().connectedUserIds).toEqual(["user-1"]);
+    });
+
+    it("ignores presence for a game this client is not in", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-2",
+        connectedUserIds: [],
+      });
+
+      expect(useGameStore.getState().connectedUserIds).toEqual([
+        "user-1",
+        "user-2",
+      ]);
+    });
+
+    it("starts out not knowing, rather than assuming an empty room", async () => {
+      await registeredCallbacks();
+
+      // An empty array reads as "everyone is gone" at the board. Until the
+      // server says, the answer is null - unknown.
+      expect(useGameStore.getState().connectedUserIds).toBeNull();
+    });
+
+    it("forgets the previous game's presence on joining another", async () => {
+      await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      useGameStore.getState().joinGame("game-2", "user-1");
+
+      expect(useGameStore.getState().connectedUserIds).toBeNull();
+    });
+  });
+
   // Every handler below is "swap in what the server decided". What is worth
   // pinning is which are allowed to lose the board, and which clear the error
   // that would otherwise hide it.
@@ -195,12 +269,43 @@ describe("gameStore", () => {
       const live = gameState("game-1");
       useGameStore.setState({ connected: true, gameState: live });
 
-      callbacks.onDisconnect!("transport close");
+      callbacks.onDisconnect!("transport close", true);
 
       expect(useGameStore.getState().connected).toBe(false);
       // socket.io reconnects on its own. Dropping gameState here would blank
       // the board on every blip and re-render it from nothing on recovery.
       expect(useGameStore.getState().gameState).toBe(live);
+    });
+
+    it("goes into reconnecting when the drop is one socket.io will retry", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ connected: true });
+
+      callbacks.onDisconnect!("transport close", true);
+
+      expect(useGameStore.getState().reconnecting).toBe(true);
+    });
+
+    it("does not claim to be reconnecting when nothing will retry", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ connected: true });
+
+      // The server closed it - socket.io does not retry that on its own, so a
+      // "reconnecting..." banner would spin forever over a dead socket.
+      callbacks.onDisconnect!("io server disconnect", false);
+
+      expect(useGameStore.getState().connected).toBe(false);
+      expect(useGameStore.getState().reconnecting).toBe(false);
+    });
+
+    it("clears reconnecting once the socket is back", async () => {
+      const callbacks = await registeredCallbacks();
+
+      callbacks.onDisconnect!("transport close", true);
+      callbacks.onConnect!();
+
+      expect(useGameStore.getState().connected).toBe(true);
+      expect(useGameStore.getState().reconnecting).toBe(false);
     });
 
     it("initializes the socket once, however many times it is asked", async () => {
