@@ -20,6 +20,7 @@ const VICTIM_PLAYER_ID = "66666666-6666-4666-8666-666666666666";
 
 const CONNECTED_USER_ID = "user-connected";
 const CONNECTED_PLAYER_ID = "player-connected";
+const OTHER_USER_ID = "user-other";
 
 interface MockSocket {
   id: string;
@@ -80,11 +81,24 @@ function lastEmit(socket: MockSocket, name: string) {
 /** A move result as GameService returns it. */
 const acceptedMove = { ok: true, state: { id: GAME_ID } } as never;
 
+/**
+ * Sockets in a room, as `fetchSockets()` reports them: `data.userId` is the only
+ * field presence reads. One id per socket, so repeating one is one user with two
+ * tabs open.
+ */
+function remoteSockets(...userIds: string[]) {
+  return userIds.map((userId, index) => ({
+    id: `remote-${index}`,
+    data: { userId },
+  }));
+}
+
 describe("GameGateway", () => {
   let gateway: GameGateway;
   let gameService: jest.Mocked<GameService>;
   let jwtService: jest.Mocked<JwtService>;
   let serverEmit: jest.Mock;
+  let fetchSockets: jest.Mock;
 
   beforeEach(async () => {
     const mockGameService = {
@@ -123,10 +137,13 @@ describe("GameGateway", () => {
     jwtService = module.get(JwtService);
 
     // The gateway broadcasts through `this.server`, which Nest would normally
-    // inject at bootstrap.
+    // inject at bootstrap. `in(...).fetchSockets()` is the room membership
+    // presence is derived from; the Redis adapter makes it span every instance.
     serverEmit = jest.fn();
+    fetchSockets = jest.fn().mockResolvedValue([]);
     gateway.server = {
       to: jest.fn().mockReturnValue({ emit: serverEmit }),
+      in: jest.fn().mockReturnValue({ fetchSockets }),
     } as never;
 
     jest.clearAllMocks();
@@ -179,6 +196,116 @@ describe("GameGateway", () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith("valid-token");
       expect(client.data.userId).toBe(CONNECTED_USER_ID);
       expect(client.disconnect).not.toHaveBeenCalled();
+    });
+  });
+
+  // Presence is who holds a socket in the room, derived on demand and broadcast
+  // as a whole set. A drop used to be a client-side no-op - PLAYER_LEFT with no
+  // state, which the client ignores - so nobody could tell a dropped opponent
+  // from one who had stopped playing.
+  describe("presence", () => {
+    /** The last PRESENCE_UPDATED broadcast to a room. */
+    function lastPresence() {
+      const calls = serverEmit.mock.calls.filter(
+        (call) => call[0] === SOCKET_EVENTS.PRESENCE_UPDATED
+      );
+      return calls[calls.length - 1]?.[1];
+    }
+
+    function droppedSocket(): MockSocket {
+      const client = createAuthedSocket();
+      client.data.gameId = GAME_ID;
+      return client;
+    }
+
+    it("tells the room who is still connected when a socket drops", async () => {
+      const client = droppedSocket();
+      // Socket.IO empties a socket's rooms before it fires `disconnect`, so the
+      // dropped socket is already gone from what the room reports.
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(gateway.server.in).toHaveBeenCalledWith(GAME_ID);
+      expect(lastPresence()).toMatchObject({
+        gameId: GAME_ID,
+        connectedUserIds: [OTHER_USER_ID],
+      });
+    });
+
+    it("does not tell the room that a dropped player LEFT the game", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      // The Player row survives a drop and the same user rejoins and plays on.
+      // PLAYER_LEFT is a genuine departure and would end their game everywhere.
+      const left = serverEmit.mock.calls.filter(
+        (call) => call[0] === SOCKET_EVENTS.PLAYER_LEFT
+      );
+      expect(left).toEqual([]);
+    });
+
+    it("reports an empty room when the last socket drops", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue([]);
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(lastPresence()).toMatchObject({ connectedUserIds: [] });
+    });
+
+    it("says nothing when a socket that was in no game drops", async () => {
+      const client = createAuthedSocket();
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it("sends the current set to a joiner, not only later changes", async () => {
+      const client = createAuthedSocket();
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+      fetchSockets.mockResolvedValue(
+        remoteSockets(CONNECTED_USER_ID, OTHER_USER_ID)
+      );
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      // To the room - which the joiner is now in - rather than `client.to(...)`,
+      // which is everyone EXCEPT them.
+      expect(lastPresence()).toMatchObject({
+        connectedUserIds: [CONNECTED_USER_ID, OTHER_USER_ID],
+      });
+    });
+
+    it("counts a user holding two sockets once", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(
+        remoteSockets(OTHER_USER_ID, OTHER_USER_ID, CONNECTED_USER_ID)
+      );
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(lastPresence().connectedUserIds).toEqual([
+        OTHER_USER_ID,
+        CONNECTED_USER_ID,
+      ]);
+    });
+
+    it("names users and carries no game state", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      // Presence is connection state. Smuggling a board into it would put an
+      // unredacted-by-default payload on a path that never goes near the
+      // redactor.
+      expect(lastPresence()).not.toHaveProperty("gameState");
+      expect(gameService.getGameState).not.toHaveBeenCalled();
     });
   });
 

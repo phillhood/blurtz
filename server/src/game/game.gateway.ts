@@ -39,11 +39,25 @@ interface SocketData {
   gameId?: string;
 }
 
+/**
+ * `pingInterval`/`pingTimeout` are what decide how long a drop stays invisible.
+ *
+ * A player who loses their network sends no FIN - the socket just goes quiet -
+ * so the heartbeat is the ONLY thing that notices, and presence cannot be
+ * broadcast until it does. Engine.IO's defaults (25s + 20s) put that at 45
+ * seconds, which is most of a Nertz round: the opponents would spend it
+ * watching a live board that nobody is behind.
+ *
+ * 10s + 10s bounds it at 20. Lower detects faster but starts calling a briefly
+ * throttled background tab dead, and a false drop is worse than a slow one.
+ */
 @WebSocketGateway({
   cors: {
     origin: ["http://localhost:3000", "http://localhost:3030"],
     credentials: true,
   },
+  pingInterval: 10000,
+  pingTimeout: 10000,
 })
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -71,6 +85,39 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   private async clientGameState(gameId: string) {
     return toClientGameState(await this.gameService.getGameState(gameId));
+  }
+
+  /**
+   * Who is holding a socket in `gameId`, right now.
+   *
+   * Presence is DERIVED from room membership rather than stored: a column would
+   * need cleaning up after a crash and would lie after a restart, and an
+   * in-memory map would be wrong the moment a second instance existed. The Redis
+   * adapter makes `fetchSockets()` span every instance, so the room is already
+   * the answer.
+   *
+   * Deduplicated: two tabs are one player.
+   */
+  private async connectedUserIds(gameId: string): Promise<string[]> {
+    const sockets = await this.server.in(gameId).fetchSockets();
+    const userIds = sockets
+      .map((socket) => (socket.data as SocketData).userId)
+      .filter((userId) => Boolean(userId));
+
+    return [...new Set(userIds)];
+  }
+
+  /**
+   * Tell the room who is connected - the whole set, never a delta. It is at most
+   * four ids, and a set that arrives late still corrects itself where a missed
+   * delta stays wrong forever.
+   */
+  private async broadcastPresence(gameId: string) {
+    this.server.to(gameId).emit(SOCKET_EVENTS.PRESENCE_UPDATED, {
+      gameId,
+      connectedUserIds: await this.connectedUserIds(gameId),
+      timestamp: new Date(),
+    });
   }
 
   /**
@@ -103,17 +150,21 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  handleDisconnect(client: Socket) {
+  /**
+   * A drop, not a departure. The Player row survives and `joinGame` returns
+   * early for an existing player, so the same user rejoins and plays on - which
+   * is why this emits PRESENCE_UPDATED and NOT `PLAYER_LEFT`: nobody left, and
+   * saying they did would end their game for every other client.
+   *
+   * Socket.IO removes a socket from its rooms before it fires `disconnect`, so
+   * the set read here already excludes this one.
+   */
+  async handleDisconnect(client: Socket) {
     const { userId, gameId } = client.data as SocketData;
 
     if (gameId && userId) {
       this.logger.log(`Socket disconnected: user ${userId} from game ${gameId}`);
-      client.leave(gameId);
-
-      this.server.to(gameId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
-        userId,
-        timestamp: new Date(),
-      });
+      await this.broadcastPresence(gameId);
     }
   }
 
@@ -198,6 +249,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         gameState,
         timestamp: new Date(),
       });
+
+      // To the room, which now includes this socket: the joiner needs the
+      // CURRENT set, not only the changes that happen after it arrives.
+      await this.broadcastPresence(gameId);
     } catch (error) {
       this.emitError(client, "Join room failed", error);
     }
