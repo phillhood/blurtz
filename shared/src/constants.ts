@@ -57,12 +57,6 @@ export const SOCKET_EVENTS = {
   // A Blitz was scored but nobody reached targetScore: the round is over and
   // the next one is waiting on everybody to ready up.
   ROUND_OVER: "round_over",
-  // A fresh round has been dealt, carrying new state like GAME_STARTED. No
-  // longer emitted by the server: the round now advances automatically on the
-  // last ready-up, and that `playing` board reaches clients over the
-  // GAME_STATE_UPDATED that `handlePlayerReady` broadcasts. Kept as a protocol
-  // name the client still handles.
-  ROUND_STARTED: "round_started",
   GAME_STATE_UPDATED: "game_state_updated",
   CARD_MOVED: "card_moved",
   // Sent only to the player whose move was refused, and always with state:

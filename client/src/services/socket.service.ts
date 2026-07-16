@@ -54,8 +54,6 @@ export interface SocketCallbacks {
     round: number;
     calledBy: string;
   }) => void;
-  /** The next round has been dealt. Fresh decks, same cumulative scores. */
-  onRoundStarted?: (data: { gameState: GameState; round: number }) => void;
 }
 
 class SocketService {
@@ -210,13 +208,6 @@ class SocketService {
       SOCKET_EVENTS.ROUND_OVER,
       (data: { gameState: GameState; round: number; calledBy: string }) => {
         this.callbacks.onRoundOver?.(data);
-      }
-    );
-
-    this.socket.on(
-      SOCKET_EVENTS.ROUND_STARTED,
-      (data: { gameState: GameState; round: number }) => {
-        this.callbacks.onRoundStarted?.(data);
       }
     );
 

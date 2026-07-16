@@ -76,7 +76,6 @@ describe("socketService subscriptions", () => {
       SOCKET_EVENTS.CARD_FLIPPED,
       SOCKET_EVENTS.BLITZ_CALLED,
       SOCKET_EVENTS.ROUND_OVER,
-      SOCKET_EVENTS.ROUND_STARTED,
       SOCKET_EVENTS.ERROR,
     ]) {
       expect(handlers.has(event), `no handler for "${event}"`).toBe(true);
@@ -172,7 +171,6 @@ describe("socketService subscriptions", () => {
     const callbacks = {
       onMoveRejected: vi.fn(),
       onRoundOver: vi.fn(),
-      onRoundStarted: vi.fn(),
       onBlitzCalled: vi.fn(),
       onPlayerJoined: vi.fn(),
       onPlayerLeft: vi.fn(),
@@ -192,10 +190,6 @@ describe("socketService subscriptions", () => {
     const roundOver = { gameState: state, round: 2, calledBy: "player-1" };
     handlers.get(SOCKET_EVENTS.ROUND_OVER)!(roundOver);
     expect(callbacks.onRoundOver).toHaveBeenCalledWith(roundOver);
-
-    const roundStarted = { gameState: state, round: 3 };
-    handlers.get(SOCKET_EVENTS.ROUND_STARTED)!(roundStarted);
-    expect(callbacks.onRoundStarted).toHaveBeenCalledWith(roundStarted);
 
     handlers.get(SOCKET_EVENTS.BLITZ_CALLED)!({ playerId: "player-1" });
     expect(callbacks.onBlitzCalled).toHaveBeenCalledWith({

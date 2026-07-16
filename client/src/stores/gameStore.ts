@@ -188,10 +188,6 @@ export const useGameStore = create<GameStore>()(
           onRoundOver: (data: { gameState: GameState }) => {
             set({ gameState: data.gameState, error: null });
           },
-
-          onRoundStarted: (data: { gameState: GameState }) => {
-            set({ gameState: data.gameState, error: null, moveRejection: null });
-          },
         };
 
         socketService.setCallbacks(callbacks);

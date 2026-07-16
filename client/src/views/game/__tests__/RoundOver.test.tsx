@@ -195,19 +195,18 @@ describe("the round-over interstitial", () => {
       screen.getByRole("button", { name: /Cancel Ready/i })
     ).toBeInTheDocument();
 
-    // The server clears readiness on a round advance; the button must follow.
+    // The round now advances automatically on the last ready-up: the server
+    // deals and broadcasts the fresh `playing` board over GAME_STATE_UPDATED.
+    // Readiness is cleared by that deal; the button must follow.
     await act(async () => {
-      callbacks.onRoundStarted?.({
-        gameState: {
-          ...roundOverState([
-            player("p1", "alice", 30, 0, false),
-            player("p2", "bob", 12, 0, false),
-          ]),
-          status: "playing",
-          currentRound: 3,
-        } as unknown as GameState,
-        round: 3,
-      });
+      callbacks.onGameStateUpdated?.({
+        ...roundOverState([
+          player("p1", "alice", 30, 0, false),
+          player("p2", "bob", 12, 0, false),
+        ]),
+        status: "playing",
+        currentRound: 3,
+      } as unknown as GameState);
     });
 
     // Back to a playing board - no ready button, and no stale readiness fired.

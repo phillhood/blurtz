@@ -440,20 +440,6 @@ describe("gameStore", () => {
       expect(useGameStore.getState().gameState!.status).toBe("round_over");
     });
 
-    it("clears the last round's move rejection when the next round is dealt", async () => {
-      const callbacks = await registeredCallbacks();
-      callbacks.onMoveRejected!({
-        gameState: gameState("game-1"),
-        reason: "That card no longer fits on that bank pile",
-      });
-
-      callbacks.onRoundStarted!({ gameState: gameState("game-1"), round: 3 });
-
-      // Fresh decks, fresh board. A toast explaining a move from the previous
-      // round would be about cards that no longer exist.
-      expect(useGameStore.getState().moveRejection).toBeNull();
-      expect(useGameStore.getState().error).toBeNull();
-    });
   });
 
   describe("joinGame", () => {
