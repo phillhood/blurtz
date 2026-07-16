@@ -53,11 +53,29 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.getByPlaceholder("Username").fill(user.username);
     await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
+
+    // Same throttler window as the test below: `/api/auth/login` allows 1/sec
+    // per IP and the test above just posted one. Without the wait the API
+    // answers 429, and every assertion here would pass on a login that was
+    // never actually judged - which is exactly what this test exists to rule
+    // out.
+    await page.waitForTimeout(1_100);
+
+    const refused = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/auth/login") &&
+        response.request().method() === "POST"
+    );
     await page.getByRole("button", { name: "Sign In" }).click();
 
-    // Refused means refused: no session, no redirect. The API answers 401
-    // "Invalid credentials" - what the app does NOT do with that answer is the
-    // subject of the expected-failure test below.
+    // Pin the answer FIRST. "Still on /login with no token" is satisfied
+    // identically by a 429, a 500 or a dropped connection - none of which is
+    // the password being refused. Only a 401 means the server looked at the
+    // credentials and said no.
+    const response = await refused;
+    expect(response.status(), await response.text()).toBe(401);
+
+    // Refused means refused: no session, no redirect.
     await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
