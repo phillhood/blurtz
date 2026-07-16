@@ -43,12 +43,30 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+/**
+ * Mock ResizeObserver.
+ *
+ * A real class, and it has to be. This used to be
+ * `vi.fn().mockImplementation(() => ({ ... }))`, which forwards `new` to the
+ * implementation - and an arrow function is not a constructor, so `new
+ * ResizeObserver()` threw. @dnd-kit's `useResizeObserver` does exactly that
+ * (`const {ResizeObserver} = window; return new ResizeObserver(handleResize)`),
+ * so every draggable component in the game blew up on render and none of them
+ * could be tested at all.
+ *
+ * It is assigned to `window`, not `global`, for the same reason: dnd-kit reads
+ * it off `window` and guards on `typeof window.ResizeObserver`.
+ */
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+Object.defineProperty(window, "ResizeObserver", {
+  writable: true,
+  configurable: true,
+  value: MockResizeObserver,
+});
 
 // Mock clipboard API
 Object.assign(navigator, {
