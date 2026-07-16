@@ -10,6 +10,7 @@ import {
   rosterCard,
   seatPlayers,
   setBankPileCount,
+  startEveryBankPile,
   statusHeading,
   type SeatedTable,
 } from "./fixtures/game";
@@ -236,6 +237,37 @@ test.describe("Four players", () => {
       // Contained by the board it sits in, rather than stretching it.
       expect(layout.rowWidth).toBeLessThanOrEqual(layout.boardWidth);
     }
+
+    await table.close();
+  });
+
+  /**
+   * The bank piles are the surface you drag cards ONTO, so the page scrolling
+   * away from them is worse than the opponents row doing it. Sixteen started
+   * foundations is a state only a full table reaches: there are four 1s per
+   * player, so two players can only ever start eight.
+   */
+  test("sixteen started foundations do not scroll the page sideways", async ({
+    browser,
+  }) => {
+    const table = await seatPlayers(browser, { playerCount: 4 });
+
+    await readyUpAndStart(table);
+    await startEveryBankPile(table.game.id);
+
+    const page = table.pages[0];
+    await page.reload();
+    await expect(page.getByText("Bank", { exact: true })).toBeVisible();
+
+    const layout = await page.evaluate(() => ({
+      pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
+      pilesRendered: document.querySelectorAll(".center-area .w-\\[88px\\]").length,
+    }));
+
+    // All sixteen really are on screen, or the assertion below passes on a
+    // board that never reached the state this test is about.
+    expect(layout.pilesRendered).toEqual(16);
+    expect(layout.pageOverflow).toBeLessThanOrEqual(0);
 
     await table.close();
   });

@@ -67,6 +67,11 @@ export const CenterArea: React.FC<LayoutProps> = ({ className, children, ...prop
     <div
       className={clsx(
         "flex flex-col items-center gap-5 justify-center pb-2.5 row-start-2",
+        // Sixteen foundations - four colours per player at a full table - are
+        // wider than the board, and BankPiles is nested too deep to constrain
+        // itself. Same reason as OpponentsRow: without this the bank stretches
+        // the grid track and scrolls the page rather than scrolling itself.
+        "min-w-0 overflow-x-auto",
         className
       )}
       {...props}

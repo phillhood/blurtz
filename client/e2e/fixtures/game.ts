@@ -1,5 +1,6 @@
 import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { uniqueName, withDb } from "./db";
+import { CARD_COLORS } from "@blurtz/shared";
 import { authenticate, createUser, type TestUser } from "./users";
 
 export interface CreatedGame {
@@ -439,6 +440,41 @@ export async function setReady(
       `UPDATE players SET is_ready = $1 WHERE game_id = $2 AND user_id = $3`,
       [isReady, gameId, userId]
     );
+  });
+}
+
+/**
+ * Start every one of the 16 shared foundations, the widest the bank ever gets.
+ * Only a full table can reach it - there are four 1s per player - and playing
+ * there for real would mean sixteen races against a shuffled deal.
+ */
+export async function startEveryBankPile(gameId: string): Promise<void> {
+  const colors = Object.values(CARD_COLORS);
+
+  await withDb(async (db) => {
+    const { rows } = await db.query(`SELECT game_state FROM games WHERE id = $1`, [
+      gameId,
+    ]);
+    const state = rows[0].game_state as {
+      bankPiles: Array<{ id: string; cards: unknown[] }>;
+    };
+
+    state.bankPiles = state.bankPiles.map((pile, index) => ({
+      ...pile,
+      cards: [
+        {
+          id: `bank-seed-${index}`,
+          value: 1,
+          color: colors[index % colors.length],
+          faceUp: true,
+        },
+      ],
+    }));
+
+    await db.query(`UPDATE games SET game_state = $1 WHERE id = $2`, [
+      state,
+      gameId,
+    ]);
   });
 }
 
