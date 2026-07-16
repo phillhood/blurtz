@@ -497,4 +497,337 @@ describe("GameService concurrency (real database)", () => {
       expect(players).toHaveLength(1);
     });
   });
+  // -------------------------------------------------------------------
+  // Task 10: multi-round.
+  //
+  // A double Blitz was survivable while a Blitz only ever ENDED the game -
+  // the second caller wrote the same terminal state over the first. With
+  // rounds it is not: two callers each accumulate into `score`, each write a
+  // RoundResult, and each bump the round. The round counter jumps by two, the
+  // scores are double-counted, and both are permanent.
+  // -------------------------------------------------------------------
+  describe("two players calling Blitz at the same instant", () => {
+    let raceGameId: string;
+    let callerOne: string;
+    let callerTwo: string;
+    let userIds: string[];
+
+    /**
+     * BOTH players have an empty blurtz pile, so both are legally entitled to
+     * call it. That is what makes this a real race rather than one valid call
+     * and one rejection: nothing about either caller is wrong, and only the
+     * lock decides which one lands.
+     */
+    beforeEach(async () => {
+      const userA = await prisma.user.create({
+        data: { username: `race-blitz-a-${uuidv4()}`, password: TEST_TAG },
+      });
+      const userB = await prisma.user.create({
+        data: { username: `race-blitz-b-${uuidv4()}`, password: TEST_TAG },
+      });
+      userIds = [userA.id, userB.id];
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 2,
+          status: "playing",
+          // High enough that neither player can finish the game: this Blitz
+          // must land on `round_over`, which is the state a double call
+          // corrupts.
+          targetScore: 100,
+          currentRound: 1,
+          hostId: userA.id,
+          gameState: { bankPiles: [] },
+        },
+      });
+      raceGameId = game.id;
+
+      const deckA = buildDeck().deck;
+      deckA.blurtzPile.cards = [];
+      const deckB = buildDeck().deck;
+      deckB.blurtzPile.cards = [];
+
+      const rowA = await prisma.player.create({
+        data: {
+          userId: userA.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(deckA)),
+          bankPileCount: 6,
+          // Carried in from earlier rounds - the number a double Blitz would
+          // accumulate into twice.
+          score: 10,
+        },
+      });
+      const rowB = await prisma.player.create({
+        data: {
+          userId: userB.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(deckB)),
+          bankPileCount: 3,
+          score: 4,
+        },
+      });
+
+      callerOne = rowA.id;
+      callerTwo = rowB.id;
+    });
+
+    /** Genuinely concurrent. Run sequentially this proves nothing. */
+    function race() {
+      return Promise.allSettled([
+        service.callBlitz(raceGameId, callerOne),
+        service.callBlitz(raceGameId, callerTwo),
+      ]);
+    }
+
+    it("lets exactly ONE Blitz land, and the loser bails on the status", async () => {
+      const results = await race();
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      // Unlocked, BOTH completed: each read `playing` before either wrote.
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      // The loser must fail on the status it read under the lock - not on a
+      // unique-constraint violation, and not on a missing row.
+      const loss = rejected[0] as PromiseRejectedResult;
+      expect(loss.reason).toBeInstanceOf(BadRequestException);
+      expect(loss.reason.message).toMatch(/not in progress/);
+    });
+
+    it("advances the round exactly once and scores it exactly once", async () => {
+      await race();
+
+      const game = await prisma.game.findUnique({
+        where: { id: raceGameId },
+        include: { players: { orderBy: { id: "asc" } } },
+      });
+
+      // The round ended; nobody reached 100.
+      expect(game.status).toBe("round_over");
+      // Still round 1: the round is OVER, not advanced - the advance is
+      // startNextRound's job. What matters is that the loser did not bump it.
+      expect(game.currentRound).toBe(1);
+      expect(game.winnerPlayerId).toBeNull();
+
+      // Scored once, from the carried-in totals:
+      //   A: 10 + (6 - 2*0) = 16
+      //   B:  4 + (3 - 2*0) =  7
+      // A second scoring pass would have made these 22 and 10.
+      const a = game.players.find((p) => p.id === callerOne);
+      const b = game.players.find((p) => p.id === callerTwo);
+      expect(a.score).toBe(16);
+      expect(b.score).toBe(7);
+      expect(a.roundScore).toBe(6);
+      expect(b.roundScore).toBe(3);
+    });
+
+    it("writes exactly one RoundResult per player for the round", async () => {
+      await race();
+
+      const rows = await prisma.roundResult.findMany({
+        where: { gameId: raceGameId, round: 1 },
+        orderBy: { playerId: "asc" },
+      });
+
+      // One per player, not two. The (gameId, playerId, round) unique index is
+      // the backstop here, but the lock is what should mean it never fires.
+      expect(rows).toHaveLength(2);
+      expect(rows.filter((r) => r.playerId === callerOne)).toHaveLength(1);
+      expect(rows.filter((r) => r.playerId === callerTwo)).toHaveLength(1);
+
+      // Exactly one of them is the caller who won the race.
+      expect(rows.filter((r) => r.calledBlurtz)).toHaveLength(1);
+    });
+
+    it("credits nobody's gamesPlayed for a round that ended without finishing", async () => {
+      await race();
+
+      const users = await prisma.user.findMany({
+        where: { id: { in: userIds } },
+      });
+
+      // The game is `round_over`, not `finished`. Neither the winner nor the
+      // loser of the race may have credited a game here.
+      expect(users.every((u) => u.gamesPlayed === 0)).toBe(true);
+      expect(users.every((u) => u.gamesWon === 0)).toBe(true);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Task 10: a round played end to end, against the real database.
+  // -------------------------------------------------------------------
+  describe("playing a round to a Blitz with a low target", () => {
+    let gameOneId: string;
+    let hostUserId: string;
+    let otherUserId: string;
+    let hostPlayerId: string;
+    let otherPlayerId: string;
+
+    async function seedGame(targetScore: number) {
+      const host = await prisma.user.create({
+        data: { username: `round-host-${uuidv4()}`, password: TEST_TAG },
+      });
+      const other = await prisma.user.create({
+        data: { username: `round-other-${uuidv4()}`, password: TEST_TAG },
+      });
+      hostUserId = host.id;
+      otherUserId = other.id;
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 2,
+          status: "playing",
+          targetScore,
+          currentRound: 1,
+          hostId: host.id,
+          gameState: { bankPiles: [] },
+        },
+      });
+      gameOneId = game.id;
+
+      // The host is the one who empties their blurtz pile and calls it.
+      const hostDeck = buildDeck().deck;
+      hostDeck.blurtzPile.cards = [];
+      const otherDeck = buildDeck().deck;
+
+      const hostRow = await prisma.player.create({
+        data: {
+          userId: host.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(hostDeck)),
+          bankPileCount: 3,
+          isReady: false,
+        },
+      });
+      const otherRow = await prisma.player.create({
+        data: {
+          userId: other.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(otherDeck)),
+          bankPileCount: 1,
+          isReady: false,
+        },
+      });
+      hostPlayerId = hostRow.id;
+      otherPlayerId = otherRow.id;
+    }
+
+    it("ends the round, accumulates score, resets counters and re-deals 40 cards", async () => {
+      // Target 5: one round of 3 is not enough, two are.
+      await seedGame(5);
+
+      // --- Round 1 -----------------------------------------------------
+      const blitz = await service.callBlitz(gameOneId, hostPlayerId);
+      expect(blitz.status).toBe("round_over");
+
+      let game = await prisma.game.findUnique({
+        where: { id: gameOneId },
+        include: { players: true },
+      });
+      expect(game.status).toBe("round_over");
+      expect(game.currentRound).toBe(1);
+
+      let host = game.players.find((p) => p.id === hostPlayerId);
+      // 3 banked, nothing stranded.
+      expect(host.score).toBe(3);
+      expect(host.roundScore).toBe(3);
+      // Not yet reset - the advance is what resets it.
+      expect(host.bankPileCount).toBe(3);
+
+      // The other player was caught with a full blurtz pile: 1 - 2*10 = -19.
+      const other = game.players.find((p) => p.id === otherPlayerId);
+      expect(other.score).toBe(-19);
+
+      // Nobody has finished a game, so nobody has played one yet.
+      let users = await prisma.user.findMany({
+        where: { id: { in: [hostUserId, otherUserId] } },
+      });
+      expect(users.every((u) => u.gamesPlayed === 0)).toBe(true);
+
+      // --- Ready up and advance ---------------------------------------
+      await expect(
+        service.startNextRound(gameOneId, hostUserId)
+      ).rejects.toThrow(/All players must be ready/);
+
+      await service.setPlayerReady(gameOneId, hostPlayerId, true);
+      await service.setPlayerReady(gameOneId, otherPlayerId, true);
+      await service.startNextRound(gameOneId, hostUserId);
+
+      game = await prisma.game.findUnique({
+        where: { id: gameOneId },
+        include: { players: true },
+      });
+
+      expect(game.status).toBe("playing");
+      expect(game.currentRound).toBe(2);
+
+      for (const player of game.players) {
+        const deck = player.deck as unknown as PlayerDeck;
+        // A whole fresh deck each.
+        expect(countDeckCards(deck)).toBe(CARDS_PER_PLAYER);
+        expect(deck.blurtzPile.cards).toHaveLength(10);
+        // The per-round counters are back to zero...
+        expect(player.bankPileCount).toBe(0);
+        expect(player.roundScore).toBe(0);
+        expect(player.isReady).toBe(false);
+      }
+
+      // ...but the cumulative score is NOT. This is the whole point.
+      host = game.players.find((p) => p.id === hostPlayerId);
+      expect(host.score).toBe(3);
+
+      // --- Round 2, to the target -------------------------------------
+      // Bank enough to cross 5, and empty the blurtz pile so the call is legal.
+      const hostDeck = game.players.find((p) => p.id === hostPlayerId)
+        .deck as unknown as PlayerDeck;
+      hostDeck.blurtzPile.cards = [];
+      await prisma.player.update({
+        where: { id: hostPlayerId },
+        data: {
+          deck: JSON.parse(JSON.stringify(hostDeck)),
+          bankPileCount: 4,
+        },
+      });
+
+      const final = await service.callBlitz(gameOneId, hostPlayerId);
+
+      // 3 carried + 4 = 7 >= 5.
+      expect(final.status).toBe("finished");
+      expect(final.winnerId).toBe(hostPlayerId);
+      expect(final.scores[hostPlayerId]).toBe(7);
+
+      game = await prisma.game.findUnique({
+        where: { id: gameOneId },
+        include: { players: true },
+      });
+      expect(game.status).toBe("finished");
+      expect(game.winnerPlayerId).toBe(hostPlayerId);
+
+      // A RoundResult per player per round: 2 rounds x 2 players.
+      const rows = await prisma.roundResult.findMany({
+        where: { gameId: gameOneId },
+      });
+      expect(rows).toHaveLength(4);
+
+      // --- And the stats that were permanently stuck at zero -----------
+      users = await prisma.user.findMany({
+        where: { id: { in: [hostUserId, otherUserId] } },
+      });
+      const hostUser = users.find((u) => u.id === hostUserId);
+      const otherUser = users.find((u) => u.id === otherUserId);
+
+      // updateGameStats had no callers at all before this task.
+      expect(hostUser.gamesPlayed).toBe(1);
+      expect(hostUser.gamesWon).toBe(1);
+      expect(otherUser.gamesPlayed).toBe(1);
+      expect(otherUser.gamesWon).toBe(0);
+    });
+  });
 });
