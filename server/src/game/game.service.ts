@@ -666,25 +666,14 @@ export class GameService {
   }
 
   /**
-   * Deal the next round of a game whose round is over.
+   * Deal the next round: round_over --(the last player readies up)--> playing.
    *
-   * The other half of the state machine `callBlitz` opened:
+   * `game` must have been read off `tx` inside `withGameLock`. The deal is then
+   * atomic with the ready write that triggers it, which is what stops two
+   * simultaneous final ready-ups double-dealing.
    *
-   *   round_over --(the last player readies up)--> playing
-   *
-   * There is no host action between rounds: `setPlayerReady` calls this the
-   * instant the final ready-up lands, in the SAME transaction. `game` must
-   * therefore have been read inside `withGameLock` off the same `tx` - like
-   * `applyForfeit`, that is what makes it safe. The deal, the counter resets, the
-   * round bump and the board reset are one atomic change under the game lock or
-   * they are a game nobody can play; and because they serialize on the game row
-   * with the ready write that triggered them, two simultaneous final ready-ups
-   * cannot double-deal - the second blocks, then reads `playing` at the status
-   * guard and never gets here.
-   *
-   * Deliberately not folded into `startGame`: a method that could deal either a
-   * `waiting` or a `round_over` game is one status check away from re-dealing a
-   * game in progress, which is every player's hand gone mid-race.
+   * Kept out of `startGame`: one method that deals either a `waiting` or a
+   * `round_over` game is one status check away from re-dealing a live game.
    */
   private async advanceRound(
     tx: DbClient,
@@ -878,22 +867,15 @@ export class GameService {
   }
 
   /**
-   * Call Blitz: score the round, then either end the round or end the game.
+   * Score the round, then end the round or the game:
    *
    *   playing --callBlitz--> round_over   when max(cumulative) <  targetScore
    *   playing --callBlitz--> finished     when max(cumulative) >= targetScore
    *
-   * Runs under the game lock, and this is the method that most needs it.
-   * Scoring reads every player's `bankPileCount` while in-flight moves are still
-   * incrementing it, so without the lock the scores handed back to one player
-   * disagree with the ones written to the database.
-   *
-   * The lock is also the whole defence against a double Blitz, and it works by
-   * making the `status !== "playing"` check below MEAN something: the second
-   * caller blocks on the row until the first commits, then reads
-   * `round_over`/`finished` and bails, having scored nothing and advanced no
-   * round. Move that read outside the lock and the check is decorative - two
-   * callers in the same millisecond both pass it.
+   * The lock is what makes the `status !== "playing"` check below mean anything:
+   * it holds the second caller until the first commits, so a double Blitz reads
+   * `round_over` and bails instead of scoring twice. Scoring also reads
+   * `bankPileCount` while in-flight moves are still incrementing it.
    */
   async callBlitz(
     gameId: string,
