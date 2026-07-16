@@ -380,6 +380,44 @@ export class GameService {
   }
 
   /**
+   * Hand the host role on, if the player leaving was holding it.
+   *
+   * `hostId` is a USER id and outlives the Player row it names, so every door
+   * out of a game has to answer this question - and they were not answering it
+   * the same way. `startGame` and `startNextRound` both demand host AND
+   * membership, so a `hostId` pointing at someone who has left is a game
+   * nobody can deal: the host is not in it, and everyone who is in it is not
+   * the host. The departed host could still start it over REST, too.
+   *
+   * ONE copy, TWO callers: the waiting-lobby path, which has always done this,
+   * and `applyForfeit`, which never did (that was the bug). Extracted rather
+   * than copied precisely because a second copy is how the two drifted apart
+   * in the first place.
+   *
+   * No-ops when the leaver was not the host, or when nobody is left to take
+   * it - a game with no players is being finished by its caller anyway.
+   */
+  private async reassignHostIfDeparting(
+    tx: DbClient,
+    game: { id: string; hostId: string },
+    departingUserId: string,
+    remainingPlayers: Array<{ userId: string }>
+  ): Promise<void> {
+    if (game.hostId !== departingUserId || remainingPlayers.length === 0) {
+      return;
+    }
+
+    const heir = remainingPlayers[0].userId;
+    await tx.game.update({
+      where: { id: game.id },
+      data: { hostId: heir },
+    });
+    this.logger.log(
+      `Host ${departingUserId} left game ${game.id} - reassigned host to ${heir}`
+    );
+  }
+
+  /**
    * Runs under the game lock: leaving an in-progress game ends it, and the
    * waiting-game path is a read-then-delete that can also flip the game to
    * `finished`. Both are game-ending mutations, so they serialize on the same
@@ -434,18 +472,9 @@ export class GameService {
           where: { id: gameId },
           data: { status: "finished" },
         });
-      } else if (game.hostId === userId) {
-        // The host is leaving but the game lives on. `hostId` outlives the
-        // Player row, so without this the game is unstartable by anyone -
-        // nobody left is the host - and the departed host could still start
-        // it over REST. Hand the role to whoever remains.
-        await tx.game.update({
-          where: { id: gameId },
-          data: { hostId: remainingPlayers[0].userId },
-        });
-        this.logger.log(
-          `Host ${userId} left game ${gameId} - reassigned host to ${remainingPlayers[0].userId}`
-        );
+      } else {
+        // The host may be the one leaving, but the lobby lives on.
+        await this.reassignHostIfDeparting(tx, game, userId, remainingPlayers);
       }
       await tx.player.delete({ where: { id: player.id } });
       return this.readGameState(tx, gameId);
@@ -494,6 +523,7 @@ export class GameService {
     game: {
       id: string;
       status: string;
+      hostId: string;
       players: Array<{ id: string; userId: string }>;
     },
     playerId: string
@@ -541,8 +571,22 @@ export class GameService {
         { userId: player.userId, won: false },
       ]);
       this.logger.log(`Player ${playerId} forfeited game ${game.id} - no remaining players`);
+    } else {
+      // More than one player left: the game plays on and nothing is credited.
+      //
+      // But it still needs a host who is IN it. Without this the game ran on
+      // perfectly happily until its next `round_over` and then died there,
+      // because `startNextRound` wants the host and the host had forfeited -
+      // no remaining player could deal, and the game could not be left either.
+      // The failure surfaced a whole round away from the forfeit that caused
+      // it, which is what made it so hard to see.
+      await this.reassignHostIfDeparting(
+        tx,
+        game,
+        player.userId,
+        remainingPlayers
+      );
     }
-    // More than one player left: the game plays on and nothing is credited.
     await tx.player.delete({ where: { id: player.id } });
 
     return this.readGameState(tx, game.id);
