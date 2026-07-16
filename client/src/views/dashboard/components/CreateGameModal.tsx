@@ -20,28 +20,38 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
   const [gameName, setGameName] = useState("");
   const [maxPlayers, setMaxPlayers] = useState(2);
   const [isPrivate, setIsPrivate] = useState(false);
-  const [errors, setErrors] = useState<{
-    gameName?: string;
-    maxPlayers?: string;
-  }>({});
+  const [errors, setErrors] = useState<{ gameName?: string }>({});
 
+  /**
+   * Only the rules a player can actually break.
+   *
+   * A "Game name is required" branch and `maxPlayers < 2` / `> 4` branches used
+   * to sit here and could not fire. The submit is `disabled={!gameName.trim()}`
+   * (asserted below), which blocks implicit Enter submission too, so the only
+   * input that could produce the empty-name error is the one that makes the
+   * button unclickable; and maxPlayers is state this component owns, moved only
+   * by ± buttons that clamp to 2-4 and are themselves disabled at the bounds.
+   * There is no other input.
+   *
+   * They are gone rather than made reachable, for three reasons. An empty name
+   * is already covered: it is `length < 2`, so if the disabled state ever
+   * regressed the player gets "at least 2 characters" - correct, and more
+   * specific than "required". The server's CreateGameDto enforces all three of
+   * these rules anyway, with the same wording, and its messages now reach the
+   * modal verbatim - so the real defence in depth lives on the authoritative
+   * side, where it belongs. And making them reachable would mean dropping the
+   * disabled submit, which is behaviour a test pins deliberately.
+   */
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
 
-    const newErrors: { gameName?: string; maxPlayers?: string } = {};
+    const newErrors: { gameName?: string } = {};
 
-    if (!gameName.trim()) {
-      newErrors.gameName = "Game name is required";
-    } else if (gameName.trim().length < 2) {
+    const trimmed = gameName.trim();
+    if (trimmed.length < 2) {
       newErrors.gameName = "Game name must be at least 2 characters";
-    } else if (gameName.trim().length > 50) {
+    } else if (trimmed.length > 50) {
       newErrors.gameName = "Game name must be less than 50 characters";
-    }
-
-    if (maxPlayers < 2) {
-      newErrors.maxPlayers = "Minimum 2 players required";
-    } else if (maxPlayers > 4) {
-      newErrors.maxPlayers = "Maximum 4 players allowed";
     }
 
     setErrors(newErrors);
@@ -117,7 +127,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
             style={{
               display: "flex",
               alignItems: "center",
-              border: `2px solid ${errors.maxPlayers ? "#ef4444" : "#e5e7eb"}`,
+              border: "2px solid #e5e7eb",
               borderRadius: "8px",
               backgroundColor: "white",
               overflow: "hidden",

@@ -67,13 +67,23 @@ describe("CreateGameModal", () => {
     await user.type(screen.getByPlaceholderText("Enter game name..."), "{Enter}");
 
     expect(onCreateGame).not.toHaveBeenCalled();
-    // NOTE: no assertion on a "Game name is required" message, because none is
-    // ever shown. handleSubmit computes one, but the submit button is
-    // `disabled={!gameName.trim()}` - so the only input that could produce
-    // that error is also the input that makes the button unclickable, and the
-    // branch is unreachable through the UI. Reported as dead code rather than
-    // asserted into existence.
+    // No "Game name is required" message, because none is ever shown and the
+    // branch that computed one is gone. The submit is `disabled={!gameName
+    // .trim()}`, so the only input that could produce that error is also the
+    // input that makes the button unclickable. An empty name that somehow got
+    // through is `length < 2` and reads as such - see below.
     expect(screen.queryByText("Game name is required")).not.toBeInTheDocument();
+  });
+
+  it("has no unreachable maxPlayers error to show", () => {
+    // maxPlayers is state this component owns, moved only by ± buttons that
+    // clamp to 2-4 and are disabled at the bounds, so the guards that used to
+    // sit in handleSubmit could not fire. The server's CreateGameDto enforces
+    // the same 2-4 rule with the same wording, and says so to the player.
+    setup();
+
+    expect(screen.queryByText("Minimum 2 players required")).not.toBeInTheDocument();
+    expect(screen.queryByText("Maximum 4 players allowed")).not.toBeInTheDocument();
   });
 
   it("disables the submit until there is a name to submit", async () => {
