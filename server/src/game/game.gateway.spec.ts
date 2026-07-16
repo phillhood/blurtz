@@ -1,10 +1,10 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { JwtService } from "@nestjs/jwt";
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Socket } from "socket.io";
 import { GameGateway } from "./game.gateway";
 import { GameService } from "./game.service";
-import { SOCKET_EVENTS } from "@blurtz/shared";
+import { SOCKET_EVENTS, SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 // The DTOs validate every id as a v4 UUID, so fixtures must look like one.
 const GAME_ID = "11111111-1111-4111-8111-111111111111";
@@ -59,12 +59,16 @@ function asSocket(socket: MockSocket): Socket {
   return socket as unknown as Socket;
 }
 
-/** The `message` of the last SOCKET_EVENTS.ERROR emitted to a socket. */
-function lastErrorMessage(socket: MockSocket): string | undefined {
+/** The payload of the last SOCKET_EVENTS.ERROR emitted to a socket. */
+function lastError(socket: MockSocket): { code?: string; message?: string } | undefined {
   const errorCalls = socket.emit.mock.calls.filter(
     (call) => call[0] === SOCKET_EVENTS.ERROR
   );
-  return errorCalls[errorCalls.length - 1]?.[1]?.message;
+  return errorCalls[errorCalls.length - 1]?.[1];
+}
+
+function lastErrorMessage(socket: MockSocket): string | undefined {
+  return lastError(socket)?.message;
 }
 
 /** The payload of the last event of `name` emitted to a socket. */
@@ -175,6 +179,99 @@ describe("GameGateway", () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith("valid-token");
       expect(client.data.userId).toBe(CONNECTED_USER_ID);
       expect(client.disconnect).not.toHaveBeenCalled();
+    });
+  });
+
+  // Every ERROR carries a `code`. It is the only thing the client is allowed to
+  // branch on, so a handler that emitted a message alone would silently hand the
+  // client back nothing to classify - and its default is "not fatal".
+  describe("the error contract", () => {
+    const move = {
+      gameId: GAME_ID,
+      cardId: CARD_ID,
+      fromPileId: FROM_PILE_ID,
+      toPileId: TO_PILE_ID,
+    };
+
+    it("emits NOT_A_PLAYER with its message when the membership gate refuses", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(null);
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
+    });
+
+    it("carries a code the service threw through to the wire", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        })
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
+    });
+
+    // The distinction the client depends on: both say "not found", only one is
+    // an eviction. Collapsing them here is the original bug, one layer down.
+    it("does not dress a lost race up as NOT_A_PLAYER", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found in this game",
+        })
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.PLAYER_NOT_FOUND);
+    });
+
+    it("falls back to UNKNOWN for an exception carrying no code", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new BadRequestException("Game is not in progress")
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.UNKNOWN,
+        message: "Game is not in progress",
+      });
+    });
+
+    it("falls back to UNKNOWN for a plain thrown Error", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(new Error("connection pool timeout"));
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.UNKNOWN);
+    });
+
+    it("emits INVALID_PAYLOAD when the payload fails validation", async () => {
+      const client = createAuthedSocket();
+
+      await gateway.handleMoveCard(asSocket(client), { gameId: "not-a-uuid" });
+
+      expect(gameService.moveCard).not.toHaveBeenCalled();
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.INVALID_PAYLOAD);
     });
   });
 

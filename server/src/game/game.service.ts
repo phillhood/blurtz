@@ -22,6 +22,7 @@ import {
   scoreRound,
   validateMove,
   GAME_CONSTANTS,
+  SOCKET_ERROR_CODES,
   GameListing,
   GameState,
   MoveResult,
@@ -297,7 +298,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       const existingPlayer = game.players.find((p) => p.userId === userId);
@@ -420,12 +424,18 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       const player = game.players.find((p) => p.user.id === userId);
       if (!player) {
-        throw new NotFoundException("Player not found in this game");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found in this game",
+        });
       }
 
       // A finished game is a RECORD. `Game.winnerPlayerId` is ON DELETE SET NULL
@@ -507,7 +517,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       return this.applyForfeit(tx, game, playerId);
@@ -545,7 +558,10 @@ export class GameService {
 
     const player = game.players.find((p) => p.id === playerId);
     if (!player) {
-      throw new NotFoundException("Player not found in this game");
+      throw new NotFoundException({
+        code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+        message: "Player not found in this game",
+      });
     }
 
     const remainingPlayers = game.players.filter((p) => p.id !== playerId);
@@ -624,7 +640,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "waiting") {
@@ -640,7 +659,10 @@ export class GameService {
       // calls this directly, and `hostId` outlives the host's Player row if
       // leaveGame ever failed to reassign it.
       if (!game.players.some((p) => p.userId === userId)) {
-        throw new ForbiddenException("You are not a player in this game");
+        throw new ForbiddenException({
+          code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+          message: "You are not a player in this game",
+        });
       }
 
       this.assertReadyToDeal(game.players, "start the game");
@@ -732,7 +754,10 @@ export class GameService {
     });
 
     if (!game) {
-      throw new NotFoundException("Game not found");
+      throw new NotFoundException({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
     }
 
     const gameState = game.gameState as any;
@@ -775,7 +800,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -784,7 +812,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const playerDeck = this.parseDeck(playerId, player.deck);
@@ -826,7 +857,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       // The two states a deal can be waiting on - the only two where readiness
@@ -839,7 +873,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       await tx.player.update({
@@ -903,7 +940,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -912,7 +952,10 @@ export class GameService {
 
       const callingPlayer = game.players.find((p) => p.id === playerId);
       if (!callingPlayer) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const callingPlayerDeck = this.parseDeck(playerId, callingPlayer.deck);
@@ -1039,7 +1082,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -1048,7 +1094,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const playerDeck = this.parseDeck(playerId, player.deck);

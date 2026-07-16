@@ -13,9 +13,9 @@ import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
 // Shared with the client, which is what makes "the client listens for the name
 // the server emits" a compile-time fact rather than two copies to keep in step.
-import { toClientGameState, SOCKET_EVENTS } from "@blurtz/shared";
+import { toClientGameState, SOCKET_EVENTS, SOCKET_ERROR_CODES } from "@blurtz/shared";
 import { validateWsPayload } from "@utils";
-import { getErrorMessage } from "@utils/error-handler";
+import { getErrorMessage, getErrorCode } from "@utils/error-handler";
 import {
   JoinRoomDto,
   LeaveRoomDto,
@@ -125,7 +125,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { userId } = client.data as SocketData;
 
     if (!userId) {
-      throw new UnauthorizedException("Not authenticated");
+      throw new UnauthorizedException({
+        code: SOCKET_ERROR_CODES.UNAUTHENTICATED,
+        message: "Not authenticated",
+      });
     }
 
     return userId;
@@ -144,10 +147,29 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const playerId = await this.gameService.getPlayerIdForUser(gameId, userId);
 
     if (!playerId) {
-      throw new ForbiddenException("You are not a player in this game");
+      throw new ForbiddenException({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
     }
 
     return playerId;
+  }
+
+  /**
+   * Report a failed operation to the socket that caused it.
+   *
+   * `code` is what the client branches on; `message` is only ever displayed. The
+   * two must not swap roles - a client that reads meaning out of a message is
+   * one server-side rename away from ejecting a player mid-game.
+   */
+  private emitError(client: Socket, context: string, error: unknown) {
+    this.logger.warn(`${context}: ${getErrorMessage(error)}`);
+    client.emit(SOCKET_EVENTS.ERROR, {
+      code: getErrorCode(error),
+      message: getErrorMessage(error),
+      timestamp: new Date(),
+    });
   }
 
   @SubscribeMessage(SOCKET_EVENTS.JOIN_ROOM)
@@ -177,11 +199,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Join room failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Join room failed", error);
     }
   }
 
@@ -217,11 +235,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Leave room failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Leave room failed", error);
     }
   }
 
@@ -243,11 +257,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Start game failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Start game failed", error);
     }
   }
 
@@ -296,11 +306,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Move card failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Move card failed", error);
     }
   }
 
@@ -320,11 +326,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Flip card failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Flip card failed", error);
     }
   }
 
@@ -375,11 +377,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Call blitz failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Call blitz failed", error);
     }
   }
 
@@ -401,11 +399,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Player ready failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Player ready failed", error);
     }
   }
 
@@ -440,11 +434,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Forfeit game failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Forfeit game failed", error);
     }
   }
 }

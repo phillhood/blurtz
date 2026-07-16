@@ -18,7 +18,7 @@ import {
 } from "@nestjs/swagger";
 import { GameService } from "./game.service";
 // Redaction lives in the shared package - see shared/src/index.ts.
-import { toClientGameState } from "@blurtz/shared";
+import { toClientGameState, SOCKET_ERROR_CODES } from "@blurtz/shared";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { ApiResponse } from "@types";
 import { CreateGameDto, JoinGameByIdDto, JoinGameByCodeDto, GameIdParamDto } from "./dto";
@@ -180,7 +180,10 @@ export class GameController {
       req.user.sub
     );
     if (!playerId) {
-      throw new ForbiddenException("You are not a player in this game");
+      throw new ForbiddenException({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
     }
 
     const gameState = await this.gameService.getGameState(gameId);
