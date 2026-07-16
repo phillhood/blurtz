@@ -4,3 +4,7 @@ node_modules
 .env
 
 CLAUDE.md
+
+# Playwright e2e artifacts
+client/test-results
+client/playwright-report
