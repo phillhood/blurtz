@@ -139,18 +139,20 @@ describe("gameService", () => {
       expect(created.id).toBe("game-new");
     });
 
-    it("throws when the server refuses the create", async () => {
-      // NOTE: what it throws is *not* asserted, deliberately. createGame wraps
-      // its own body in try/catch and replaces whatever came back with a fixed
-      // "Failed to create game. Please try again later." - so the server's real
-      // reason ("name must not be empty") never reaches the user. That message
-      // loss is reported as a bug; pinning the generic string here would freeze
-      // it. What must hold either way is that a refused create throws rather
-      // than resolving to a game that does not exist.
+    it("tells the player what the server actually objected to", async () => {
+      // The reason has to survive the trip. createGame used to wrap its body in
+      // try/catch and replace whatever came back with a fixed "Failed to create
+      // game. Please try again later.", so a 400 naming the exact problem
+      // reached the player as a shrug. This is the Nest ValidationPipe body:
+      // a real status, and `message` as an array.
       server.use(
         http.post(`${BASE_URL}/api/game`, () =>
           HttpResponse.json(
-            { success: false, error: "name must not be empty" },
+            {
+              statusCode: 400,
+              message: ["name must not be empty"],
+              error: "Bad Request",
+            },
             { status: 400 }
           )
         )
@@ -158,7 +160,36 @@ describe("gameService", () => {
 
       await expect(
         gameService.createGame({ name: "", maxPlayers: 2, isPrivate: false })
-      ).rejects.toThrow();
+      ).rejects.toThrow("name must not be empty");
+    });
+
+    it("does not bury a 500 under the server's internals", async () => {
+      // The other half of the rule: a 5xx is the server falling over, not the
+      // player getting it wrong, and its message is not the player's to read.
+      server.use(
+        http.post(`${BASE_URL}/api/game`, () =>
+          HttpResponse.json(
+            { statusCode: 500, message: "ECONNREFUSED prisma pool" },
+            { status: 500 }
+          )
+        )
+      );
+
+      await expect(
+        gameService.createGame({ name: "OK", maxPlayers: 2, isPrivate: false })
+      ).rejects.toThrow("Server error. Please try again later.");
+    });
+
+    it("falls back to a generic message when the envelope refuses without a reason", async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/game`, () =>
+          HttpResponse.json({ success: false })
+        )
+      );
+
+      await expect(
+        gameService.createGame({ name: "OK", maxPlayers: 2, isPrivate: false })
+      ).rejects.toThrow("Failed to create game. Please try again later.");
     });
   });
 
@@ -222,20 +253,55 @@ describe("gameService", () => {
       expect(hits).toEqual(["byId"]);
     });
 
-    it("throws when the game cannot be joined", async () => {
-      // Same caveat as createGame: the thrown message is the generic one, which
-      // is reported. That it throws at all is what keeps the caller from
-      // navigating into a game it never joined.
+    it("tells the player why the game could not be joined", async () => {
+      // "Game is full" and "Game with alias x not found" are different things to
+      // do next. Both used to arrive as "Failed to join game by code. Please try
+      // again later.", which is neither.
       server.use(
         http.post(`${BASE_URL}/api/game/joinByCode`, () =>
           HttpResponse.json(
-            { success: false, error: "Game is full" },
+            { statusCode: 400, message: "Game is full", error: "Bad Request" },
             { status: 400 }
           )
         )
       );
 
-      await expect(gameService.joinGame({ alias: "full-game" })).rejects.toThrow();
+      await expect(gameService.joinGame({ alias: "full-game" })).rejects.toThrow(
+        "Game is full"
+      );
+    });
+
+    it("surfaces a 404 from the invite-code lookup as the server phrased it", async () => {
+      server.use(
+        http.post(`${BASE_URL}/api/game/joinByCode`, () =>
+          HttpResponse.json(
+            {
+              statusCode: 404,
+              message: "Game with alias nope not found",
+              error: "Not Found",
+            },
+            { status: 404 }
+          )
+        )
+      );
+
+      await expect(gameService.joinGame({ alias: "nope" })).rejects.toThrow(
+        "Game with alias nope not found"
+      );
+    });
+
+    it("refuses a join with neither an id nor a code, without issuing a request", async () => {
+      // `path` used to stay "" here, so this POSTed to the API base URL itself -
+      // a request that addresses no route and means nothing. Unreachable from
+      // the current UI, but the failure mode is a nonsense call to the API root
+      // rather than an error the caller can read.
+      const fetchSpy = vi.spyOn(globalThis, "fetch");
+
+      await expect(gameService.joinGame({})).rejects.toThrow(
+        "Cannot join a game without an id or an invite code."
+      );
+
+      expect(fetchSpy).not.toHaveBeenCalled();
     });
   });
 
