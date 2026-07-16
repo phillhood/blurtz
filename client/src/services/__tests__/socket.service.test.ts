@@ -343,6 +343,29 @@ describe("socketService emits", () => {
     expect(() =>
       socketService.moveCard("game-1", "card-1", "pile-a", "pile-b")
     ).toThrow("Socket not connected");
+
+    // forfeitGame checked only `!this.socket` where every sibling checks
+    // `!this.socket?.connected`, so on a dropped-but-present socket it alone
+    // emitted into socket.io's buffer and told the caller it had gone through.
+    expect(() => socketService.forfeitGame("game-1")).toThrow(
+      "Socket not connected"
+    );
+
+    // The rest of the family, so the odd one out cannot come back unnoticed.
+    expect(() => socketService.joinGame("game-1")).toThrow("Socket not connected");
+    expect(() => socketService.leaveGame("game-1")).toThrow("Socket not connected");
+    expect(() => socketService.startGame("game-1")).toThrow("Socket not connected");
+    expect(() => socketService.startNextRound("game-1")).toThrow(
+      "Socket not connected"
+    );
+    expect(() => socketService.callBlitz("game-1")).toThrow("Socket not connected");
+    expect(() => socketService.flipCard("game-1", "pile-a")).toThrow(
+      "Socket not connected"
+    );
+    expect(() => socketService.playerReady("game-1", true)).toThrow(
+      "Socket not connected"
+    );
+
     expect(fakeSocket.emit).not.toHaveBeenCalled();
   });
 
