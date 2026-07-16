@@ -32,8 +32,18 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
     if (!isCurrentPlayer) return;
   };
 
+  // One predicate, read by both the cursor and the click. These used to be two
+  // conditions: the cursor checked the status, the handler did not - so a
+  // finished or round_over board showed a default cursor and still emitted a
+  // flip when clicked. The server refuses it, so the cost was a wasted round
+  // trip and a rejection toast rather than a wrong board.
+  const canFlipDrawPile =
+    isCurrentPlayer &&
+    player.deck.drawPile.cards.length > 0 &&
+    gameState?.status === "playing";
+
   const handleDrawPileClick = () => {
-    if (!isCurrentPlayer || player.deck.drawPile.cards.length === 0) return;
+    if (!canFlipDrawPile) return;
     flipDrawPile();
   };
 
@@ -41,14 +51,6 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
     if (isCurrentPlayer && player.deck.blurtzPile.cards.length === 0) {
       callBlitz();
     }
-  };
-
-  const canFlipDrawPile = () => {
-    return (
-      isCurrentPlayer &&
-      player.deck.drawPile.cards.length > 0 &&
-      gameState?.status === "playing"
-    );
   };
 
   // Whether a work pile lights up under the cursor. The rule is `canPlace`'s -
@@ -113,7 +115,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
           <DrawPile
             pile={player.deck.drawPile}
             onPileClick={handleDrawPileClick}
-            canFlip={canFlipDrawPile()}
+            canFlip={canFlipDrawPile}
             isDraggable={isDraggable}
             playerId={player.id}
             isCurrentPlayer={isCurrentPlayer}

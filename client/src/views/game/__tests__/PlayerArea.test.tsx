@@ -182,14 +182,32 @@ describe("PlayerArea", () => {
     expect(mockFlipDrawPile).not.toHaveBeenCalled();
   });
 
-  // NOTE: there is deliberately no test here for "does not flip the stock once
-  // the game is over", because it does. `canFlipDrawPile()` gates the cursor on
-  // `isCurrentPlayer && cards.length > 0 && status === "playing"`, but
-  // `handleDrawPileClick` checks only the first two - so on a finished or
-  // round_over board the stock shows a default cursor and still emits a flip
-  // when clicked. The server refuses it, so this costs a wasted round trip and
-  // a rejection toast rather than a wrong board. Reported as a bug; asserting
-  // the current behaviour would freeze the divergence in place.
+  it("does not flip the stock once the game is finished", async () => {
+    // The cursor and the click are one predicate now. They used to be two, and
+    // the click's half omitted the status - so a finished board still emitted a
+    // flip. The server refuses it; the cost was a wasted round trip and a
+    // rejection toast over a board nobody can play anyway.
+    gameContext.gameState = { id: "game-1", status: "finished" } as GameState;
+
+    renderArea({ player: player({ draw: [faceDown("stock-1")] }) });
+
+    await userEvent.setup().click(stockTop());
+
+    expect(mockFlipDrawPile).not.toHaveBeenCalled();
+  });
+
+  it("does not flip the stock between rounds", async () => {
+    // round_over is the other non-playing status a board sits in with a stock
+    // still full of cards, and it is the one a player is most likely to click:
+    // the interstitial is live and the cards are right there.
+    gameContext.gameState = { id: "game-1", status: "round_over" } as GameState;
+
+    renderArea({ player: player({ draw: [faceDown("stock-1")] }) });
+
+    await userEvent.setup().click(stockTop());
+
+    expect(mockFlipDrawPile).not.toHaveBeenCalled();
+  });
 
   it("renders an opponent's area without making it playable", () => {
     const { container } = renderArea({
