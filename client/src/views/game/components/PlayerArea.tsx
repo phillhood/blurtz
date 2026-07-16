@@ -66,7 +66,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
   };
 
   const isDraggable = isCurrentPlayer && gameState?.status === "playing";
-  let isBlurtzAvailable =
+  const isBlurtzAvailable =
     isCurrentPlayer &&
     player.deck.blurtzPile.cards.length === 0 &&
     gameState?.status === "playing";

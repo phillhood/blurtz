@@ -14,7 +14,8 @@
     "build": "rimraf dist && tsc",
     "clean": "rimraf dist",
     "test": "jest",
-    "test:watch": "jest --watch"
+    "test:watch": "jest --watch",
+    "lint": "eslint src --report-unused-disable-directives --max-warnings 0"
   },
   "dependencies": {
     "uuid": "^11.1.0"

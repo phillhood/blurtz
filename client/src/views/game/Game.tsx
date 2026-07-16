@@ -77,7 +77,11 @@ const Game: React.FC = () => {
     if (!connected) {
       joinedGameIdRef.current = null;
     }
-  }, [gameId, connected]);
+    // `joinGame` is declared here because it is read here. It changes identity
+    // only when `user.id` does (it is a useCallback over a zustand action, both
+    // stable), and a re-run cannot re-join anyway - `joinedGameIdRef` is what
+    // decides that, not this array.
+  }, [gameId, connected, joinGame]);
 
   // Check if error is fatal (should block the game) or transient (show toast).
   //

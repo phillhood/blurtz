@@ -36,8 +36,14 @@ const getOpponentMaxWidth = (count: number): string => {
 
 export const PlayerArea: React.FC<PlayerAreaProps> = ({
   isOpponent = false,
-  opponentCount = 1,
-  hasBlurtzButton = false,
+  // Named out of `props` on purpose and then not used: this component spreads
+  // `{...props}` onto a <div>, and React would pass an unrecognised
+  // `opponentCount`/`hasBlurtzButton` straight through to the DOM and warn
+  // about it. Callers do send both (see `views/game/components/PlayerArea`).
+  // The `_` prefix is this codebase's marker for a deliberately unused binding;
+  // the prop keeps its name.
+  opponentCount: _opponentCount = 1,
+  hasBlurtzButton: _hasBlurtzButton = false,
   isExpanding = false,
   className,
   children,
