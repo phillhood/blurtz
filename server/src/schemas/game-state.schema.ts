@@ -15,12 +15,11 @@ import {
  * Postgres and has to ask whether it is still a deck. The client is handed
  * state by a server that has already checked.
  *
- * Every schema is annotated `z.ZodType<T>` against the hand-written domain
- * type it parses, and that annotation is the point: it makes the compiler
- * reject a schema that has drifted from the type. The types are NOT `z.infer`
- * versions of these schemas - the dependency deliberately runs schema -> type,
- * so that the domain stays readable and zod-free and the parser is the thing
- * that has to keep up.
+ * Every schema is annotated `z.ZodType<T>` against the hand-written domain type
+ * it parses, and that annotation is the point: it makes the compiler reject a
+ * schema that has drifted from the type. The types are NOT `z.infer` versions of
+ * these schemas - the dependency deliberately runs schema -> type, so the domain
+ * stays readable and zod-free and the parser is what has to keep up.
  */
 
 export const CardColorSchema: z.ZodType<CardColor> = z.object({
@@ -29,9 +28,9 @@ export const CardColorSchema: z.ZodType<CardColor> = z.object({
   type: z.enum(["a", "b"]),
 });
 
-// `number` and `ownerId` are gone from `Card`, so they are gone from here.
-// Decks written before that still carry them; zod strips unknown keys rather
-// than rejecting, so an old row still parses and the next write drops them.
+// Decks stored before `number`/`ownerId` left `Card` still carry them. Zod
+// strips unknown keys rather than rejecting, so an old row still parses and the
+// next write drops them.
 export const CardSchema: z.ZodType<Card> = z.object({
   id: z.string().uuid(),
   value: z.number().min(1).max(10),
@@ -55,15 +54,6 @@ export const GameStateDataSchema: z.ZodType<GameplayState> = z.object({
   bankPiles: z.array(PileSchema),
 });
 
-// PlayerStateSchema and FullGameStateSchema used to sit here. Both were dead -
-// nothing outside this directory has ever imported them - and both had drifted
-// from the types they claimed to describe: FullGameStateSchema's players had a
-// nullable deck and no bankPileCount, so it could not be pinned to `Player`
-// without failing to compile. That is the pin doing its job; the answer for a
-// parser with no callers and no matching type is to delete it, not to fix it
-// into a shape nothing checks.
-
-// Validation helpers
 export function validateGameStateData(data: unknown): GameplayState {
   return GameStateDataSchema.parse(data);
 }

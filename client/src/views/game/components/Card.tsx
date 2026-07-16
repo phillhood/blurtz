@@ -97,10 +97,9 @@ const CardComponent: React.FC<CardComponentProps> = ({
 
   // Render face-down card (back of card).
   //
-  // This early return is also the type narrowing: below it `card` is a
-  // VisibleCard, which is the only reason `card.color` and `card.value` are
-  // readable at all. A face-down card genuinely has neither - the server does
-  // not send them.
+  // This early return IS the type narrowing: below it `card` is a VisibleCard,
+  // which is the only reason `card.color` and `card.value` are readable at all.
+  // A face-down card genuinely has neither - the server does not send them.
   if (!card.faceUp) {
     return (
       <div

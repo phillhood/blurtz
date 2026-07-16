@@ -43,7 +43,6 @@ const FannedCards: React.FC<FannedCardsProps> = ({
     return null;
   }
 
-  // Get the last N cards to display (most recent flips)
   const displayCards = cards.slice(-maxDisplay);
   const cardCount = displayCards.length;
 

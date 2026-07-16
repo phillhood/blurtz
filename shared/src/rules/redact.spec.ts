@@ -4,12 +4,8 @@ import { dealCards } from "./engine";
 import { ClientCard, ClientPile, toClientGameState } from "./redact";
 
 /**
- * Redaction's tests.
- *
- * Pure-function tests like the engine's beside them: no Prisma, no Nest, no
- * database. The last group is the one that matters - it serialises the payload
- * and greps it, because a string in a socket frame is what an attacker
- * actually gets.
+ * The last group is the one that matters: it serialises the payload and greps
+ * it, because a string in a socket frame is what an attacker actually gets.
  */
 
 const { RED, BLUE, GREEN } = CARD_COLORS;
@@ -84,18 +80,12 @@ function deck(
 }
 
 describe("redaction", () => {
-  // =====================================================================
-  // A face-down card carries nothing but its existence.
-  // =====================================================================
   describe("face-down cards", () => {
     it("emits ONLY id and faceUp - no value, number, color or ownerId", () => {
-      // `number` and `ownerId` are NOT on `Card` any more, and this fixture
-      // keeps them anyway - hence the assertion. Redaction is a whitelist: it
-      // builds the hidden card field by field rather than spreading and
-      // deleting, so a field a future `Card` grows cannot leak by default.
-      // A card carrying fields the type does not know about is exactly the
-      // case that proves it, and it is not hypothetical - decks written before
-      // those fields were dropped still have them in the JSON blob.
+      // Deliberately carries `number` and `ownerId`, which are not on `Card`:
+      // redaction is a whitelist, so a card holding fields the type does not
+      // know about is what proves it cannot leak them. Not hypothetical - old
+      // deck blobs in the JSON column still have them.
       const hidden = {
         id: "real-id",
         value: 7,
@@ -120,8 +110,8 @@ describe("redaction", () => {
 
     it("hides face-down cards in ALL FOUR pile kinds", () => {
       // Bank piles never hold a face-down card in a real game, but redaction
-      // must not depend on that - it is the last thing between the deal and
-      // the wire.
+      // must not depend on that - it is the last thing between the deal and the
+      // wire.
       const state = gameState(
         [
           deck("p1", {
@@ -142,9 +132,6 @@ describe("redaction", () => {
     });
   });
 
-  // =====================================================================
-  // A face-up card is the client's to see, in full.
-  // =====================================================================
   describe("face-up cards", () => {
     it("passes a face-up card through untouched", () => {
       const visible: Card = {
@@ -180,9 +167,6 @@ describe("redaction", () => {
     });
   });
 
-  // =====================================================================
-  // Synthetic ids.
-  // =====================================================================
   describe("hidden card ids", () => {
     it("never publishes a hidden card's real id", () => {
       const state = gameState([deck("p1")]);
@@ -252,9 +236,6 @@ describe("redaction", () => {
     });
   });
 
-  // =====================================================================
-  // Everything that is not a card is not a secret.
-  // =====================================================================
   describe("non-card state", () => {
     it("carries ids, names, scores and status through unchanged", () => {
       const state = gameState([deck("p1")]);
@@ -288,9 +269,6 @@ describe("redaction", () => {
     });
   });
 
-  // =====================================================================
-  // THE LEAK TEST: serialise the payload and grep it.
-  // =====================================================================
   describe("a real deal, serialised", () => {
     /** A deterministic deal, so a failure is reproducible. */
     function seededRng(seed: number): () => number {
@@ -325,11 +303,10 @@ describe("redaction", () => {
     });
 
     it("leaks no face-down card's value or colour into the payload", () => {
-      // A hidden card's value is a digit 1-10 and its colour is one of four
-      // names, all of which legitimately appear on the face-up cards. The
-      // grep that means something is therefore structural: NOTHING in the
-      // payload marked `faceUp: false` may carry a value, a number or a
-      // colour at all.
+      // A string grep cannot work here: a hidden card's value is a digit 1-10
+      // and its colour one of four names, all of which legitimately appear on
+      // face-up cards. So the check is structural - nothing marked
+      // `faceUp: false` may carry a value or colour at all.
       const decks = [dealCards(2, seededRng(3)), dealCards(2, seededRng(4))];
       const state = gameState(decks);
 

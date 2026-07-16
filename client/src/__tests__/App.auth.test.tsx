@@ -5,17 +5,11 @@ import userEvent from "@testing-library/user-event";
 /**
  * A refused login has to say so, from inside the real <App>.
  *
- * This is the only place the bug was ever visible. Every part in isolation was
- * fine: the API answered 401 "Invalid credentials", `authStore.login` threw it,
- * and `Login.tsx` caught it into `setError`. What broke was the composition -
- * `login` set the store-wide `loading`, `App` returned `<div>Loading...</div>`
- * INSTEAD of the router while that was true, and so the `<Login>` holding the
- * error unmounted mid-request. The one that mounted afterwards was a different
- * component with an empty `error` and empty inputs.
- *
- * So the real `App`, the real router, the real store and the real `Login` all
- * run here, and only the network is faked. A test that rendered `<Login>` on
- * its own would have passed the whole time this was broken.
+ * The real `App`, router, store and `Login` all run here; only the network is
+ * faked. That is the point: each part is correct in isolation, and what can
+ * break is the composition - `App` unmounting the router (and the `<Login>`
+ * holding the error) while a store-wide `loading` is true. A test that rendered
+ * `<Login>` on its own could not see it.
  */
 
 vi.mock("@services/auth.service", () => ({
@@ -75,8 +69,8 @@ describe("App - a rejected login", () => {
     await user.type(screen.getByPlaceholderText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
-    // Mid-flight: the form is still there, the button says so, and the
-    // "Loading..." that used to replace the entire tree is nowhere.
+    // Mid-flight: the form is still mounted, the button says so, and the
+    // tree-replacing "Loading..." is nowhere.
     expect(screen.getByRole("heading", { name: "Welcome Back" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Signing in..." })).toBeDisabled();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();

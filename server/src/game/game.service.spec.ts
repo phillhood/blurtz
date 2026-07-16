@@ -11,9 +11,8 @@ import { PrismaService } from "@prisma";
 import { UserService } from "@user/user.service";
 import { CARD_COLORS, Card } from "@blurtz/shared";
 
-// Decks are validated against PlayerDeckSchema on the way out of the
-// database, and it holds card ids to real v4 UUIDs - so fixtures must look
-// like one, the same way the gateway spec's ids do.
+// PlayerDeckSchema holds card ids to real v4 UUIDs, so fixtures must look like
+// one or they fail at the DB boundary rather than on the assertion.
 const CARD_A = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
 const CARD_B = "bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb";
 const CARD_C = "cccccccc-cccc-4ccc-8ccc-cccccccccccc";
@@ -21,7 +20,6 @@ const CARD_TEN = "eeeeeeee-eeee-4eee-8eee-eeeeeeeeeeee";
 const bankCardId = (n: number) =>
   `dddddddd-dddd-4ddd-8ddd-${String(n).padStart(12, "0")}`;
 
-// Small helper to keep card fixtures short and consistent.
 function card(id: string, value: number, color = CARD_COLORS.RED, faceUp = true): Card {
   return { id, value, color, faceUp };
 }
@@ -90,8 +88,8 @@ describe("GameService", () => {
     };
 
     // The lock itself is exercised against a real Postgres in
-    // game.concurrency.spec.ts - here it just has to run the callback, handing
-    // it the mock client that stands in for the transaction.
+    // game.concurrency.spec.ts - here it just runs the callback, handing it the
+    // mock client that stands in for the transaction.
     const mockGameRepository = {
       withGameLock: jest.fn((_gameId: string, fn: (tx: unknown) => unknown) =>
         fn(mockPrismaService)
@@ -109,10 +107,10 @@ describe("GameService", () => {
           provide: GameRepository,
           useValue: mockGameRepository,
         },
-        // The REAL UserService, over the mocked Prisma. Stubbing it out would
-        // hide the thing most worth testing about it - that
-        // `recordGameResults` orders its writes - so it runs for real and the
-        // assertions look at `prismaService.user.update`.
+        // The REAL UserService, over the mocked Prisma: stubbing it out would
+        // hide the thing most worth testing - that `recordGameResults` orders
+        // its writes - so it runs for real and the assertions look at
+        // `prismaService.user.update`.
         UserService,
       ],
     }).compile();
@@ -128,10 +126,6 @@ describe("GameService", () => {
     expect(service).toBeDefined();
   });
 
-  // ---------------------------------------------------------------------
-  // Item 1: findGameByAlias must not leak password hashes via `user: true`.
-  // Task 8: nor decks - this game is the `joinByCode` response body.
-  // ---------------------------------------------------------------------
   describe("findGameByAlias", () => {
     it("requests a narrowed user selection, not the full user record", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(null);
@@ -145,15 +139,10 @@ describe("GameService", () => {
       expect(callArg.select.players.select.user).toEqual({
         select: { id: true, username: true },
       });
-      // Explicitly guard against a regression back to `user: true`.
       expect(callArg.select.players.select.user).not.toBe(true);
     });
 
     it("does NOT select the players' decks", async () => {
-      // `deck` is a scalar, so the `include: { players: ... }` this used to
-      // use selected it - and the caller returns this game straight to the
-      // client. A player rejoining a game in progress by its invite code got
-      // every opponent's face-down cards, no socket required.
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(null);
 
       await service.findGameByAlias("ABC123");
@@ -161,31 +150,17 @@ describe("GameService", () => {
       const callArg = (prismaService.game.findUnique as jest.Mock).mock
         .calls[0][0];
 
-      // A `select` is what makes this airtight: with `include`, every scalar
-      // Prisma grows on Player arrives by default. Here nothing arrives
-      // unless it is named, and `deck` is not.
+      // The `select` is what makes this airtight: with `include`, every scalar
+      // Prisma grows on Player arrives by default.
       expect(callArg.include).toBeUndefined();
       expect(callArg.select.players.select).not.toHaveProperty("deck");
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 3 & 4: moveCard / executeMove stack-move + bank-pile behaviour.
-  // ---------------------------------------------------------------------
   describe("moveCard", () => {
-    // This test used to play the card at the BOTTOM of a work pile straight to
-    // a bank pile - the only fixture that could tell `splice(i)` from
-    // `splice(i, 1)` at this level. That move is now correctly rejected (a
-    // foundation only takes the accessible card), so the fixture has been
-    // re-pointed onto a legal one: the TOP card of a real, legal work pile,
-    // with cards underneath that must survive.
-    //
-    // A legal work→bank move is always the top card, so it can no longer
-    // distinguish the two splice branches here - by construction, nothing at
-    // this level can. That distinction now lives where it can actually be
-    // asked as a counterfactual: `cardsMovedBy` in rules/engine.spec.ts. This
-    // test keeps the other half of the regression: one card leaves, the pile
-    // beneath it is not swept along, and the bank counter moves by exactly one.
+    // A legal work→bank move is always the TOP card, so nothing at this level
+    // can distinguish `splice(i)` from `splice(i, 1)`. That counterfactual lives
+    // where it can be asked directly: `cardsMovedBy` in rules/engine.spec.ts.
     it("moves exactly ONE card from a work pile to a bank pile, not the whole stack", async () => {
       // A legal work pile: descending by one, alternating colour type.
       const cardB = card(CARD_B, 3, CARD_COLORS.BLUE); // bottom
@@ -240,13 +215,8 @@ describe("GameService", () => {
       expect(updatedBankPile.cards[0].id).toBe(CARD_A);
     });
 
-    // -------------------------------------------------------------------
-    // Task 7 item 2: a buried work-pile card may not be played to a bank
-    // pile. This is the exact fixture that used to be accepted: the move
-    // spliced a card out of the MIDDLE of the pile, left the cards above it
-    // behind as a stack that was never legal, and credited a bank point for
-    // it - repeatable for every face-up card in the pile.
-    // -------------------------------------------------------------------
+    // Deliberately illegal: the played card is buried under two others, to prove
+    // the guard rejects it rather than splicing it out of the middle.
     it("rejects a work-pile card played to a bank pile from under other cards", async () => {
       const cardA = card(CARD_A, 1, CARD_COLORS.RED); // bottom - buried
       const cardB = card(CARD_B, 9, CARD_COLORS.BLUE);
@@ -281,8 +251,7 @@ describe("GameService", () => {
         "Only the top card of a work pile can be played to a bank pile"
       );
 
-      // The crux: nothing was written, so no free bank point and no corrupt
-      // work pile.
+      // Nothing written: no free bank point and no corrupt work pile.
       expect(prismaService.player.update).not.toHaveBeenCalled();
       expect(prismaService.game.update).not.toHaveBeenCalled();
     });
@@ -379,9 +348,6 @@ describe("GameService", () => {
       expect(updatedBankPile.cards[9].id).toBe(CARD_TEN);
     });
 
-    // -------------------------------------------------------------------
-    // Item 6: status guards.
-    // -------------------------------------------------------------------
     it("throws BadRequestException when the game is not in progress", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
         gameRow({
@@ -398,9 +364,6 @@ describe("GameService", () => {
       expect(prismaService.player.update).not.toHaveBeenCalled();
     });
 
-    // -------------------------------------------------------------------
-    // Task 5 item 1: every mutation runs inside the game's row lock.
-    // -------------------------------------------------------------------
     it("does all of its work inside the game lock", async () => {
       const playerDeck = {
         blurtzPile: { id: "blurtz-1", type: "blurtz", cards: [] },
@@ -428,9 +391,6 @@ describe("GameService", () => {
       );
     });
 
-    // -------------------------------------------------------------------
-    // Task 5 item 3: MoveResult carries state on BOTH outcomes.
-    // -------------------------------------------------------------------
     it("returns { ok: true } with the resulting state on an accepted move", async () => {
       const playerDeck = {
         blurtzPile: { id: "blurtz-1", type: "blurtz", cards: [] },
@@ -492,29 +452,24 @@ describe("GameService", () => {
       );
 
       expect(result.ok).toBe(false);
-      // The crux: a rejection is not a bare failure. Without state the client
-      // has nothing to reconcile against and the card stays invisible.
+      // A rejection is not a bare failure: without state the client has nothing
+      // to reconcile against and the card stays invisible.
       expect(result.state).toBeDefined();
       expect(result.state.id).toBe("game-1");
       expect((result as { reason: string }).reason).toBe(
         "That card no longer fits on that bank pile"
       );
 
-      // Nothing was written.
       expect(prismaService.player.update).not.toHaveBeenCalled();
       expect(prismaService.game.update).not.toHaveBeenCalled();
     });
 
-    // -------------------------------------------------------------------
-    // Task 5 item 5: the deck JSON is validated at the DB boundary.
-    // -------------------------------------------------------------------
     it("throws rather than play on when the stored deck is malformed", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
         gameRow({
           gameState: { bankPiles: [], currentTurn: 0 },
           players: [
-            // workPiles is missing entirely - a shape no move can be
-            // meaningfully validated against.
+            // Deliberately malformed: workPiles is missing entirely.
             playerRow("player-1", {
               blurtzPile: { id: "blurtz-1", type: "blurtz", cards: [] },
               drawPile: { id: "draw-1", type: "draw", cards: [] },
@@ -553,9 +508,6 @@ describe("GameService", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 6: startGame status guard.
-  // ---------------------------------------------------------------------
   describe("startGame", () => {
     it("throws BadRequestException if the game has already started", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
@@ -572,10 +524,6 @@ describe("GameService", () => {
       expect(prismaService.player.update).not.toHaveBeenCalled();
     });
 
-    // -------------------------------------------------------------------
-    // Task 4 item 5: only the host may start, and only when everyone is
-    // ready. `hostId` is a User id, not a Player id.
-    // -------------------------------------------------------------------
     it("throws ForbiddenException when a non-host tries to start the game", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -595,9 +543,8 @@ describe("GameService", () => {
       expect(prismaService.game.update).not.toHaveBeenCalled();
     });
 
-    // A departed host keeps `hostId` on the game row. The socket path checks
-    // membership first, but the REST route calls startGame directly - so
-    // without a membership check here, someone who left can still start it.
+    // `hostId` is a User id and outlives the host's Player row. The socket path
+    // checks membership first, but the REST route calls startGame directly.
     it("throws ForbiddenException when the host has left the game", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -696,7 +643,6 @@ describe("GameService", () => {
       const result = await service.startGame("game-1", "host-user");
 
       expect(result.id).toBe("game-1");
-      // Each player is dealt a deck, and the game is flipped to `playing`.
       expect(prismaService.player.update).toHaveBeenCalledTimes(2);
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
@@ -704,15 +650,8 @@ describe("GameService", () => {
       });
     });
 
-    // The deal CONSUMES readiness, here exactly as the round advance does.
-    //
-    // This asymmetry - the round advance dealt with `isReady: false` and
-    // `startGame` dealt with no reset at all - skipped the round-over gate
-    // exactly once. Nothing else clears `isReady` (`callBlitz` does not), so
-    // the lobby's `isReady: true` survived all of round 1, and the round-over
-    // interstitial came up with its ready-up gate already satisfied: round 2
-    // dealt before anyone had seen the scoreboard. Round 3 onward was fine,
-    // because round 2 was dealt by the round advance, which resets.
+    // Nothing else clears `isReady` - `callBlitz` does not - so a lobby `true`
+    // left standing here survives round 1 and pre-satisfies the round-over gate.
     it("clears everyone's readiness when it deals, so the round-over gate holds", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -762,20 +701,15 @@ describe("GameService", () => {
 
       for (const update of updates) {
         expect(update.data.isReady).toBe(false);
-        // Dealt in the SAME write, not a second round trip - the readiness and
-        // the deck it belongs to cannot land apart.
+        // The SAME write: the readiness and the deck it belongs to cannot land
+        // apart.
         expect(update.data.deck).toBeDefined();
-        // `score` is the running total. A deal must never touch it, whichever
-        // deal it is.
+        // `score` is the running total - no deal may touch it.
         expect(update.data).not.toHaveProperty("score");
       }
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Task 4 item 3: the gateway resolves identity through this, instead of
-  // trusting a playerId sent over the socket.
-  // ---------------------------------------------------------------------
   describe("getPlayerIdForUser", () => {
     it("returns the player id for a user who is in the game", async () => {
       (prismaService.player.findFirst as jest.Mock).mockResolvedValue({
@@ -800,9 +734,6 @@ describe("GameService", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 6: flipDrawPile status guard.
-  // ---------------------------------------------------------------------
   describe("flipDrawPile", () => {
     it("throws BadRequestException when the game is not in progress", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
@@ -842,7 +773,6 @@ describe("GameService", () => {
       await expect(service.joinGame(GAME_ID, USER_ID)).rejects.toThrow(
         ForbiddenException
       );
-      // The crux: no Player row may be created for the outsider.
       expect(prismaService.player.create).not.toHaveBeenCalled();
     });
 
@@ -892,9 +822,8 @@ describe("GameService", () => {
   });
 
   describe("leaveGame host reassignment", () => {
-    // `hostId` outlives the host's Player row. If the host leaves a waiting
-    // game and nobody inherits the role, the game is unstartable by anyone
-    // left in it - and the departed host could still start it over REST.
+    // `hostId` outlives the host's Player row: with nobody inheriting the role,
+    // the game is unstartable by anyone left in it.
     it("hands the host role to a remaining player when the host leaves", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -939,16 +868,10 @@ describe("GameService", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Task 15 item 3: leaveGame handled `playing` as a forfeit and let EVERY
-  // other status fall through to the waiting-lobby deletion path.
-  // ---------------------------------------------------------------------
   describe("leaveGame by status", () => {
-    // A round_over game is a game in progress: rounds have been played, score
-    // is on the board and RoundResults are written. Deleting a player out of
-    // it through the lobby path stranded it - one player left, joinGame
-    // refuses a non-waiting game, and the round advance cannot fire below
-    // MIN_PLAYERS. No winner, no stats, forever.
+    // round_over is a game in progress. Deleting a player out of it through the
+    // lobby path strands it: one player left, joinGame refuses a non-waiting
+    // game, and the round advance cannot fire below MIN_PLAYERS.
     it("finishes a two-player round_over game rather than stranding it", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -965,13 +888,11 @@ describe("GameService", () => {
 
       await service.leaveGame("game-1", "user-quitter").catch(() => {});
 
-      // The last player standing takes it, exactly as a forfeit out of
-      // `playing` would end it.
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
         data: { status: "finished", winnerPlayerId: "p2" },
       });
-      // And it was a real game, so it is credited like one.
+      // It was a real game, so it is credited like one.
       const calls = (prismaService.user.update as jest.Mock).mock.calls.map(
         (c) => c[0]
       );
@@ -985,14 +906,9 @@ describe("GameService", () => {
       });
     });
 
-    // A finished game is a record. Deleting the Player row it points at nulls
-    // `winnerPlayerId` through the schema's ON DELETE SET NULL - the game
-    // silently forgets who won it.
-    //
-    // It no-ops rather than throwing because leaving a finished game is the
-    // NORMAL way out of one: the client sits on the final scoreboard with a
-    // Leave button that sends a plain leave. The row must survive; the player
-    // must still get out.
+    // Deleting the Player row a finished game points at nulls `winnerPlayerId`
+    // through ON DELETE SET NULL. It no-ops rather than throwing because leaving
+    // a finished game is the NORMAL way out of one.
     it("leaves a finished game alone - no delete, no host write", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
         gameRow({
@@ -1023,21 +939,12 @@ describe("GameService", () => {
       expect(prismaService.player.delete).not.toHaveBeenCalled();
       expect(prismaService.game.update).not.toHaveBeenCalled();
       expect(prismaService.user.update).not.toHaveBeenCalled();
-      // And the caller still gets state back, so the gateway can let them out
-      // of the room.
+      // State still comes back, so the gateway can let them out of the room.
       expect(state.winner).toBe("p1");
       expect(state.status).toBe("finished");
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Task 15 item 4: a forfeit that leaves the game running never reassigned
-  // `hostId`. If the forfeiter was the host, `hostId` pointed at a non-member.
-  // The old host-triggered round advance demanded host AND membership, so it
-  // could never be satisfied by anyone left and the game died at the next
-  // round_over. The round now advances automatically, but a game's host must
-  // still be a live player - which is what this checks.
-  // ---------------------------------------------------------------------
   describe("host reassignment on a forfeit that the game survives", () => {
     it("hands the host role on when the host forfeits a three-player game", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
@@ -1089,20 +996,6 @@ describe("GameService", () => {
       expect(hostWrites).toHaveLength(0);
     });
   });
-  // ---------------------------------------------------------------------
-  // Task 10: multi-round.
-  //
-  // The scaffolding for rounds existed but was vestigial - `currentRound` was
-  // hard-coded to 0 in `readGameState`, `bankPileCount` accumulated forever,
-  // and `callBlitz` OVERWROTE `Player.score` with the round's score instead of
-  // adding to it. A game could not reach a target it threw away every round.
-  // ---------------------------------------------------------------------
-  // ---------------------------------------------------------------------
-  // Task 15 item 2: setPlayerReady was the only mutator that took no lock and
-  // checked no status. `callBlitz` does not clear readiness, so a `true` set
-  // during play survived into the round_over interstitial and pre-satisfied
-  // the all-ready gate - reopening the multi-round skip that 0b7fb3b closed.
-  // ---------------------------------------------------------------------
   describe("setPlayerReady", () => {
     function readyGame(status: string) {
       return {
@@ -1152,10 +1045,9 @@ describe("GameService", () => {
       });
     });
 
-    // The UI does not draw the control during play - but the server must not
-    // rely on a hidden button. A hand-crafted socket message set `true` mid
-    // round, and nothing ever cleared it before the next interstitial's gate
-    // read it.
+    // The UI does not draw the control during play, but the server must not rely
+    // on a hidden button: a hand-crafted socket message can set `true` mid-round,
+    // and nothing clears it before the next interstitial's gate reads it.
     it("refuses a readiness change while the game is playing", async () => {
       mockReady("playing");
 
@@ -1275,9 +1167,8 @@ describe("GameService", () => {
     });
 
     it("crosses the target on the CUMULATIVE total, not the round's score", async () => {
-      // The round itself only scores 10 - nowhere near 100. It is the running
-      // total that ends the game, which is exactly what overwriting `score`
-      // made impossible.
+      // The round itself only scores 10: it is the running total that ends the
+      // game.
       mockBlitz(blitzGame({ targetScore: 12, callerScore: 5 }));
 
       const result = await service.callBlitz("game-1", "p1");
@@ -1297,7 +1188,7 @@ describe("GameService", () => {
         (c) => c[0]
       );
 
-      // p1: 20 carried + 10 this round = 30. The old code wrote 10.
+      // p1: 20 carried + 10 this round = 30.
       expect(updates).toContainEqual({
         where: { id: "p1" },
         data: { score: 30, roundScore: 10 },
@@ -1353,12 +1244,9 @@ describe("GameService", () => {
       expect(prismaService.game.update).not.toHaveBeenCalled();
     });
 
-    // The property the whole locking story buys: the second caller into the
-    // lock observes the first's committed status and bails. Here the status is
-    // simply already `round_over`, which is what that caller would read.
     it("refuses a Blitz on a game that is no longer playing", async () => {
-      // Exactly what the loser of a two-caller race reads once it gets into
-      // the lock: the winner already committed, and the status says so.
+      // A `round_over` status is exactly what the loser of a two-caller race
+      // reads once it gets into the lock: the winner already committed.
       mockBlitz({ ...blitzGame({ targetScore: 100 }), status: "round_over" });
 
       await expect(service.callBlitz("game-1", "p1")).rejects.toThrow(
@@ -1369,10 +1257,6 @@ describe("GameService", () => {
       expect(prismaService.roundResult.create).not.toHaveBeenCalled();
     });
 
-    // -----------------------------------------------------------------
-    // updateGameStats had ZERO callers before this - gamesPlayed and
-    // gamesWon were permanently 0 for every user in the system.
-    // -----------------------------------------------------------------
     it("credits every player's stats exactly once when the game finishes", async () => {
       mockBlitz(blitzGame({ targetScore: 12, callerScore: 5 }));
 
@@ -1383,12 +1267,11 @@ describe("GameService", () => {
       );
 
       expect(calls).toHaveLength(2);
-      // The winner: played one, won one.
       expect(calls).toContainEqual({
         where: { id: "user-b" },
         data: { gamesPlayed: { increment: 1 }, gamesWon: { increment: 1 } },
       });
-      // The loser: played one, won none. `gamesWon` is absent, not 0.
+      // The loser: `gamesWon` is absent, not 0.
       expect(calls).toContainEqual({
         where: { id: "user-a" },
         data: { gamesPlayed: { increment: 1 } },
@@ -1396,10 +1279,9 @@ describe("GameService", () => {
     });
 
     it("orders the stats writes by userId ASC to avoid cross-game deadlocks", async () => {
-      // The player ROWS are ordered p1 (user-b) then p2 (user-a): if the sort
-      // were dropped, the writes would come out in that order and this fails.
-      // Two games finishing at once with these same two players, each locking
-      // them in its own order, is a deadlock - see UserService.recordGameResults.
+      // Fixture: the player ROWS are deliberately ordered p1 (user-b) then p2
+      // (user-a), so dropping the sort makes the writes come out in that order
+      // and this fails. See UserService.recordGameResults for the deadlock.
       mockBlitz(blitzGame({ targetScore: 12, callerScore: 5 }));
 
       await service.callBlitz("game-1", "p1");
@@ -1419,10 +1301,9 @@ describe("GameService", () => {
     });
   });
 
-  // The round no longer advances on a host click - it advances the instant the
-  // LAST player readies up, inside `setPlayerReady`'s transaction. These cover
-  // the deal itself; the two-simultaneous-final-ready-ups race that proves it
-  // deals exactly ONCE is in game.concurrency.spec.ts, against a real database.
+  // These cover the deal itself; the two-simultaneous-final-ready-ups race that
+  // proves it deals exactly ONCE is in game.concurrency.spec.ts, against a real
+  // database.
   describe("the round advancing on the last ready-up", () => {
     // A round_over game with p1 already ready and p2 not: p2's ready-up is the
     // one that completes the table.
@@ -1504,9 +1385,8 @@ describe("GameService", () => {
         expect(update.data.bankPileCount).toBe(0);
         expect(update.data.roundScore).toBe(0);
         expect(update.data.isReady).toBe(false);
-        // THE line that matters. `score` is the running total the game is
-        // played to; a round advance that reset it would make the target
-        // unreachable and every previous round pointless.
+        // `score` is the running total the game is played to: a round advance
+        // that reset it would make the target unreachable.
         expect(update.data).not.toHaveProperty("score");
       }
     });

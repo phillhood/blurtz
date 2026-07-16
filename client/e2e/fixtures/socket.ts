@@ -1,13 +1,6 @@
 import type { Page } from "@playwright/test";
 
-/**
- * A tap on what the server actually sends this browser.
- *
- * The redaction spec exists because the leak it guards against is invisible in
- * the UI by construction: a client can be handed every opponent's face-down
- * card and still draw a card back over it. Screenshots prove nothing. The only
- * place the truth is legible is the frame on the wire, so this reads it.
- */
+/** A tap on what the server actually sends this browser. */
 
 export interface SocketFrame {
   event: string;
@@ -86,11 +79,9 @@ export interface FoundCard {
 }
 
 /**
- * Every card-shaped object anywhere in `value`, found structurally rather than
- * by looking in the places cards are supposed to be.
- *
- * The difference matters: a leak that only this finds is a leak in a field
- * nobody thought to check. Anything with a `faceUp` key is a card.
+ * Every card-shaped object anywhere in `value` (anything with a `faceUp` key),
+ * found structurally rather than in the places cards are supposed to be - a
+ * leak that only this finds is a leak in a field nobody thought to check.
  */
 export function findCards(value: unknown, path = "$"): FoundCard[] {
   if (Array.isArray(value)) {

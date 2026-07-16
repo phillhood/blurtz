@@ -5,20 +5,15 @@ import { CARD_COLORS, CARD_VALUES, GAME_CONSTANTS } from "../constants";
 /**
  * The Blurtz rules engine.
  *
- * Everything in this file is a pure function of its arguments: no Prisma, no
- * Nest, no `this`, no I/O, no logging. That is deliberate and load-bearing -
- * these rules are destined to be shared verbatim with the client, and anything
- * that reaches for a database or a logger cannot make that trip.
+ * Every function here is pure: no Prisma, no Nest, no `this`, no I/O, no
+ * logging. That is load-bearing - the client runs these same rules, and
+ * anything reaching for a database or a logger cannot make that trip. The only
+ * licensed impurities are `uuidv4` and an injectable `Rng`, both of which mint
+ * fresh things rather than read the world.
  *
- * "Pure" here allows two generators, both injectable and both only ever used to
- * mint fresh things rather than to read the world: `uuidv4` for card and pile
- * ids, and an `Rng` for the shuffle.
- *
- * Mutation rules: functions that answer a question (`canPlace`,
- * `canMoveFromPile`, `cardsMovedBy`, `flipDrawPile`, `scoreRound`) never touch
- * their arguments. `executeMove` is the one deliberate exception - it mutates
- * the deck and board it is handed, because that is what the caller then writes
- * back to the database.
+ * Functions that answer a question (`canPlace`, `canMoveFromPile`,
+ * `cardsMovedBy`, `flipDrawPile`, `scoreRound`) never touch their arguments.
+ * `executeMove` is the one deliberate exception.
  */
 
 /** A source of randomness, injectable so callers can make dealing deterministic. */
@@ -29,7 +24,7 @@ export type Rng = () => number;
  *
  * Typed loosely on purpose: this comes out of a JSON column, so `bankPiles`
  * genuinely can be absent on an old or half-written row, and the lookups below
- * have always tolerated that.
+ * tolerate that.
  */
 export type BoardState = Partial<GameplayState> & Record<string, any>;
 
@@ -42,9 +37,7 @@ export type BoardState = Partial<GameplayState> & Record<string, any>;
  * is `topCard` (absent when the pile is empty).
  *
  * - work: descending by one, alternating `color.type`. An EMPTY work pile
- *   accepts ANY card - there is no "kings only" restriction in Blurtz. (The
- *   client's dead constants copy claims an empty work pile takes only a 10;
- *   it is wrong, and `engine.spec.ts` pins that down.)
+ *   accepts ANY card - there is no "kings only" restriction in Blurtz.
  * - bank: ascending by one, same `color.name`, and an empty pile starts at 1.
  * - blurtz/draw: never a destination. Cards leave those piles; they never
  *   arrive.
@@ -95,12 +88,11 @@ export function canPlace(
  * - draw: only the LAST face-up card is accessible (the top of the waste).
  * - blurtz: only the top card.
  * - work → work: any face-up card, because it travels with the stack above it.
- * - work → bank: ONLY the top card. This is the one that matters. A buried card
- *   played straight to a foundation used to be accepted, splicing itself out of
- *   the middle of the pile and leaving the cards above it behind as a stack
- *   that was never legal - free score, corrupt board, repeatable for every card
- *   in the pile. In Nertz a foundation only ever takes the accessible card; a
- *   buried card moves as part of a stack, and only to another work pile.
+ * - work → bank: ONLY the top card. A buried card played straight to a
+ *   foundation would splice itself out of the middle of the pile and leave the
+ *   cards above it as a stack that was never legal - free score, corrupt board.
+ *   A foundation only ever takes the accessible card; a buried card moves as
+ *   part of a stack, and only to another work pile.
  */
 export function moveFromPileRejection(
   fromType: PileType,
@@ -158,16 +150,14 @@ export function canMoveFromPile(
  * everything stacked above it.
  *
  * A stack move is work→work and nothing else. Every other move - including
- * work→bank - carries exactly ONE card. Getting this wrong is how a single
- * play to a foundation swept a whole tableau stack onto it.
+ * work→bank - carries exactly ONE card; a destination-blind version of this
+ * rule sweeps a whole tableau stack onto a foundation.
  *
  * Generic in the card, because this rule reads nothing but `id`: it is about
- * how FAR a move reaches, not about what the cards are. That is what lets the
- * client call it with the redacted `ClientCard`s it actually holds - where a
- * face-down card has no `value` and never could - and get the same answer from
- * the same function the server moves cards with. The client's own copy of this
- * (`getMovingCardIds`) was destination-blind and swept the whole stack for
- * every move out of a work pile; there is one function now, and one test.
+ * how FAR a move reaches, not what the cards are. That is what lets the client
+ * call it with the redacted `ClientCard`s it holds - where a face-down card has
+ * no `value` and never could - and get the same answer the server moves cards
+ * with.
  *
  * Returns a copy; nothing here mutates `cards`. Empty when the card is absent.
  */
@@ -300,8 +290,7 @@ export function executeMove(
   const cardIndex = fromPile.cards.findIndex((c) => c.id === cardId);
   if (cardIndex === -1) return;
 
-  // How far the move reaches is `cardsMovedBy`'s decision, not this function's:
-  // one rule, one home. This only has to splice out what it names.
+  // How far the move reaches is `cardsMovedBy`'s decision: one rule, one home.
   const moving = cardsMovedBy(
     fromPile.type,
     toPile.type,
@@ -312,7 +301,6 @@ export function executeMove(
 
   toPile.cards.push(...cardsToMove);
 
-  // Emptying the blurtz pile's top card exposes the next one.
   if (fromPile.type === "blurtz" && fromPile.cards.length > 0) {
     const nextCard = fromPile.cards[fromPile.cards.length - 1];
     nextCard.faceUp = true;
@@ -326,16 +314,14 @@ export function executeMove(
 /**
  * Cycle the draw pile: flip up to three cards from the stock onto the waste.
  *
- * KNOWN-GOOD. This logic was traced independently twice and is correct; its
- * characterization test cycles it 11+ times and pins id-preservation, order
- * stability and the flip count. If it looks wrong to you, read that test before
- * you "fix" it.
+ * KNOWN-GOOD, and odd-looking. Read `engine.spec.ts`'s characterization test
+ * before "fixing" it.
  *
  * The array is one list with two segments: [face-down stock at the front]
  * [face-up waste at the end]. A flip splices three off the front, turns them
  * face-up and appends them - so the waste grows in flip order and its LAST card
  * is the playable one. When the stock runs out, the whole array turns face-down
- * again in place, which preserves the cycle order exactly.
+ * again in place, preserving the cycle order exactly.
  *
  * Returns a new array of new card objects; the input is untouched.
  */
@@ -453,21 +439,18 @@ export function dealCards(numPlayers: number, rng: Rng = Math.random): PlayerDec
 
   const playerDeck = createPlayerDeck(workPileCount);
 
-  // 10 cards to the blurtz pile, only the top one face-up.
   for (let i = 0; i < GAME_CONSTANTS.BLURTZ_PILE_SIZE; i++) {
     const card = deck.pop()!;
     card.faceUp = i === GAME_CONSTANTS.BLURTZ_PILE_SIZE - 1;
     playerDeck.blurtzPile.cards.push(card);
   }
 
-  // One face-up card to each work pile.
   for (let i = 0; i < workPileCount; i++) {
     const card = deck.pop()!;
     card.faceUp = true;
     playerDeck.workPiles[i].cards.push(card);
   }
 
-  // The rest is the draw pile, face-down.
   playerDeck.drawPile.cards = deck.map((card) => ({
     ...card,
     faceUp: false,
@@ -484,9 +467,9 @@ export function dealCards(numPlayers: number, rng: Rng = Math.random): PlayerDec
  * A player's score for a round: one point per card banked, minus two for every
  * card still stranded on their blurtz pile.
  *
- * The penalty is what makes Blurtz a race rather than a hoarding game, and it
- * genuinely can go negative - a player who banks nothing and is caught with a
- * full blurtz pile scores -20. Do not clamp it.
+ * Genuinely goes negative - a player who banks nothing and is caught with a
+ * full blurtz pile scores -20. Do not clamp it; the penalty is what makes
+ * Blurtz a race rather than a hoarding game.
  */
 export function scoreRound(bankPileCount: number, blurtzRemaining: number): number {
   return bankPileCount - 2 * blurtzRemaining;

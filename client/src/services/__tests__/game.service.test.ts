@@ -140,11 +140,8 @@ describe("gameService", () => {
     });
 
     it("tells the player what the server actually objected to", async () => {
-      // The reason has to survive the trip. createGame used to wrap its body in
-      // try/catch and replace whatever came back with a fixed "Failed to create
-      // game. Please try again later.", so a 400 naming the exact problem
-      // reached the player as a shrug. This is the Nest ValidationPipe body:
-      // a real status, and `message` as an array.
+      // Shaped as a real Nest ValidationPipe body: a real status, and `message`
+      // as an array.
       server.use(
         http.post(`${BASE_URL}/api/game`, () =>
           HttpResponse.json(
@@ -254,9 +251,8 @@ describe("gameService", () => {
     });
 
     it("tells the player why the game could not be joined", async () => {
-      // "Game is full" and "Game with alias x not found" are different things to
-      // do next. Both used to arrive as "Failed to join game by code. Please try
-      // again later.", which is neither.
+      // "Game is full" and "Game with alias x not found" are different things
+      // for the player to do next; a generic fallback is neither.
       server.use(
         http.post(`${BASE_URL}/api/game/joinByCode`, () =>
           HttpResponse.json(
@@ -291,10 +287,9 @@ describe("gameService", () => {
     });
 
     it("refuses a join with neither an id nor a code, without issuing a request", async () => {
-      // `path` used to stay "" here, so this POSTed to the API base URL itself -
-      // a request that addresses no route and means nothing. Unreachable from
-      // the current UI, but the failure mode is a nonsense call to the API root
-      // rather than an error the caller can read.
+      // Unreachable from the current UI, but the alternative to refusing is a
+      // POST to the API root: a request that addresses no route and that the
+      // caller cannot read as anything.
       const fetchSpy = vi.spyOn(globalThis, "fetch");
 
       await expect(gameService.joinGame({})).rejects.toThrow(

@@ -7,9 +7,8 @@ import { getGameStatusTitle, getStatusColor, formatDate } from "../game.utils";
  */
 describe("getGameStatusTitle", () => {
   it("announces the winner by name, not by id", () => {
-    // The point of the `winnerName` parameter. `gameState.winner` is a Player
-    // id and this used to interpolate it raw, so the screen that announces the
-    // whole point of the game greeted the winner with a UUID.
+    // The point of the `winnerName` parameter: `gameState.winner` is a Player
+    // id, and interpolating it raw greets the winner with a UUID.
     expect(getGameStatusTitle("finished", 2, 2, "ada")).toBe(
       "Game finished! - Winner: ada"
     );
@@ -18,8 +17,8 @@ describe("getGameStatusTitle", () => {
 
   it("says a finished game finished even when nobody won it", () => {
     // `readGameState` resolves `winner: winner?.id || null`, and a game where
-    // everybody forfeited finishes with nobody. All three of these used to
-    // render the literal text "Winner: null".
+    // everybody forfeited finishes with nobody. All three spellings of "no
+    // winner" must avoid rendering the literal text "Winner: null".
     for (const noWinner of [null, undefined, ""]) {
       expect(getGameStatusTitle("finished", 2, 2, noWinner)).toBe(
         "Game finished!"
@@ -39,10 +38,8 @@ describe("getGameStatusTitle", () => {
   });
 
   it("counts against the game's own size, not a hardcoded 2", () => {
-    // The denominator used to be the literal `2` regardless of maxPlayers, so
-    // a 4-player game waiting for people reported "(1/2)" and - the case that
-    // proves it - sat at "(2/2)" while still waiting for two more, which reads
-    // as full. maxPlayers was accepted and used only for the full check.
+    // The 4-player cases are the point: a hardcoded denominator reports "(2/4)"
+    // as "(2/2)", which reads as full while two seats are still open.
     expect(getGameStatusTitle("waiting", 1, 4)).toBe(
       "Waiting for players... (1/4)"
     );

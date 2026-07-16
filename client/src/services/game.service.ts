@@ -4,17 +4,12 @@ import { ApiResponse, CreateGameRequest, Game, JoinGameRequest } from "@types";
 /**
  * Turn whatever went wrong into the error the player should read.
  *
- * These two paths used to wrap their bodies in try/catch and replace the reason
- * with a fixed string, so a 400 "name must not be empty" reached the user as
- * "Failed to create game. Please try again later." - which names nothing the
- * player can act on.
+ * `api.service` parses a refused request's Nest error body into an `ApiError`
+ * whose `message` is the server's own (joining ValidationPipe's array) - so
+ * surface that rather than a fixed string, which would name nothing the player
+ * can act on. `fallback` is for a failure with nothing to say.
  *
- * The server answers a refused request with a real HTTP status and a Nest error
- * body; `api.service` parses that into an `ApiError` whose `message` is the
- * server's own (joining ValidationPipe's array). Surface it. The generic
- * fallback is kept for what it was always for: a failure with nothing to say.
- *
- * Modelled on `auth.service.ts`, deliberately - the two should read alike.
+ * Deliberately mirrors `auth.service.ts`; the two should read alike.
  */
 const asUserFacingError = (error: unknown, fallback: string): Error => {
   // ApiError extends Error, so it has to be narrowed first.
@@ -77,9 +72,8 @@ export class GameService {
     const { id, alias } = payload;
 
     // The two join routes are not interchangeable, and with neither an id nor
-    // an alias there is no route at all. `path` used to stay "" here and the
-    // call POSTed to the API root - a request that means nothing and that the
-    // caller would read as a join failure. Refuse it instead of sending it.
+    // an alias there is no route at all - refuse rather than POST to the API
+    // root, which the caller would read as a join failure.
     const path = id
       ? `/api/game/joinById`
       : alias

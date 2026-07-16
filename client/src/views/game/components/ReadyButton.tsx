@@ -4,22 +4,10 @@ import { useGameContext } from "@hooks";
 /**
  * Ready up, in the lobby or between rounds.
  *
- * Reads `currentPlayer.isReady` - the SERVER's answer - rather than keeping a
- * local copy. It used to hold `isReady` in useState and fire `playerReady`
- * from an effect keyed on `[status, isReady]`, which had two problems that
- * only became visible once there was a second round:
- *
- *  - The effect fired on mount, so opening a game announced a readiness nobody
- *    had clicked.
- *  - A round advance resets `isReady` to false on the server, but the local
- *    copy still said true - and the effect's `status` dependency then fired
- *    that stale `true` straight back, readying the player for the next round
- *    without them touching anything. Every round after the first would have
- *    readied itself the instant the previous one ended.
- *
- * Mirroring server state is what the rest of this client already does: there
- * are no optimistic updates here, and the store is the source of truth either
- * way.
+ * Reads `currentPlayer.isReady` - the SERVER's answer - and deliberately keeps
+ * no local copy. A round advance resets `isReady` on the server, so a local
+ * mirror goes stale and any effect that echoes it back would ready the player
+ * for the next round without them touching anything.
  */
 const ReadyButton: React.FC = () => {
   const { gameState, currentPlayer, playerReady } = useGameContext();

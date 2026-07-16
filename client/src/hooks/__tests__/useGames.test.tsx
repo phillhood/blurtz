@@ -5,7 +5,6 @@ import { ReactNode } from "react";
 import { useGames } from "../useGames";
 import { gameService } from "@services/game.service";
 
-// Mock the game service
 vi.mock("@services/game.service", () => ({
   gameService: {
     getAvailableGames: vi.fn(),
@@ -13,7 +12,6 @@ vi.mock("@services/game.service", () => ({
   },
 }));
 
-// Mock the auth store
 vi.mock("@stores", () => ({
   useAuthStore: vi.fn((selector) =>
     selector({ user: { id: "user-1", username: "testuser" } })

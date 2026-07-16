@@ -2,7 +2,6 @@ import { useCallback } from "react";
 import { Game } from "@types";
 import { useAuthStore, useGameStore } from "@stores";
 
-// Hook for backwards compatibility - delegates to Zustand store
 export const useGameContext = () => {
   const user = useAuthStore((state) => state.user);
   const gameState = useGameStore((state) => state.gameState);
@@ -13,7 +12,6 @@ export const useGameContext = () => {
   const clearMoveRejection = useGameStore((state) => state.clearMoveRejection);
   const getCurrentPlayer = useGameStore((state) => state.getCurrentPlayer);
 
-  // Get store actions
   const storeJoinGame = useGameStore((state) => state.joinGame);
   const storeCreateAndJoinGame = useGameStore((state) => state.createAndJoinGame);
   const storeLeaveGame = useGameStore((state) => state.leaveGame);
@@ -26,7 +24,7 @@ export const useGameContext = () => {
 
   const currentPlayer = getCurrentPlayer(user?.id);
 
-  // Wrapper functions that inject userId/playerId automatically
+  // These wrappers inject the acting user's id; components never pass one.
   const joinGame = useCallback(
     (gameId: string) => {
       if (user?.id) {

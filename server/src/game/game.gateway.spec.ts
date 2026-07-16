@@ -73,7 +73,7 @@ function lastEmit(socket: MockSocket, name: string) {
   return calls[calls.length - 1]?.[1];
 }
 
-/** A move result as GameService now returns it. */
+/** A move result as GameService returns it. */
 const acceptedMove = { ok: true, state: { id: GAME_ID } } as never;
 
 describe("GameGateway", () => {
@@ -132,9 +132,6 @@ describe("GameGateway", () => {
     expect(gateway).toBeDefined();
   });
 
-  // ---------------------------------------------------------------------
-  // Item 1: authenticate on connect.
-  // ---------------------------------------------------------------------
   describe("handleConnection", () => {
     it("disconnects a socket that sends no token", async () => {
       const client = createMockSocket({});
@@ -181,9 +178,6 @@ describe("GameGateway", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 4: room membership is verified against the database.
-  // ---------------------------------------------------------------------
   describe("handleMoveCard", () => {
     it("rejects a move from a user who is not a player in that game", async () => {
       const client = createAuthedSocket();
@@ -266,8 +260,8 @@ describe("GameGateway", () => {
         toPileId: TO_PILE_ID,
       });
 
-      // playerId is no longer part of the contract, so the payload is
-      // refused outright rather than silently acting as the victim.
+      // playerId is not part of the contract, so the payload is refused outright
+      // rather than silently acting as the victim.
       expect(gameService.moveCard).not.toHaveBeenCalled();
       expect(lastErrorMessage(client)).toContain("playerId");
     });
@@ -287,10 +281,8 @@ describe("GameGateway", () => {
       expect(lastErrorMessage(client)).toBe("Not authenticated");
     });
 
-    // -------------------------------------------------------------------
-    // Task 5 item 3: broadcast the state the move itself returned. Going
-    // back to the service for it would race the next player's move.
-    // -------------------------------------------------------------------
+    // The state the move itself returned: going back to the service for it
+    // would race the next player's move.
     it("broadcasts the state the move returned, without re-reading it", async () => {
       const client = createAuthedSocket();
       const movedState = { id: GAME_ID, status: "playing", players: [], bankPiles: [] };
@@ -317,11 +309,9 @@ describe("GameGateway", () => {
       );
     });
 
-    // -------------------------------------------------------------------
-    // Task 5 item 4: a rejected move gets MOVE_REJECTED *with state*, to
-    // the mover only. A bare ERROR left the client's gameState identity
-    // unchanged, so the card it had hidden stayed invisible forever.
-    // -------------------------------------------------------------------
+    // A rejected move gets MOVE_REJECTED *with state*, to the mover only: a bare
+    // ERROR leaves the client's gameState identity unchanged, so the card it had
+    // hidden stays invisible forever.
     describe("when the service rejects the move", () => {
       const rejectedState = {
         id: GAME_ID,
@@ -378,14 +368,10 @@ describe("GameGateway", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Task 8: the gateway is where state stops being internal.
-  //
-  // GameService returns UNREDACTED state by contract - these prove the
-  // gateway never emits it. The redactor's own behaviour is pinned in
-  // rules/redact.spec.ts; what is tested here is that it is actually WIRED
-  // IN on the paths that broadcast.
-  // ---------------------------------------------------------------------
+  // GameService returns UNREDACTED state by contract - these prove the gateway
+  // never emits it. The redactor's own behaviour is pinned in
+  // rules/redact.spec.ts; what is tested here is that it is WIRED IN on the
+  // paths that broadcast.
   describe("redaction of emitted state", () => {
     const HIDDEN_CARD_ID = "77777777-7777-4777-8777-777777777777";
     const VISIBLE_CARD_ID = "88888888-8888-4888-8888-888888888888";
@@ -563,9 +549,6 @@ describe("GameGateway", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 4: joining the room only after the service accepts the join.
-  // ---------------------------------------------------------------------
   describe("handleJoinGame", () => {
     it("does NOT put the socket in the room when joinGame throws", async () => {
       const client = createAuthedSocket();
@@ -598,9 +581,6 @@ describe("GameGateway", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 5: start_game delegates to the service with the connection's user.
-  // ---------------------------------------------------------------------
   describe("handleStartGame", () => {
     it("rejects start_game from a user who is not a player in the game", async () => {
       const client = createAuthedSocket();
@@ -643,9 +623,6 @@ describe("GameGateway", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // Item 3/4: the remaining gameplay handlers derive identity too.
-  // ---------------------------------------------------------------------
   describe("other gameplay handlers", () => {
     it("rejects flip_card from a non-player", async () => {
       const client = createAuthedSocket();

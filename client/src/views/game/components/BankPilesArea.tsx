@@ -14,12 +14,10 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
   bankPiles,
   canDropOnPile,
 }) => {
-  // Only show piles with cards
   const activePiles = bankPiles
     .map((pile, index) => ({ pile, index }))
     .filter(({ pile }) => pile.cards.length > 0);
 
-  // Find the first empty pile for the placeholder
   const firstEmptyIndex = bankPiles.findIndex((pile) => pile.cards.length === 0);
   const firstEmptyPile = firstEmptyIndex >= 0 ? bankPiles[firstEmptyIndex] : null;
 
@@ -68,7 +66,6 @@ const EmptyPileDropZone: React.FC<{
     data: { pileId, pileIndex, isEmpty: true },
   });
 
-  // Check if the active card can be dropped here
   const canDropHere = isOver && active
     ? canDrop((active.data.current as DragData)?.card)
     : false;

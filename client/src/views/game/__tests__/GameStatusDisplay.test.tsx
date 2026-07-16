@@ -54,11 +54,8 @@ describe("GameStatusDisplay", () => {
     expect(screen.getByText("Game in progress!")).toBeInTheDocument();
   });
 
-  // ------------------------------------------------------------------
-  // `gameState.winner` is a Player id. The heading wants a name, and the
-  // roster is the only place one exists - this used to greet the winner
-  // with a UUID.
-  // ------------------------------------------------------------------
+  // `gameState.winner` is a Player id. The heading wants a name, and the roster
+  // is the only place one exists.
   it("names the winner of a finished game", () => {
     gameContext.gameState = state({
       status: "finished",

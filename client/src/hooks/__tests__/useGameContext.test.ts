@@ -43,14 +43,12 @@ const inGame = () =>
   }) as unknown as GameState;
 
 /**
- * The hook that injects the signed-in user into every store action, so the
- * components never have to know a user id exists.
+ * The hook that injects the signed-in user into every store action.
  *
- * The guards are the subject: every wrapper here refuses to act when there is
- * nobody to act as. Without them a component that renders a frame early -
- * before the profile lands, or after a logout - would emit an action with
- * `undefined` where an id belongs, and the store would put "Not connected to
- * game server" on screen for a game the player is sitting in.
+ * The guards are the subject: every wrapper refuses to act when there is nobody
+ * to act as. Without them a component rendering early - before the profile
+ * lands, or after a logout - emits an action with `undefined` where an id
+ * belongs.
  */
 describe("useGameContext", () => {
   beforeEach(() => {
@@ -221,8 +219,7 @@ describe("useGameContext", () => {
 
   it("starts the game without needing a seat", () => {
     // Deliberately unguarded - the server decides who may start, and the button
-    // only renders for the host. (Round advance is no longer a client action:
-    // the last ready-up deals the next round on the server.)
+    // only renders for the host.
     useGameStore.setState({ gameState: inGame() });
     const { result } = renderHook(() => useGameContext());
 

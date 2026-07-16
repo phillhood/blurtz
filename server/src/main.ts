@@ -43,7 +43,6 @@ async function bootstrap() {
 
   app.useLogger(app.get(Logger));
 
-  // Configure Redis adapter for Socket.IO if Redis is available
   if (process.env.REDIS_URL || process.env.USE_REDIS_ADAPTER === "true") {
     const redisIoAdapter = new RedisIoAdapter(app);
     try {
@@ -69,7 +68,6 @@ async function bootstrap() {
 
   app.setGlobalPrefix("api");
 
-  // Swagger setup
   const config = new DocumentBuilder()
     .setTitle("Blurtz API")
     .setDescription("API for the Blurtz multiplayer card game")

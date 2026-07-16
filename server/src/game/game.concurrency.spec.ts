@@ -229,8 +229,8 @@ describe("GameService concurrency (real database)", () => {
 
   describe("two players racing the same bank pile with the same card", () => {
     /**
-     * Fire both moves genuinely concurrently. Run sequentially this proves
-     * nothing - it passed against the unlocked code too.
+     * Fire both moves genuinely concurrently. Run sequentially, this proves
+     * nothing - the unlocked code passes it too.
      */
     async function race(): Promise<MoveResult[]> {
       return Promise.all([
@@ -276,9 +276,9 @@ describe("GameService concurrency (real database)", () => {
 
       const after = await census();
 
-      // The invariant that matters: a card is somewhere, exactly once. The
-      // unlocked code dropped one on the floor here - both players' decks lost
-      // their ace, but only one ace reached a bank pile.
+      // The invariant that matters: a card is somewhere, exactly once. Unlocked,
+      // one is dropped on the floor - both players' decks lose their ace, but
+      // only one ace reaches a bank pile.
       expect(after.total).toBe(CARDS_PER_PLAYER * 2);
       expect(new Set(after.ids).size).toBe(after.ids.length);
       expect(new Set(after.ids)).toEqual(new Set(before.ids));
@@ -292,7 +292,7 @@ describe("GameService concurrency (real database)", () => {
 
       const { bankPileCounts } = await census();
 
-      // Unlocked, both players were credited for the same single card.
+      // Unlocked, both players are credited for the same single card.
       expect(bankPileCounts.reduce((a, b) => a + b, 0)).toBe(1);
       expect(bankPileCounts.filter((c) => c === 1)).toHaveLength(1);
       expect(bankPileCounts.filter((c) => c === 0)).toHaveLength(1);
@@ -324,15 +324,9 @@ describe("GameService concurrency (real database)", () => {
     });
   });
 
-  // -------------------------------------------------------------------
-  // Task 6 item 2: forfeitGame read the game through the OUTER prisma
-  // client, outside the lock. A forfeit racing a Blitz therefore read the
-  // pre-Blitz "playing" row, computed a winner from it in JS, and only then
-  // blocked on the row lock - so it waited for the Blitz to commit and then
-  // wrote its stale winner straight over the top of it.
-  //
-  // Two players' game ended with the wrong winner and the wrong scores.
-  // -------------------------------------------------------------------
+  // A forfeit that reads the game outside the lock reads the pre-Blitz "playing"
+  // row, computes a winner from it in JS, then blocks on the row lock - waiting
+  // for the Blitz to commit before writing its stale winner over the top.
   describe("a forfeit racing a Blitz", () => {
     let raceGameId: string;
     /** Empty Blurtz pile, so this is the only player allowed to call Blitz. */
@@ -347,12 +341,11 @@ describe("GameService concurrency (real database)", () => {
      * Without that asymmetry a clobbered winner would look identical to a
      * correct one and the test would prove nothing.
      *
-     * `targetScore: 5` is what keeps that asymmetry intact now that a Blitz
-     * can end a ROUND rather than the game. The high scorer makes 10, which
-     * clears 5, so a landed Blitz still finishes the game and still crowns
-     * them. At the default target of 100 this Blitz would score the round and
-     * leave the game `round_over`, and the race being tested - two ways of
-     * ENDING a game colliding - would not happen at all.
+     * `targetScore: 5` keeps that asymmetry intact given a Blitz can end a ROUND
+     * rather than the game: the high scorer makes 10, which clears 5, so a
+     * landed Blitz finishes the game and crowns them. At the default target of
+     * 100 this Blitz would leave the game `round_over` and the race being tested
+     * - two ways of ENDING a game colliding - would not happen at all.
      */
     beforeEach(async () => {
       const userA = await prisma.user.create({
@@ -417,8 +410,8 @@ describe("GameService concurrency (real database)", () => {
       const fulfilled = results.filter((r) => r.status === "fulfilled");
       const rejected = results.filter((r) => r.status === "rejected");
 
-      // Unlocked, BOTH of these completed: the forfeit's stale read still
-      // said "playing", so it never noticed the game had already ended.
+      // Unlocked, BOTH of these complete: the forfeit's stale read still says
+      // "playing", so it never notices the game has already ended.
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
 
@@ -456,18 +449,16 @@ describe("GameService concurrency (real database)", () => {
         expect(game.players.find((p) => p.id === blitzCaller).score).toBe(0);
       }
 
-      // Spelled out because it is the actual defect: the unlocked forfeit
-      // produced a hybrid neither branch above accepts - the Blitz's scores
-      // on the board, but the forfeit's winner sitting on the game row.
+      // Spelled out because it is the defect: an unlocked forfeit produces a
+      // hybrid neither branch above accepts - the Blitz's scores on the board,
+      // but the forfeit's winner sitting on the game row.
       const blitzScored = game.players.some((p) => p.score !== 0);
       expect(blitzScored).toBe(blitz.status === "fulfilled");
     });
   });
 
-  // -------------------------------------------------------------------
-  // Item 7: joinGame is check-then-create, so concurrent joins used to be
-  // able to seat the same user twice.
-  // -------------------------------------------------------------------
+  // joinGame is check-then-create, so without the lock concurrent joins can seat
+  // the same user twice.
   describe("concurrent joins by the same user", () => {
     it("creates exactly one player row", async () => {
       const game = await prisma.game.create({
@@ -497,15 +488,10 @@ describe("GameService concurrency (real database)", () => {
       expect(players).toHaveLength(1);
     });
   });
-  // -------------------------------------------------------------------
-  // Task 10: multi-round.
-  //
-  // A double Blitz was survivable while a Blitz only ever ENDED the game -
-  // the second caller wrote the same terminal state over the first. With
-  // rounds it is not: two callers each accumulate into `score`, each write a
-  // RoundResult, and each bump the round. The round counter jumps by two, the
-  // scores are double-counted, and both are permanent.
-  // -------------------------------------------------------------------
+  // A double Blitz is survivable only if a Blitz always ENDS the game - the
+  // second caller writes the same terminal state over the first. With rounds it
+  // is not: two callers each accumulate into `score`, each write a RoundResult,
+  // and each bump the round. Double-counted, and permanent.
   describe("two players calling Blitz at the same instant", () => {
     let raceGameId: string;
     let callerOne: string;
@@ -588,7 +574,7 @@ describe("GameService concurrency (real database)", () => {
       const fulfilled = results.filter((r) => r.status === "fulfilled");
       const rejected = results.filter((r) => r.status === "rejected");
 
-      // Unlocked, BOTH completed: each read `playing` before either wrote.
+      // Unlocked, BOTH complete: each reads `playing` before either writes.
       expect(fulfilled).toHaveLength(1);
       expect(rejected).toHaveLength(1);
 
@@ -617,7 +603,7 @@ describe("GameService concurrency (real database)", () => {
       // Scored once, from the carried-in totals:
       //   A: 10 + (6 - 2*0) = 16
       //   B:  4 + (3 - 2*0) =  7
-      // A second scoring pass would have made these 22 and 10.
+      // A second scoring pass would make these 22 and 10.
       const a = game.players.find((p) => p.id === callerOne);
       const b = game.players.find((p) => p.id === callerTwo);
       expect(a.score).toBe(16);
@@ -658,9 +644,7 @@ describe("GameService concurrency (real database)", () => {
     });
   });
 
-  // -------------------------------------------------------------------
-  // Task 10: a round played end to end, against the real database.
-  // -------------------------------------------------------------------
+  // A round played end to end, against the real database.
   describe("playing a round to a Blitz with a low target", () => {
     let gameOneId: string;
     let hostUserId: string;
@@ -818,14 +802,14 @@ describe("GameService concurrency (real database)", () => {
       });
       expect(rows).toHaveLength(4);
 
-      // --- And the stats that were permanently stuck at zero -----------
+      // --- And the stats ------------------------------------------------
       users = await prisma.user.findMany({
         where: { id: { in: [hostUserId, otherUserId] } },
       });
       const hostUser = users.find((u) => u.id === hostUserId);
       const otherUser = users.find((u) => u.id === otherUserId);
 
-      // updateGameStats had no callers at all before this task.
+      // Credited exactly once, by the game that finished.
       expect(hostUser.gamesPlayed).toBe(1);
       expect(hostUser.gamesWon).toBe(1);
       expect(otherUser.gamesPlayed).toBe(1);
@@ -833,11 +817,8 @@ describe("GameService concurrency (real database)", () => {
     });
   });
 
-  // -------------------------------------------------------------------
-  // Task 15: `round_over` is a real status that four sites written before it
-  // existed never learned about. These are the round-trips through a real
-  // database, where the FK behaviour and the row locks are the point.
-  // -------------------------------------------------------------------
+  // `round_over` round-trips through a real database, where the FK behaviour and
+  // the row locks are the point.
 
   /** A user tagged for cleanup. */
   async function makeUser(prefix: string) {
@@ -898,10 +879,9 @@ describe("GameService concurrency (real database)", () => {
 
     beforeEach(seedRoundOver);
 
-    // getActiveGames filtered on waiting/starting/playing/paused. A player who
-    // opened the Dashboard during the interstitial saw NOTHING - the game they
-    // were in the middle of simply was not listed, and there was no way back
-    // into it.
+    // Drop `round_over` from getActiveGames' filter and a player who opens the
+    // Dashboard during the interstitial sees NOTHING - the game they are in the
+    // middle of is not listed, and there is no way back into it.
     it("is listed as an active game for the players in it", async () => {
       const active = await service.getActiveGames(userTwoId);
 
@@ -910,10 +890,10 @@ describe("GameService concurrency (real database)", () => {
       expect(active[0].status).toBe("round_over");
     });
 
-    // The strand: the Player row was deleted through the waiting-lobby path,
-    // leaving a round_over game with one player. joinGame refuses a
-    // non-waiting game, so they could not come back; the round advance cannot
-    // fire below MIN_PLAYERS. Stuck, unwinnable, forever.
+    // The strand: delete the Player row through the waiting-lobby path and a
+    // round_over game is left with one player. joinGame refuses a non-waiting
+    // game, so they cannot come back; the round advance cannot fire below
+    // MIN_PLAYERS. Stuck, unwinnable, forever.
     it("finishes rather than stranding when a player leaves a two-player game", async () => {
       await service.leaveGame(roundOverGameId, userOneId);
 
@@ -939,9 +919,9 @@ describe("GameService concurrency (real database)", () => {
       expect(quitterUser.gamesWon).toBe(0);
     });
 
-    // The stale-readiness half of the skip: setPlayerReady took no lock and
-    // no status guard, so a ready write could land AFTER the deal that reset
-    // it - pre-readying that player for the NEXT interstitial.
+    // The stale-readiness half of the skip: without the lock and the status
+    // guard, a ready write lands AFTER the deal that reset it - pre-readying
+    // that player for the NEXT interstitial.
     it("cannot be readied up again once the next round has been dealt", async () => {
       // One player ready already; the OTHER player's ready-up is the last one,
       // so it deals the next round itself.
@@ -969,7 +949,7 @@ describe("GameService concurrency (real database)", () => {
       expect(players.every((p) => p.isReady === false)).toBe(true);
     });
 
-    // The double-deal guard. The deal now lives inside `setPlayerReady`, so two
+    // The double-deal guard. The deal lives inside `setPlayerReady`, so two
     // players firing the FINAL ready-up at the same instant is the race that
     // matters. Unlocked, both read "one ready, one not", both write the last
     // ready, and both advance - currentRound jumps by two and every deck is
@@ -1003,7 +983,7 @@ describe("GameService concurrency (real database)", () => {
         include: { players: { orderBy: { id: "asc" } } },
       });
 
-      // Advanced by EXACTLY one: round 1 -> 2. Double-dealt, this would be 3.
+      // Advanced by EXACTLY one: round 1 -> 2. Double-dealt, this is 3.
       expect(game.status).toBe("playing");
       expect(game.currentRound).toBe(2);
       expect(game.players.every((p) => p.isReady === false)).toBe(true);
@@ -1058,9 +1038,8 @@ describe("GameService concurrency (real database)", () => {
         include: { players: true },
       });
 
-      // Pre-fix this player was deleted and the FK nulled the winner: the
-      // game forgot it had been won at all, and the host was handed to the
-      // loser on the way past.
+      // Delete this player and the FK nulls the winner: the game forgets it was
+      // won at all, and the host is handed to the loser on the way past.
       expect(after.winnerPlayerId).toBe(winnerRow.id);
       expect(after.players).toHaveLength(2);
       expect(after.status).toBe("finished");
@@ -1068,14 +1047,8 @@ describe("GameService concurrency (real database)", () => {
     });
   });
 
-  // -------------------------------------------------------------------
-  // Task 15 item 4: a forfeit the game SURVIVES never reassigned hostId. The
-  // game played on to its next round_over and then died there - the old
-  // host-triggered round advance wanted the host, and the host was not in the
-  // game any more. The round now advances automatically on the last ready-up,
-  // so this checks BOTH that the host is reassigned to a live player and that
-  // the round advances regardless.
-  // -------------------------------------------------------------------
+  // A forfeit the game SURVIVES must still leave `hostId` naming a live player,
+  // and the round must advance regardless of who the host is.
   describe("the host forfeiting a three-player game", () => {
     it("reassigns the host to a live player, and the round still advances", async () => {
       const host = await makeUser("ff-host");
@@ -1132,12 +1105,12 @@ describe("GameService concurrency (real database)", () => {
       expect(after.status).toBe("playing");
       expect(after.players).toHaveLength(2);
 
-      // The invariant that was broken: the host is someone still IN the game.
-      // (Which of the two inherits it is Postgres' row order, not a contract.)
+      // The invariant: the host is someone still IN the game. (Which of the two
+      // inherits it is Postgres' row order, not a contract.)
       const remainingUserIds = after.players.map((p) => p.userId);
       expect(remainingUserIds).toContain(after.hostId);
 
-      // Play on to the interstitial, where the missing host used to be fatal.
+      // Play on to the interstitial, where a missing host would be fatal.
       const blitz = await service.callBlitz(game.id, secondRow.id);
       expect(blitz.status).toBe("round_over");
 
@@ -1145,11 +1118,10 @@ describe("GameService concurrency (real database)", () => {
       const midway = await prisma.game.findUnique({ where: { id: game.id } });
       expect(midway.status).toBe("round_over");
 
-      // The last ready-up deals round 2 - and crucially it needs no host, which
-      // is the whole point now that the host forfeited. Pre-fix, NOBODY could
-      // get past this: the host-triggered advance wanted a host who was no
-      // longer a player, so its host check could not be satisfied by anyone
-      // alive.
+      // The last ready-up deals round 2, and crucially needs no host - which is
+      // the whole point now that the host forfeited. A host-triggered advance
+      // would want a host who is no longer a player, so its check could not be
+      // satisfied by anyone alive.
       await service.setPlayerReady(game.id, thirdRow.id, true);
 
       after = await prisma.game.findUnique({

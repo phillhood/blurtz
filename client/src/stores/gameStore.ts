@@ -21,12 +21,10 @@ interface GameStoreState {
   /**
    * Why the server refused the last move. Deliberately NOT `error`.
    *
-   * Rejection reasons are free text chosen by the server ("Destination pile
-   * not found", "That card no longer fits on that bank pile"), and <Game>
-   * decides fatality by substring-matching `error` for "not found". Sharing
-   * the field means a bad pile id ejects a player out of a live game they are
-   * still perfectly able to play. A refused move is never fatal, so it gets a
-   * channel the fatality heuristic cannot see.
+   * Rejection reasons are free text ("Destination pile not found"), and <Game>
+   * decides fatality by substring-matching `error` for "not found" - so sharing
+   * the field would eject a player from a game they can still play. A refused
+   * move is never fatal, so it gets a channel that heuristic cannot see.
    */
   moveRejection: string | null;
   // Internal flags
@@ -48,7 +46,8 @@ interface GameStoreActions {
   leaveGame: (userId: string, forfeit?: boolean) => void;
   // Game actions.
   // The server derives the acting player from the socket's authenticated
-  // connection, so these no longer take (and must not send) a playerId.
+  // connection. These must not send a playerId: identity never comes off the
+  // wire.
   makeMove: (cardId: string, fromPileId: string, toPileId: string) => void;
   flipCard: (pileId: string) => void;
   flipDrawPile: (playerId: string) => void;
@@ -392,8 +391,9 @@ export const useGameStore = create<GameStore>()(
   )
 );
 
-// Auto-initialize/disconnect socket based on auth state changes
-// This runs outside React - no useEffect, no dependency arrays
+// Connects and disconnects the socket on login/logout, outside React - no
+// useEffect, no dependency arrays. Only runs because `main.tsx` imports this
+// module for its side effect.
 import { useAuthStore } from "./authStore";
 import { User } from "@types";
 

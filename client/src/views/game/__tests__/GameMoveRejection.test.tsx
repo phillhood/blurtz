@@ -82,14 +82,9 @@ describe("<Game> and a rejected move", () => {
     });
   });
 
-  // -------------------------------------------------------------------
-  // Task 6 item 1: <Game> decides fatality with
-  //   error?.includes("not found") || error?.includes("does not exist")
-  // and validateMove can reject with "Source pile not found" / "Destination
-  // pile not found". Routing a rejection reason through `error` therefore
-  // unmounts a player out of a live game over a bad pile id - the exact
-  // opposite of what MOVE_REJECTED exists to do.
-  // -------------------------------------------------------------------
+  // These reasons are chosen, not arbitrary: <Game> decides fatality with
+  // `error?.includes("not found")`, and these are real `validateMove` rejections
+  // that match it. Do not swap them for other strings - the match is the test.
   it.each([
     "Destination pile not found",
     "Source pile not found",

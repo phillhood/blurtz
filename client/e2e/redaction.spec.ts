@@ -5,22 +5,17 @@ import { findCards, recordSocketFrames, type SocketRecorder } from "./fixtures/s
 /**
  * A client must not be sent a card it is not allowed to see.
  *
- * This is the most valuable assertion in the suite, because it is the one bug
- * that is invisible in the UI by construction: the client draws a card back
- * over whatever it was sent, so a server leaking every opponent's whole deal
- * looks EXACTLY like a correct one on screen. Screenshots cannot see it. The
- * only place the truth is legible is the frame on the wire.
- *
- * So this reads the frames. `shared/src/rules/redact.spec.ts` already pins the
- * pure function; what this adds is that the function is actually reached on
- * every path out of the real server - which is a wiring claim, and wiring is
- * what e2e is for.
+ * Asserted on the wire, not the DOM: the client draws a card back over whatever
+ * it was sent, so a server leaking every opponent's deal looks EXACTLY like a
+ * correct one on screen. `shared/src/rules/redact.spec.ts` pins the pure
+ * function; this pins that it is actually reached on every path out of the
+ * real server.
  */
 test.describe("Redaction", () => {
   /**
    * A face-down card on the wire must be `{ id, faceUp: false }` and nothing
-   * else - not a nulled-out value, but no value field at all - and its id must
-   * be the synthetic positional one, never the card's real id.
+   * else - no value field at all, not a nulled-out one - under the synthetic
+   * positional id, never the card's real id.
    */
   function assertNoLeaks(recorder: SocketRecorder) {
     const cards = recorder.frames.flatMap((frame) =>
@@ -59,13 +54,12 @@ test.describe("Redaction", () => {
     for (const recorder of recorders) {
       const { hidden, visible } = assertNoLeaks(recorder);
 
-      // The assertion above is only worth something if there were face-down
-      // cards to leak. A 2-player deal gives each player 9 buried blurtz cards
-      // and a 25-card draw pile: 34 each, 68 in the game, in every frame that
-      // carries state.
+      // Only worth something if there were face-down cards to leak: a 2-player
+      // deal buries 9 blurtz cards and a 25-card draw pile per player, 68 in
+      // the game.
       expect(hidden.length).toBeGreaterThan(60);
-      // ...and only worth something if face-up cards DO come through with
-      // their values, or "redaction" could just be an empty payload.
+      // ...and only if face-up cards DO come through with their values, or
+      // "redaction" could just be an empty payload.
       expect(visible.length).toBeGreaterThan(0);
       for (const { card } of visible) {
         expect(card).toHaveProperty("value");
@@ -77,12 +71,9 @@ test.describe("Redaction", () => {
   });
 
   /**
-   * The deal itself, read off the wire.
-   *
-   * The DOM cannot answer this: the blurtz pile renders at most 3 of its cards
-   * and the draw pile 2, so "10 cards, one of them face-up" is simply not on
-   * screen. It is on the wire, and it is the difference between a correct deal
-   * and a plausible-looking one.
+   * Read off the wire because the DOM cannot answer it: the blurtz pile renders
+   * at most 3 of its cards and the draw pile 2, so "10 cards, one face-up" is
+   * not on screen.
    */
   test("the dealt state on the wire is the deal the rules describe", async ({
     browser,

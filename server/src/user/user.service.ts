@@ -82,13 +82,12 @@ export class UserService {
    *   game B (users Y, X): locks Y, waits for X   -> deadlock
    *
    * Postgres detects the cycle and kills one of them, so a game that was
-   * legitimately won just fails to finish. Acquiring the rows in one total
-   * order shared by every caller makes the cycle impossible to form: both
-   * transactions reach for X first and the loser simply waits its turn.
+   * legitimately won just fails to finish. Acquiring the rows in one total order
+   * shared by every caller makes the cycle impossible to form: both transactions
+   * reach for X first and the loser simply waits its turn.
    *
-   * This is the specific case that "each statement only touches one row, so it
-   * cannot deadlock" does not cover. That reasoning is sound for a single
-   * update and false the moment a transaction takes a second lock.
+   * "Each statement only touches one row, so it cannot deadlock" is sound for a
+   * single update and false the moment a transaction takes a second lock.
    */
   async recordGameResults(
     client: Prisma.TransactionClient,

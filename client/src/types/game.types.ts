@@ -1,21 +1,15 @@
 /**
- * The game types, as the client sees them.
+ * The game types, as the client sees them: re-exports of `@blurtz/shared`, not
+ * copies.
  *
- * These are re-exports of `@blurtz/shared`, not copies. They used to be a
- * hand-maintained mirror of `server/src/types/game.types.ts` and had drifted
- * from it - most of the client compared `card.number` while the server
- * compared `card.value`, two names for one field that only agreed because
- * `createFullDeck` wrote both.
+ * The mapping is the point. What the client calls a `Pile` is the REDACTED pile
+ * the server publishes (`ClientPile`), not the server's internal one - a
+ * face-down card on the wire carries an id and nothing else, and these names are
+ * what make the client incapable of expecting otherwise.
  *
- * The mapping is the point: what the client calls a `Pile` is the REDACTED
- * pile the server publishes (`ClientPile`), not the server's internal one. A
- * face-down card on the wire carries an id and nothing else, and these names
- * are what make the client incapable of expecting otherwise.
- *
- * `@blurtz/shared` resolves through the workspace symlink like any other
- * dependency - there is no path alias for it, deliberately. This file stays
- * only so the client's `@types` barrel keeps one meaning: "the types this app
- * uses", wherever they are authored.
+ * This file exists only so the `@types` barrel keeps one meaning: "the types
+ * this app uses", wherever they are authored. `@blurtz/shared` resolves through
+ * the workspace symlink - there is deliberately no path alias for it.
  */
 export type {
   // The card union. A `ClientCard` is a `VisibleCard | HiddenCard`

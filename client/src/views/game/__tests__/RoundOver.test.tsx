@@ -8,11 +8,9 @@ import { socketService, SocketCallbacks } from "@services/socket.service";
 import { GameState } from "@types";
 
 /**
- * The round-over interstitial, driven through the REAL store.
- *
- * These pin two things the client had no way to express before rounds existed:
- * that a `round_over` game shows the standings instead of a board, and that
- * readiness is the SERVER's state rather than a local copy the button keeps.
+ * The round-over interstitial, driven through the REAL store. Pins that a
+ * `round_over` game shows the standings instead of a board, and that readiness
+ * is the SERVER's state rather than a local copy the button keeps.
  */
 class StubResizeObserver {
   observe() {}
@@ -166,13 +164,6 @@ describe("the round-over interstitial", () => {
     expect(socketService.playerReady).toHaveBeenCalledWith("game-1", true);
   });
 
-  /**
-   * The regression the old ReadyButton would have shipped: it held `isReady`
-   * in local state, so a round advance that cleared readiness on the server
-   * left the button still saying "Cancel Ready" - and its effect fired that
-   * stale `true` straight back, readying the player for a round they never
-   * agreed to.
-   */
   it("reflects the SERVER's readiness, not a local copy", async () => {
     const callbacks = await registeredCallbacks();
     renderGame();

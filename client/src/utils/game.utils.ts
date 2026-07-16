@@ -1,24 +1,14 @@
-// `canDropOnBankPile` and `canDropOnWorkPile` used to live here, as the
-// client's own copy of the placement rules. They are gone. The rule is
-// `canPlace` in `@blurtz/shared`, which the server decides every real move
-// with; the call sites now ask it directly (see `Game.tsx` and the work-pile
-// affordance in `views/game/components/PlayerArea.tsx`). Nothing below is a
-// rule - these are display helpers, which is why they stayed.
+// Display helpers only. No placement rule belongs here: `canPlace` in
+// `@blurtz/shared` is the one authority, and call sites ask it directly.
 
 export const getGameStatusTitle = (
   status: string,
   playerCount: number,
   maxPlayers: number,
-  // The winner's USERNAME, resolved by the caller from `gameState.players`.
-  //
-  // `gameState.winner` is a Player id, and this used to interpolate it raw -
-  // so the one screen that announces the whole point of the game greeted the
-  // winner with a UUID.
-  //
-  // `string | null | undefined` because a finished game need not have a
-  // winner: `readGameState` resolves `winner: winner?.id || null`, and a game
-  // where everybody forfeited finishes with nobody. That case used to render
-  // the literal text "Winner: null".
+  // The winner's USERNAME, resolved by the caller from `gameState.players` -
+  // `gameState.winner` is a Player id, and interpolating it raw greets the
+  // winner with a UUID. Nullable because a finished game need not have a
+  // winner: a game everybody forfeited finishes with nobody.
   winnerName?: string | null
 ): string => {
   switch (status) {
@@ -68,7 +58,6 @@ export const formatDate = (date: string | Date): string => {
 
   const formatted = dateObj.toLocaleDateString("en-US", options);
 
-  // Add ordinal suffix to day
   const day = dateObj.getDate();
   const ordinalSuffix = getOrdinalSuffix(day);
 

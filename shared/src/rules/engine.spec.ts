@@ -12,24 +12,13 @@ import {
   validateMove,
 } from "./engine";
 
-/**
- * The rules engine's tests.
- *
- * These are pure-function tests: no Prisma, no Nest, no database, no mocks.
- * That is the point - the engine is being tested at the layer it will be
- * shared from, and the specs are meant to survive the move to a shared package
- * with the client largely untouched.
- */
-
 const { RED, BLUE, YELLOW, GREEN } = CARD_COLORS;
 
 /**
- * A card, with a readable id.
- *
  * Ids are "R1"/"B3" rather than UUIDs on purpose: nothing in the engine parses
- * an id, and a failure that says `["B3", "Y2"]` beats one that says
+ * an id, and a failure that says `["B3", "Y2"]` beats one reading
  * `["bbbbbbbb-bbbb-4bbb-...", ...]`. The UUID shape is a database-boundary
- * concern, policed by PlayerDeckSchema and exercised in game.service.spec.ts.
+ * concern, policed by `PlayerDeckSchema`.
  */
 function card(
   id: string,
@@ -45,21 +34,15 @@ function pile(id: string, type: Pile["type"], cards: Card[] = []): Pile {
 }
 
 /**
- * A board whose `bankPiles` is known to be there.
- *
- * `BoardState` leaves `bankPiles` optional because the engine reads it out of
- * a JSON column, where an old or half-written row genuinely can arrive without
- * one - and the engine tolerates that on purpose. A test that just built the
- * board three lines up knows better. Saying so once here beats an `!` on every
- * assertion below, and it does not weaken anything: the engine is still
- * exercised through its real, tolerant signature.
+ * A board whose `bankPiles` is known to be there. `BoardState` leaves it
+ * optional because a JSON column can hand the engine a row without one; a test
+ * that built the board three lines up knows better. Saying so once here beats
+ * an `!` on every assertion, and the engine is still exercised through its
+ * real, tolerant signature.
  */
 type TestBoard = BoardState & { bankPiles: Pile[] };
 
 describe("rules engine", () => {
-  // =====================================================================
-  // canPlace - WORK piles
-  // =====================================================================
   describe("canPlace: work piles", () => {
     it("accepts ANY card on an empty work pile", () => {
       expect(canPlace("work", undefined, card("R1", 1, RED))).toBe(true);
@@ -68,11 +51,6 @@ describe("rules engine", () => {
       expect(canPlace("work", undefined, card("G10", 10, GREEN))).toBe(true);
     });
 
-    // Two contradictory rules exist in this codebase: the dead client copy at
-    // client/src/utils/constants.utils.ts requires `value === 10` to start a
-    // work pile, while the server has always allowed any card. This test
-    // records which one is real - the server's. A shared rules package must
-    // adopt THIS behaviour, not the client's.
     it("does NOT restrict an empty work pile to 10s", () => {
       expect(canPlace("work", undefined, card("R1", 1, RED))).toBe(true);
       expect(canPlace("work", undefined, card("B4", 4, BLUE))).toBe(true);
@@ -106,8 +84,6 @@ describe("rules engine", () => {
     });
 
     it("alternates on colour TYPE, not colour name", () => {
-      // The crux of the asymmetry with bank piles: two different-named cards
-      // of the same type cannot stack, and this is the rule that says so.
       const blueFive = card("B5", 5, BLUE);
       expect(canPlace("work", blueFive, card("R4", 4, RED))).toBe(false);
       expect(canPlace("work", blueFive, card("Y4", 4, YELLOW))).toBe(true);
@@ -123,9 +99,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // canPlace - BANK piles
-  // =====================================================================
   describe("canPlace: bank piles", () => {
     it("accepts ONLY a 1 on an empty bank pile", () => {
       expect(canPlace("bank", undefined, card("R1", 1, RED))).toBe(true);
@@ -167,11 +140,9 @@ describe("rules engine", () => {
       expect(canPlace("bank", redFive, card("R1", 1, RED))).toBe(false);
     });
 
-    // This is the test that licenses the absence of any "clear a bank pile at
-    // 10" logic. A completed pile is ALREADY inert: the ascending rule can only
-    // ever accept an 11, and no such card exists. Nothing needs to recycle it,
-    // and BANK_PILE_COUNT: 16 is correct precisely because piles are never
-    // reused - 16 is the number of 1s in play (4 colours x 4 players).
+    // Licenses the absence of any "clear a bank pile at 10" logic, and with it
+    // BANK_PILE_COUNT: 16 - piles are never recycled, so there is one per 1 in
+    // play (4 colours x 4 players).
     it("is inert once complete: nothing can be played on a finished 1-10 pile", () => {
       const redTen = card("R10", 10, RED);
 
@@ -186,17 +157,14 @@ describe("rules engine", () => {
     });
 
     it("rejects an 11th card on a full 1-10 pile", () => {
-      // An 11 is the only thing the rule would accept on a 10 - and it does not
-      // exist in the deck. Constructed here purely to prove the pile's
+      // An 11 cannot exist in the deck. Minted by hand here to show the pile's
       // inertness comes from the deck's range, not from a special case.
       const redTen = card("R10", 10, RED);
       const redEleven = card("R11", 11, RED);
 
-      // Sanity: the rule really is "top + 1, same name" and nothing more.
       expect(redEleven.value).toBe(redTen.value + 1);
       expect(redEleven.color.name).toBe(redTen.color.name);
 
-      // ...and yet dealCards never mints one, so a full pile stays inert.
       const dealt = dealCards(4);
       const allValues = [
         ...dealt.blurtzPile.cards,
@@ -208,9 +176,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // canPlace - piles that are never destinations
-  // =====================================================================
   describe("canPlace: non-destination piles", () => {
     it("never accepts a card onto a blurtz or draw pile", () => {
       expect(canPlace("blurtz", undefined, card("R1", 1, RED))).toBe(false);
@@ -224,23 +189,15 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // cardsMovedBy - how far does a move reach?
-  // =====================================================================
   describe("cardsMovedBy", () => {
     const bottom = card("R1", 1, RED);
     const middle = card("B9", 9, BLUE);
     const top = card("Y2", 2, YELLOW);
     const stack = () => [bottom, middle, top];
 
-    // THE regression test for the corruption bug. A work→bank move takes one
-    // card and one card only. When it took the whole stack, a single play to a
-    // foundation swept an entire tableau pile onto it.
-    //
-    // Asked as a counterfactual: `cardsMovedBy` answers "how far would this
-    // reach", not "is this allowed" - that is `canMoveFromPile`'s job, and it
-    // rejects this exact move (see below). The buried card is used here because
-    // it is the ONLY input that can tell the two branches apart.
+    // A buried card is the only input that tells the two branches apart, hence
+    // the fixture. `cardsMovedBy` answers "how far would this reach", not "is
+    // this allowed" - forbidding the move is `canMoveFromPile`'s job.
     it("moves exactly ONE card work→bank, even from the bottom of a stack", () => {
       expect(cardsMovedBy("work", "bank", stack(), "R1")).toEqual([bottom]);
       expect(cardsMovedBy("work", "bank", stack(), "B9")).toEqual([middle]);
@@ -254,7 +211,6 @@ describe("rules engine", () => {
         top,
       ]);
       expect(cardsMovedBy("work", "work", stack(), "B9")).toEqual([middle, top]);
-      // The top card carries nothing with it - a stack of one.
       expect(cardsMovedBy("work", "work", stack(), "Y2")).toEqual([top]);
     });
 
@@ -283,9 +239,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // canMoveFromPile - is the card takeable at all?
-  // =====================================================================
   describe("canMoveFromPile", () => {
     describe("draw piles", () => {
       // [face-down stock at the front][face-up waste at the end]
@@ -356,11 +309,9 @@ describe("rules engine", () => {
         expect(canMoveFromPile("work", "work", workCards(), "R1")).toBe(true);
       });
 
-      // Task 7 item 2. Only the accessible card of a work pile may go to a
-      // foundation. Without this, a buried card played to a bank pile spliced
-      // itself out of the middle of the pile, left the cards above it behind as
-      // a stack that was never legal, and scored a point for it - for every
-      // face-up card in the pile, repeatably.
+      // Only the accessible card of a work pile may reach a foundation: a
+      // buried card would splice itself out of the middle and leave the cards
+      // above it as a stack that was never legal.
       it("allows ONLY the top card work→bank", () => {
         expect(canMoveFromPile("work", "bank", workCards(), "R1")).toBe(true);
         expect(canMoveFromPile("work", "bank", workCards(), "Y2")).toBe(false);
@@ -379,9 +330,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // validateMove
-  // =====================================================================
   describe("validateMove", () => {
     function scenario() {
       const deck: PlayerDeck = {
@@ -431,8 +379,6 @@ describe("rules engine", () => {
       );
     });
 
-    // The rejection a player hits when they lose a race for a shared pile -
-    // worth its own message, because it is the most common one in the game.
     it("distinguishes losing a bank race from an impossible placement", () => {
       const { deck, board } = scenario();
       board.bankPiles[0].cards.push(card("R1x", 1, RED));
@@ -447,7 +393,6 @@ describe("rules engine", () => {
       );
     });
 
-    // Item 2, at the validation layer: the whole reason the fix exists.
     it("rejects a buried work-pile card played to a bank pile", () => {
       const { deck, board } = scenario();
       // A legal work pile with a 1 buried under it.
@@ -463,9 +408,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // executeMove
-  // =====================================================================
   describe("executeMove", () => {
     it("moves the card and everything above it work→work", () => {
       const deck: PlayerDeck = {
@@ -510,10 +452,8 @@ describe("rules engine", () => {
       expect(board.bankPiles[0].cards.map((c) => c.id)).toEqual(["R1"]);
     });
 
-    // Proves executeMove takes its reach from `cardsMovedBy` rather than
-    // keeping a second copy of the rule. `validateMove` makes this move
-    // unreachable in a real game; the point here is that the two layers cannot
-    // drift apart.
+    // `validateMove` makes this move unreachable in a real game; the fixture is
+    // deliberately illegal so the two layers cannot drift apart.
     it("takes its extent from cardsMovedBy: a work→bank move never sweeps the stack", () => {
       const deck: PlayerDeck = {
         blurtzPile: pile("blurtz-1", "blurtz", []),
@@ -553,9 +493,7 @@ describe("rules engine", () => {
       executeMove(deck, board, "R1", "blurtz-1", "bank-1");
 
       expect(deck.blurtzPile.cards.map((c) => c.id)).toEqual(["G5", "B4"]);
-      // The newly exposed card is now playable...
       expect(deck.blurtzPile.cards[1].faceUp).toBe(true);
-      // ...and the one still buried under it is not.
       expect(deck.blurtzPile.cards[0].faceUp).toBe(false);
     });
 
@@ -578,18 +516,11 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // Invariants over sequences of legal moves
-  // =====================================================================
   describe("invariants over a sequence of legal moves", () => {
     /**
-     * Every property a card is allowed to have.
-     *
-     * This is how "faceUp is the complete visibility predicate" is actually
-     * enforced: if a future change smuggles visibility into a second field -
-     * `hidden`, `visibleTo`, `revealed` - this set catches it. The next phase's
-     * redaction keys on `faceUp` ALONE, so a card whose visibility is encoded
-     * anywhere else would leak.
+     * How "faceUp is the complete visibility predicate" is enforced: redaction
+     * keys on `faceUp` ALONE, so a change smuggling visibility into a second
+     * field (`hidden`, `visibleTo`, `revealed`) would leak. This set catches it.
      */
     const ALLOWED_CARD_KEYS = new Set(["id", "value", "color", "faceUp"]);
 
@@ -603,11 +534,9 @@ describe("rules engine", () => {
     }
 
     /**
-     * Every invariant, as one comparable object.
-     *
-     * Reported rather than asserted piecemeal so a failure names the offending
-     * card and the step it happened at, instead of just saying `false !== true`
-     * somewhere inside a loop. Every violation list is expected to be empty.
+     * Every invariant as one comparable object, rather than asserted piecemeal,
+     * so a failure names the offending card and the step it happened at instead
+     * of `false !== true` somewhere inside a loop. Violation lists must be empty.
      */
     function invariantReport(
       deck: PlayerDeck,
@@ -624,7 +553,6 @@ describe("rules engine", () => {
         seen.add(id);
       }
 
-      // Visibility must live in `faceUp` and nowhere else.
       const unknownCardKeys: string[] = [];
       for (const c of cards) {
         for (const key of Object.keys(c)) {
@@ -632,20 +560,17 @@ describe("rules engine", () => {
         }
       }
 
-      // Blurtz: only the top card is ever face-up.
       const blurtzVisibilityViolations = deck.blurtzPile.cards
         .filter((c, i) => c.faceUp !== (i === deck.blurtzPile.cards.length - 1))
         .map((c) => c.id);
 
-      // Work and bank piles hold only face-up cards - a card had to be visible
-      // to get there in the first place.
+      // A card had to be visible to reach a work or bank pile at all.
       const faceDownOnWorkOrBank = [...deck.workPiles, ...board.bankPiles]
         .flatMap((p: Pile) => p.cards)
         .filter((c) => !c.faceUp)
         .map((c) => c.id);
 
-      // Draw pile: face-down stock is a prefix, face-up waste a suffix. A
-      // face-down card must never sit behind a face-up one.
+      // Draw pile: face-down stock is a prefix, face-up waste a suffix.
       const firstFaceUp = deck.drawPile.cards.findIndex((c) => c.faceUp);
       const drawFaceDownAfterFaceUp =
         firstFaceUp === -1
@@ -751,8 +676,6 @@ describe("rules engine", () => {
       const expectedIds = allCards(deck, board).map((c) => c.id);
       expect(expectedIds).toHaveLength(40);
 
-      // Cycling the draw pile many times must never lose, duplicate or reorder
-      // a card, and must never break the visibility layout.
       for (let i = 0; i < 15; i++) {
         deck.drawPile.cards = flipDrawPile(deck.drawPile.cards);
         expectInvariants(deck, board, expectedIds, `cycle ${i}`);
@@ -760,15 +683,10 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // flipDrawPile - characterization
-  // =====================================================================
   describe("flipDrawPile (characterization - this logic is known-good)", () => {
     /**
-     * These tests exist to PROTECT the cycling logic from a well-meaning
-     * "fix", not to propose one. It was traced independently twice and is
-     * correct. If one of these fails, the change is wrong until proven
-     * otherwise.
+     * These PROTECT the cycling logic from a well-meaning "fix" rather than
+     * propose one. If one fails, the change is wrong until proven otherwise.
      */
 
     function stock(n: number): Card[] {
@@ -813,10 +731,8 @@ describe("rules engine", () => {
 
         // Every expectation below is derived from the state BEFORE the flip,
         // independently of what flipDrawPile does - that is what makes this a
-        // test rather than a restatement.
-        //
-        // When the stock is exhausted the whole pile turns face-down again, so
-        // the stock for THIS flip is the entire pile.
+        // test rather than a restatement. When the stock is exhausted the whole
+        // pile turns face-down again, so the stock for THIS flip is everything.
         const wasReset = downBefore === 0;
         const stockForFlip = wasReset ? before : before.slice(0, downBefore);
         const expectedFlips = Math.min(3, stockForFlip.length);
@@ -926,9 +842,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // dealCards
-  // =====================================================================
   describe("dealCards", () => {
     it("deals 40 cards - a full deck - to each player", () => {
       for (const numPlayers of [2, 3, 4]) {
@@ -965,17 +878,6 @@ describe("rules engine", () => {
       }
     });
 
-    /**
-     * This used to assert `c.number === c.value` on every dealt card - the
-     * alias invariant, held together by `createFullDeck` remembering to write
-     * both. There is one name now (`value`), so the invariant is not that the
-     * two agree but that the second one is not there at all: `number` was what
-     * the client compared while the server compared `value`, and a card that
-     * quietly grows it back is how that divergence would start again.
-     *
-     * `ownerId` is in the same position - two lines of type that nothing has
-     * ever assigned or read.
-     */
     it("deals cards carrying ONLY id, value, color and faceUp", () => {
       const deck = dealCards(3, seededRng(11));
       const cards = [
@@ -1079,9 +981,6 @@ describe("rules engine", () => {
     });
   });
 
-  // =====================================================================
-  // scoreRound
-  // =====================================================================
   describe("scoreRound", () => {
     it("scores one per banked card when the blurtz pile is empty", () => {
       expect(scoreRound(0, 0)).toBe(0);
@@ -1095,8 +994,6 @@ describe("rules engine", () => {
       expect(scoreRound(10, 5)).toBe(0);
     });
 
-    // The penalty is what makes this a race rather than a hoarding game, and it
-    // genuinely goes negative. Do not clamp it at zero.
     it("goes negative when the penalty outweighs the cards banked", () => {
       expect(scoreRound(0, 10)).toBe(-20);
       expect(scoreRound(2, 5)).toBe(-8);
@@ -1113,11 +1010,7 @@ describe("rules engine", () => {
   });
 });
 
-/**
- * A tiny deterministic PRNG (mulberry32) so deals are repeatable.
- *
- * Only ever used in tests: `dealCards` defaults to `Math.random` in production.
- */
+/** A deterministic PRNG (mulberry32) so deals are repeatable. Tests only. */
 function seededRng(seed: number): () => number {
   let a = seed >>> 0;
   return () => {

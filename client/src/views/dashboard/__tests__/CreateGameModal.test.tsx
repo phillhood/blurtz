@@ -77,9 +77,9 @@ describe("CreateGameModal", () => {
 
   it("has no unreachable maxPlayers error to show", () => {
     // maxPlayers is state this component owns, moved only by ± buttons that
-    // clamp to 2-4 and are disabled at the bounds, so the guards that used to
-    // sit in handleSubmit could not fire. The server's CreateGameDto enforces
-    // the same 2-4 rule with the same wording, and says so to the player.
+    // clamp to 2-4 and are disabled at the bounds, so a local guard in
+    // handleSubmit could never fire. The server's CreateGameDto enforces the
+    // same rule and says so to the player.
     setup();
 
     expect(screen.queryByText("Minimum 2 players required")).not.toBeInTheDocument();

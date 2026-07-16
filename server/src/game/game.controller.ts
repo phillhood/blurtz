@@ -153,14 +153,12 @@ export class GameController {
   }
 
   /**
-   * The socket path is what the client actually plays through; this route is
-   * the REST mirror of it, and it used to be the widest hole in the app.
+   * The REST mirror of the socket path the client actually plays through.
    *
-   * `JwtAuthGuard` proves you are SOMEBODY. It does not prove you are somebody
-   * in THIS game - so any logged-in user who could name a game id got back the
-   * full deal, every player's face-down cards included. Both halves of that are
-   * fixed here: membership is checked, and what a member gets back is redacted
-   * exactly like a broadcast.
+   * `JwtAuthGuard` proves you are SOMEBODY; it does not prove you are somebody in
+   * THIS game. Without both halves below - the membership check, and redacting
+   * what a member gets back exactly like a broadcast - any logged-in user who
+   * could name a game id would get the full deal, face-down cards included.
    */
   @Get(":id/state")
   @ApiOperation({ summary: "Get current game state" })

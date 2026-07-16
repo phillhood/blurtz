@@ -11,9 +11,8 @@ import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/commo
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
-// Redaction and the socket event names both come from the shared package -
-// which is what makes "the client listens for the name the server emits" a
-// compile-time fact rather than a comment on two copies.
+// Shared with the client, which is what makes "the client listens for the name
+// the server emits" a compile-time fact rather than two copies to keep in step.
 import { toClientGameState, SOCKET_EVENTS } from "@blurtz/shared";
 import { validateWsPayload } from "@utils";
 import { getErrorMessage } from "@utils/error-handler";
@@ -61,14 +60,14 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
    * Read a game's state, redacted and ready to emit.
    *
    * Every handler below binds state through this method or through
-   * `toClientGameState` on a mutator's return, so the local variable an
-   * emission closes over is ALREADY redacted - there is no unredacted state in
-   * scope to leak by accident. That is the invariant: state is redacted at
-   * birth in this file, not on its way out.
+   * `toClientGameState` on a mutator's return, so the local variable an emission
+   * closes over is ALREADY redacted - there is no unredacted state in scope to
+   * leak by accident. State is redacted at birth in this file, not on its way
+   * out.
    *
    * `GameService` returns internal state with every face-down card's value
-   * intact, deliberately - it is the game's own view of itself. This gateway
-   * is the boundary where that stops being true.
+   * intact, deliberately - it is the game's own view of itself. This gateway is
+   * the boundary where that stops being true.
    */
   private async clientGameState(gameId: string) {
     return toClientGameState(await this.gameService.getGameState(gameId));
@@ -233,10 +232,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const userId = this.requireUserId(client);
       await this.requirePlayerId(client, gameId);
 
-      // The host check and the readiness check live in GameService.startGame.
-      // This is the deal, so it is the single biggest thing redaction protects:
-      // unredacted, GAME_STARTED hands every player every opponent's whole
-      // shuffled deck.
+      // The deal, so the single biggest thing redaction protects: unredacted,
+      // GAME_STARTED hands every player every opponent's whole shuffled deck.
       const gameState = toClientGameState(
         await this.gameService.startGame(gameId, userId)
       );
@@ -264,9 +261,8 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const playerId = await this.requirePlayerId(client, gameId);
 
       // The state comes back from the move itself, read inside the same
-      // transaction that made it. Going back to the service for it would race
-      // the next player's move and could broadcast a state this move never
-      // produced.
+      // transaction that made it: going back to the service for it would race the
+      // next player's move and could broadcast a state this move never produced.
       const result = await this.gameService.moveCard(
         gameId,
         playerId,
@@ -276,17 +272,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       );
 
       // `=== false` rather than `!result.ok`: this project compiles with
-      // strictNullChecks off, and without it TypeScript will not narrow a
-      // union by a boolean discriminant's truthiness - only by comparison.
-      // `result.state` is internal state, read inside the move's transaction.
-      // Both branches redact it before it goes anywhere - a rejection is
-      // delivered to one socket rather than the room, which makes it no less
-      // of a broadcast of everyone else's cards.
+      // strictNullChecks off, and without it TypeScript will not narrow a union
+      // by a boolean discriminant's truthiness - only by comparison.
+      //
+      // `result.state` is internal state. Both branches redact it: a rejection
+      // goes to one socket rather than the room, which makes it no less of a
+      // broadcast of everyone else's cards.
       if (result.ok === false) {
-        // Only the mover hears about this - the board did not change for
-        // anyone else. The state is what lets them un-hide the card they
-        // moved; a bare ERROR would leave it invisible on the pile it never
-        // left.
+        // Only the mover hears about this - the board did not change for anyone
+        // else. The state is what lets them un-hide the card they moved; a bare
+        // ERROR would leave it invisible on the pile it never left.
         client.emit(SOCKET_EVENTS.MOVE_REJECTED, {
           gameState: toClientGameState(result.state),
           reason: result.reason,
@@ -339,18 +334,16 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { gameId } = await validateWsPayload(CallBlitzDto, data);
       const playerId = await this.requirePlayerId(client, gameId);
 
-      // Validate Blitz call, score the round, and end the round or the game.
       const result = await this.gameService.callBlitz(gameId, playerId);
 
-      // The state comes back from the call itself, read inside the same
-      // transaction that scored it - not re-read here. A re-read would race
-      // the round advance and could broadcast a board this Blitz never
+      // Read inside the transaction that scored it, not re-read here: a re-read
+      // would race the round advance and could broadcast a board this Blitz never
       // produced. Redacted once; both emissions below close over the redacted
       // value, so there is no unredacted state in scope to leak.
       const gameState = toClientGameState(result.state);
 
-      // Notify all players that Blitz was called. `scores` is cumulative,
-      // `roundScores` is this round alone - the scoreboard needs both.
+      // `scores` is cumulative, `roundScores` is this round alone - the
+      // scoreboard needs both.
       this.server.to(gameId).emit(SOCKET_EVENTS.BLITZ_CALLED, {
         playerId,
         scores: result.scores,
@@ -369,10 +362,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           timestamp: new Date(),
         });
       } else {
-        // Nobody reached the target: the round is over, not the game. Players
-        // ready up, and the last ready-up deals the next round automatically -
-        // the resulting `playing` state reaches everyone over the
-        // GAME_STATE_UPDATED that `handlePlayerReady` broadcasts.
+        // Nobody reached the target: the round is over, not the game. The last
+        // ready-up deals the next round, and that `playing` state reaches
+        // everyone over `handlePlayerReady`'s GAME_STATE_UPDATED.
         this.server.to(gameId).emit(SOCKET_EVENTS.ROUND_OVER, {
           gameState,
           round: result.round,
@@ -397,11 +389,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { gameId, isReady } = await validateWsPayload(PlayerReadyDto, data);
       const playerId = await this.requirePlayerId(client, gameId);
 
-      // Between rounds, the last ready-up also deals the next round inside
-      // `setPlayerReady`. Either way we re-read and broadcast the full state:
-      // a plain readiness change or a freshly-dealt `playing` board both reach
-      // every client through this one GAME_STATE_UPDATED. Redacted at birth by
-      // `clientGameState`, so the new decks do not leak.
+      // Between rounds the last ready-up also deals the next round inside
+      // `setPlayerReady`, so a plain readiness change and a freshly-dealt
+      // `playing` board both reach every client through this one
+      // GAME_STATE_UPDATED - redacted at birth, so the new decks do not leak.
       await this.gameService.setPlayerReady(gameId, playerId, isReady);
 
       const gameState = await this.clientGameState(gameId);

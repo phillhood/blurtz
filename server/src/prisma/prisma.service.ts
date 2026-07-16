@@ -12,10 +12,10 @@ export class PrismaService
 
   constructor() {
     const connectionString = process.env.DATABASE_URL;
-    // Interactive transactions hold their connection for the whole callback,
-    // and every game mutation now runs inside one. pg's default max of 10
-    // would have concurrent moves queueing for a connection before they even
-    // reach the row lock.
+    // Interactive transactions hold their connection for the whole callback, and
+    // every game mutation runs inside one. pg's default max of 10 would have
+    // concurrent moves queueing for a connection before they even reach the row
+    // lock.
     const pool = new Pool({ connectionString, max: 20 });
     const adapter = new PrismaPg(pool);
     super({ adapter });

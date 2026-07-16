@@ -9,16 +9,14 @@ interface AuthState {
   /**
    * The persisted session is still being resolved. Nothing else.
    *
-   * It starts `true` and goes `false` exactly once, when `fetchUserProfile`
-   * settles: until then a token in localStorage may or may not turn out to be
-   * a signed-in user, and `App` cannot decide between the router's
-   * authenticated and anonymous branches without knowing which.
+   * Starts `true` and goes `false` exactly once, when `fetchUserProfile`
+   * settles: until then a token in localStorage may or may not turn out to be a
+   * signed-in user, and `App` cannot pick a router branch without knowing.
    *
-   * `login` and `register` deliberately do NOT set it. They used to, and `App`
-   * unmounts the whole router while it is true - so a failed login threw away
-   * the `<Login>` that was about to show the error, along with the credentials
-   * the user had typed. Both forms already track their own in-flight state
-   * locally, which is what a disabled submit button should read anyway.
+   * `login` and `register` deliberately do NOT set it: `App` unmounts the whole
+   * router while it is true, which would throw away the form about to show the
+   * error along with the credentials the user typed. Both forms track their own
+   * in-flight state locally.
    */
   loading: boolean;
   error: string | null;

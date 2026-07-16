@@ -64,14 +64,9 @@ describe("gameStore", () => {
     );
   });
 
-  // ---------------------------------------------------------------------
-  // Task 5 item 4: a rejected move must resolve the board, not freeze it.
-  //
-  // The gateway used to answer a rejected move with a bare ERROR carrying no
-  // state. The store's gameState object identity never changed, so <Game>'s
-  // effect on [gameState] never fired, pendingMoveCardIds was never cleared,
-  // and the card sat at opacity: 0 - invisible, but still in the pile.
-  // ---------------------------------------------------------------------
+  // A rejected move must resolve the board, not freeze it: <Game>'s effect is
+  // keyed on [gameState], so only a new object identity clears
+  // pendingMoveCardIds and un-hides the card that never moved.
   describe("onMoveRejected", () => {
     it("swaps in the state the server sent back", async () => {
       const callbacks = await registeredCallbacks();
@@ -91,10 +86,6 @@ describe("gameStore", () => {
       expect(after).not.toBe(before);
     });
 
-    // Task 6 item 1: the reason used to go into `error`, which <Game> greps
-    // for "not found" to decide whether to replace the board with a fatal
-    // error screen. Two of validateMove's own reasons match that grep, so a
-    // stale pile id ejected the player from a game they could still play.
     it("surfaces the reason on the move-rejection channel, not the error channel", async () => {
       const callbacks = await registeredCallbacks();
 
@@ -180,12 +171,9 @@ describe("gameStore", () => {
     });
   });
 
-  // ---------------------------------------------------------------------
-  // The rest of the server's event surface. The client computes no game state
-  // of its own - every one of these is "swap in what the server decided" - so
-  // what is worth pinning is which of them are allowed to lose the board, and
-  // which of them clear the error that would otherwise hide it.
-  // ---------------------------------------------------------------------
+  // Every handler below is "swap in what the server decided". What is worth
+  // pinning is which are allowed to lose the board, and which clear the error
+  // that would otherwise hide it.
   describe("connection lifecycle", () => {
     it("marks itself connected and clears a stale connection error", async () => {
       const callbacks = await registeredCallbacks();

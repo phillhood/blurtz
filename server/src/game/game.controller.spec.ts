@@ -4,13 +4,9 @@ import { GameController } from "./game.controller";
 import { GameService } from "./game.service";
 
 /**
- * The REST surface's tests.
- *
- * `GET /api/game/:id/state` is the reason this file exists. It is guarded by
- * JwtAuthGuard, which proves the caller is SOMEBODY - it never proved they
- * were somebody in this game, so any logged-in user who could name a game id
- * read the whole deal. These pin both halves of the fix: membership, and
- * redaction of what a member gets back.
+ * `GET /api/game/:id/state` is the reason this file exists. JwtAuthGuard proves
+ * the caller is SOMEBODY, not that they are somebody in THIS game - so these pin
+ * both halves: membership, and redaction of what a member gets back.
  */
 
 const GAME_ID = "11111111-1111-4111-8111-111111111111";
@@ -27,7 +23,7 @@ function requestFor(userId: string) {
   return { user: { sub: userId } };
 }
 
-/** Internal state as GameService really returns it - values and all. */
+/** Internal state as GameService returns it - values and all. */
 function internalState() {
   return {
     id: GAME_ID,

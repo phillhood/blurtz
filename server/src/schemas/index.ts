@@ -10,7 +10,7 @@ export {
   safeValidatePlayerDeck,
 } from "./game-state.schema";
 
-// The `z.infer` type aliases that used to be re-exported from here are gone.
-// They shadowed the real domain types with structurally-similar-but-separate
-// copies, which is exactly the drift this package's `z.ZodType<T>` pins now
-// prevent. Card, CardColor, Pile and PlayerDeck come from `@blurtz/shared`.
+// No `z.infer` aliases re-exported from here: they would shadow the real domain
+// types with structurally-similar-but-separate copies, which is the drift this
+// package's `z.ZodType<T>` pins exist to prevent. Card, CardColor, Pile and
+// PlayerDeck come from `@blurtz/shared`.

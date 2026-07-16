@@ -3,13 +3,12 @@ import { Prisma } from "@prisma/client";
 import { PrismaService } from "@prisma";
 
 /**
- * How long a statement will wait for a contended row lock before giving up.
+ * How long a statement waits for a contended row lock before giving up.
  *
- * Nertz is simultaneous-play, so lock waits are the normal case, not the
- * exception - but they are measured in milliseconds. A wait that reaches this
- * bound means something is genuinely wrong (a stuck transaction, a dead
- * connection), and failing fast is far better than hanging a socket handler
- * forever with the player staring at a frozen board.
+ * Nertz is simultaneous-play, so lock waits are the normal case - but they are
+ * measured in milliseconds. A wait that reaches this bound means something is
+ * genuinely wrong (a stuck transaction, a dead connection), and failing fast
+ * beats hanging a socket handler with the player staring at a frozen board.
  */
 const LOCK_TIMEOUT = "3s";
 
@@ -30,16 +29,16 @@ export class GameRepository {
    * Run `fn` with the game's row exclusively locked.
    *
    * Nertz has every player playing at once, and racing another player to the
-   * same bank pile IS the game. Two moves landing at the same instant used to
-   * mean two read-modify-write cycles over the same JSON blobs, with the
-   * loser's write silently erasing the winner's - a card vanished from the
-   * table and `bankPileCount` was credited twice.
+   * same bank pile IS the game. Unserialized, two moves landing at the same
+   * instant are two read-modify-write cycles over the same JSON blobs, and the
+   * loser's write silently erases the winner's: a card vanishes from the table
+   * and `bankPileCount` is credited twice.
    *
-   * The contended state is exactly one row's worth: `games.game_state`
-   * (the shared bank piles) plus the `players` rows scored against it. So the
-   * game row is the serialization point. Every mutator takes this lock, which
-   * makes concurrent moves on one game queue up and each observe the previous
-   * one's committed result.
+   * The contended state is exactly one row's worth - `games.game_state` (the
+   * shared bank piles) plus the `players` rows scored against it - so the game
+   * row is the serialization point. Every mutator takes this lock, which makes
+   * concurrent moves on one game queue up and each observe the previous one's
+   * committed result.
    *
    * `fn` MUST use the `tx` client it is handed for every read and write.
    * Reaching for the outer PrismaService inside the callback issues the query

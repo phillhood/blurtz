@@ -32,11 +32,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
     if (!isCurrentPlayer) return;
   };
 
-  // One predicate, read by both the cursor and the click. These used to be two
-  // conditions: the cursor checked the status, the handler did not - so a
-  // finished or round_over board showed a default cursor and still emitted a
-  // flip when clicked. The server refuses it, so the cost was a wasted round
-  // trip and a rejection toast rather than a wrong board.
+  // One predicate, read by both the cursor and the click handler. Splitting
+  // them lets a board that looks unclickable still emit a flip the server will
+  // refuse.
   const canFlipDrawPile =
     isCurrentPlayer &&
     player.deck.drawPile.cards.length > 0 &&

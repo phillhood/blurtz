@@ -14,7 +14,6 @@ const makeApiError = (status: number, message: string) => {
   return err;
 };
 
-// Mock the auth service
 vi.mock("@services/auth.service", () => ({
   authService: {
     login: vi.fn(),
@@ -23,7 +22,6 @@ vi.mock("@services/auth.service", () => ({
   },
 }));
 
-// Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -34,14 +32,12 @@ Object.defineProperty(window, "localStorage", { value: localStorageMock });
 
 describe("authStore", () => {
   beforeEach(() => {
-    // Reset store state before each test
     useAuthStore.setState({
       user: null,
       loading: false,
       error: null,
     });
 
-    // Clear all mocks
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue(null);
   });
@@ -76,11 +72,8 @@ describe("authStore", () => {
 
     // `loading` is the BOOT flag - "we do not know yet whether the persisted
     // token is a session" - and `App` unmounts the entire router while it is
-    // true. It used to be set here as well, which is why a rejected login
-    // showed the user nothing: `login` flipped it, `App` threw the `<Login>`
-    // away mid-request, and the fresh one mounted afterwards had an empty
-    // `error` and empty inputs. This asserts login leaves it alone; the forms
-    // track their own in-flight state locally.
+    // true. Login flipping it would throw away the form mid-request, along with
+    // the error it was about to show.
     it("should NOT touch the store-wide loading flag during login", async () => {
       const mockResponse = {
         user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
@@ -163,7 +156,6 @@ describe("authStore", () => {
 
   describe("logout", () => {
     it("should clear user and remove token", () => {
-      // Set up initial logged in state
       useAuthStore.setState({
         user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
         loading: false,

@@ -1,17 +1,14 @@
 /**
- * The payloads the client sends over the socket.
+ * The payloads the client sends over the socket, one per inbound event.
  *
- * One shape per inbound event, named after the event. The server's DTOs in
- * `server/src/game/dto/socket-events.dto.ts` `implement` these, which couples
- * the two for free: class-validator still does the runtime checking (an
- * interface cannot - it does not survive compilation, and these payloads are
- * attacker-controlled), but a DTO that stops matching the payload the client
- * actually sends no longer compiles.
+ * No `userId`, no `playerId`, ever: the gateway derives identity from the
+ * verified JWT on the handshake, never from a payload. Adding an identity field
+ * here would be a security regression.
  *
- * Note what is NOT here: no `userId`, no `playerId`. The gateway derives
- * identity from the verified JWT on the handshake and never from a payload.
- * Adding an identity field to one of these would be a security regression, and
- * this is the file where that would be obvious.
+ * The server's DTOs in `server/src/game/dto/socket-events.dto.ts` `implement`
+ * these, so a DTO that drifts from the payload fails to compile. Runtime
+ * checking is still class-validator's job - these payloads are
+ * attacker-controlled and an interface does not survive compilation.
  */
 
 export interface JoinRoomPayload {

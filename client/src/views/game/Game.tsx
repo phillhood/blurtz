@@ -152,13 +152,11 @@ const Game: React.FC = () => {
     const topCard = pile.cards[pile.cards.length - 1];
     if (topCard && !topCard.faceUp) return false;
 
-    // An empty work pile accepts any card - `canPlace` says so, and it is the
-    // only copy of that rule left. The client's dead constants file used to
-    // claim it took only a 10.
+    // An empty work pile accepts any card. `canPlace` is the only copy of that
+    // rule - do not re-state it here.
     return canPlace("work", topCard, draggedCard);
   };
 
-  // Handle @dnd-kit drag start event
   const handleDragStart = (event: DragStartEvent) => {
     const dragData = event.active.data.current as DragData;
     // `card.faceUp` narrows the drag to a VisibleCard, which is what the
@@ -184,11 +182,8 @@ const Game: React.FC = () => {
   /**
    * The cards this move will actually carry, for the pending-move bookkeeping.
    *
-   * Destination-aware, because the rule is: only a work→work move takes the
-   * stack above the card. This used to be a local `getMovingCardIds` that
-   * returned the whole stack for ANY move out of a work pile, including to a
-   * bank pile - the client twin of the bug the engine's `cardsMovedBy` was
-   * extracted to fix. Same function both sides now.
+   * Destination-aware: only a work→work move takes the stack above the card.
+   * Delegates to the engine's `cardsMovedBy` so both sides run one function.
    */
   const getMovingCardIds = (fromPileId: string, cardId: string, toType: PileType): string[] => {
     const workPile = currentPlayer?.deck.workPiles.find(p => p.id === fromPileId);

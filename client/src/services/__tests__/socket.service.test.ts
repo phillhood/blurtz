@@ -6,17 +6,14 @@ import { GameState } from "@types";
  * The socket service's SUBSCRIPTIONS, not its emits.
  *
  * A callback declared on `SocketCallbacks` and implemented in `gameStore` is
- * dead code unless `setupEventListeners` actually registers a handler for the
- * event that should call it - and `GAME_ENDED` was exactly that: implemented
- * on both ends, wired to nothing in between, so winning a game was invisible
- * until the player reloaded. Nothing in the type system connects those two
- * halves, so this file asserts the connection.
+ * dead code unless `setupEventListeners` registers a handler for the event that
+ * should call it. Nothing in the type system connects those two halves, so this
+ * file asserts the connection.
  *
- * `socket.io-client` is faked at the module boundary and its `io()` returns a
+ * `socket.io-client` is faked at the module boundary; its `io()` returns a
  * socket that records every handler registered on it. The real `socketService`
- * and the real `gameStore` run: firing a recorded handler is exactly what the
- * real socket does when a frame arrives, so a test that fires one drives the
- * whole path an event takes from the wire to the store.
+ * and `gameStore` run, so firing a recorded handler drives the whole path an
+ * event takes from the wire to the store.
  */
 
 type Handler = (...args: unknown[]) => void;

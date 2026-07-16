@@ -183,10 +183,8 @@ describe("PlayerArea", () => {
   });
 
   it("does not flip the stock once the game is finished", async () => {
-    // The cursor and the click are one predicate now. They used to be two, and
-    // the click's half omitted the status - so a finished board still emitted a
-    // flip. The server refuses it; the cost was a wasted round trip and a
-    // rejection toast over a board nobody can play anyway.
+    // The cursor and the click read one predicate: if they diverge, a finished
+    // board emits a flip the server only refuses after a round trip.
     gameContext.gameState = { id: "game-1", status: "finished" } as GameState;
 
     renderArea({ player: player({ draw: [faceDown("stock-1")] }) });

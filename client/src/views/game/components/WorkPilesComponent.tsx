@@ -46,7 +46,6 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
           // suspicion that it might not hold.
           const cards = pile.cards.filter(isVisibleCard);
 
-          // Check if the bottom card of this pile is being dragged (making pile appear empty)
           const isDraggingFromThisPile = dragData?.fromPileId === pile.id;
           const bottomCardId = cards[0]?.id;
           const isDraggingBottomCard =
@@ -100,7 +99,6 @@ const EmptyWorkPileDropZone: React.FC<{
     data: { pileId, pileIndex, isEmpty: true },
   });
 
-  // Check if the active card can be dropped here
   const canDropHere =
     isOver && active ? canDrop((active.data.current as DragData)?.card) : false;
 

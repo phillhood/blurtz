@@ -247,10 +247,6 @@ class SocketService {
   }
 
   forfeitGame(gameId: string): void {
-    // `!this.socket?.connected`, like every sibling. This used to check only
-    // `!this.socket`, so a socket that existed but had dropped emitted into
-    // socket.io's buffer and reported success to the caller - the one action
-    // where the player most needs to know it did not land.
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }

@@ -27,11 +27,9 @@ const hidden = (id = "hidden-1"): ClientCard =>
  * The board, configured the way <Game> configures it.
  *
  * The 5px activation constraint is not decoration: with dnd-kit's default
- * sensors a bare pointerdown starts a drag immediately and the sensor
- * swallows the click that follows. <Game> sets `distance: 5` precisely so a
- * click stays a click and only a real drag is a drag - so a harness without it
- * would report that clicking a card does nothing, which is a fact about the
- * harness and not about the app.
+ * sensors a bare pointerdown starts a drag and swallows the click that follows.
+ * `distance: 5` keeps a click a click - a harness without it reports that
+ * clicking a card does nothing, which is a fact about the harness.
  */
 const Board = ({ children }: { children: React.ReactNode }) => {
   const sensors = useSensors(
@@ -62,13 +60,8 @@ describe("Card", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  // ---------------------------------------------------------------------
-  // The redaction. `!card.faceUp`'s early return is also the type narrowing:
-  // everything below it reads `card.color` and `card.value`, which a
-  // HiddenCard does not have. The test that matters is that a hidden card
-  // renders the BACK and leaks nothing - not even an undefined where a value
-  // would be.
-  // ---------------------------------------------------------------------
+  // `!card.faceUp`'s early return IS the type narrowing: everything below it
+  // reads `card.color` and `card.value`, which a HiddenCard does not have.
   it("renders the back of a face-down card and no value at all", () => {
     renderCard({ card: hidden() });
 

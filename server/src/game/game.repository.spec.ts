@@ -5,10 +5,9 @@ import { GameRepository } from "./game.repository";
 import { PrismaService } from "@prisma";
 
 /**
- * The mechanics of the lock, with a mocked client. That it actually
- * serializes two racing players is proven against a real Postgres in
- * game.concurrency.spec.ts - this spec is about the statements it issues and
- * the order it issues them in.
+ * The mechanics of the lock, with a mocked client: the statements it issues and
+ * the order it issues them in. That it actually serializes two racing players is
+ * proven against a real Postgres in game.concurrency.spec.ts.
  */
 describe("GameRepository", () => {
   let repository: GameRepository;

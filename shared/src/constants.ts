@@ -27,15 +27,9 @@ export const GAME_CONSTANTS = {
 /**
  * The socket protocol, as one list both sides read.
  *
- * This used to be two lists - this one and the client's copy in
- * `utils/constants.utils.ts` - carrying "keep in sync with" comments pointing
- * at each other. They were not in sync: the client's had a
- * `PLAYER_READY_UPDATED` event the server has never emitted and nothing ever
- * listened for. It is gone. Adding an event is one edit now.
- *
  * The legacy names are deliberate: the wire says `call_blitz`/`blitz_called`
- * because that is what both sides deployed. Renaming them is a protocol
- * change, not a tidy-up.
+ * because that is what both sides deployed. Renaming them is a protocol change,
+ * not a tidy-up.
  */
 export const SOCKET_EVENTS = {
   // Client -> Server
@@ -59,9 +53,9 @@ export const SOCKET_EVENTS = {
   ROUND_OVER: "round_over",
   GAME_STATE_UPDATED: "game_state_updated",
   CARD_MOVED: "card_moved",
-  // Sent only to the player whose move was refused, and always with state:
-  // nothing changed for anyone else, but the mover needs an object to
-  // reconcile against or the card they moved stays hidden.
+  // Sent only to the player whose move was refused, and always with state: the
+  // mover needs an object to reconcile against or the card they moved stays
+  // hidden.
   MOVE_REJECTED: "move_rejected",
   CARD_FLIPPED: "card_flipped",
   BLITZ_CALLED: "blitz_called",
@@ -71,14 +65,7 @@ export const SOCKET_EVENTS = {
   PLAYER_LEFT: "player_left",
 } as const;
 
-// API_ENDPOINTS used to live beside this, in both copies, and both were stale:
-// they described routes like `/api/game/games/:id/join` that the server has
-// never served. The real routes are the ones in `game.controller.ts`, and
-// `client/src/services/game.service.ts` calls them directly. A shared constant
-// that disagrees with the controller is worse than no constant, so there is
-// none. Trust the controller.
-
-// PILE_RULES used to live here too, as an untyped `canPlace` pair plus a
-// `canTake` and a `canFlip` that both unconditionally returned true. The real
-// rules are `canPlace` / `canMoveFromPile` in `rules/engine.ts`, where they are
-// typed, tested, and next to the rest of the engine.
+// There is deliberately no API_ENDPOINTS here: the game routes live in
+// `game.controller.ts` and `client/src/services/game.service.ts` calls them
+// directly. A shared constant that disagrees with the controller is worse than
+// no constant.

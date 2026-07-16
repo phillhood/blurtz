@@ -5,13 +5,10 @@ import { E2E_PASSWORD, authenticate, createUser } from "./fixtures/users";
 /**
  * The real register and login forms, through the real API.
  *
- * This is the ONE spec that goes through the front door for authentication -
- * every other spec seeds its user (see `fixtures/users.ts`), because
- * `/api/auth/register` allows 5 requests a minute per IP and a suite that
- * registered its way through every test would spend its life in a 429. Which
- * means this file is the only thing standing behind the claim that a human can
- * still get an account, so it drives the whole round trip rather than checking
- * that a form renders.
+ * The ONE spec that goes through the front door for authentication - every
+ * other spec seeds its user (`fixtures/users.ts`), because `/api/auth/register`
+ * allows 5 requests a minute per IP. So this file is the only thing standing
+ * behind the claim that a human can still get an account.
  */
 test.describe("Authentication", () => {
   test("register, log out, and log back in", async ({ page }) => {
@@ -25,8 +22,7 @@ test.describe("Authentication", () => {
     await page.getByPlaceholder("Confirm Password").fill(E2E_PASSWORD);
     await page.getByRole("button", { name: "Create Account" }).click();
 
-    // Registration signs you in: the header only renders for a logged-in user,
-    // and it renders THIS user's name.
+    // Registration signs you in: the header only renders for a logged-in user.
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole("banner").getByText(username)).toBeVisible();
 
@@ -54,11 +50,10 @@ test.describe("Authentication", () => {
     await page.getByPlaceholder("Username").fill(user.username);
     await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
 
-    // Same throttler window as the test below: `/api/auth/login` allows 1/sec
-    // per IP and the test above just posted one. Without the wait the API
-    // answers 429, and every assertion here would pass on a login that was
-    // never actually judged - which is exactly what this test exists to rule
-    // out.
+    // `/api/auth/login` is throttled to 1/sec per IP and the test above just
+    // posted one. Without this wait the API answers 429 and the assertions pass
+    // on a login that was never judged. There is no event to wait for: the
+    // window is the throttler's clock.
     await page.waitForTimeout(1_100);
 
     const refused = page.waitForResponse(
@@ -69,40 +64,17 @@ test.describe("Authentication", () => {
     await page.getByRole("button", { name: "Sign In" }).click();
 
     // Pin the answer FIRST. "Still on /login with no token" is satisfied
-    // identically by a 429, a 500 or a dropped connection - none of which is
-    // the password being refused. Only a 401 means the server looked at the
-    // credentials and said no.
+    // identically by a 429, a 500 or a dropped connection; only a 401 means the
+    // server looked at the credentials and said no.
     const response = await refused;
     expect(response.status(), await response.text()).toBe(401);
 
-    // Refused means refused: no session, no redirect.
     await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
   });
 
-  /**
-   * What the app DOES with a 401 - the other half of the test above.
-   *
-   * This used to be a `test.fail()`. A rejected login told the user nothing:
-   *
-   *   1. `authStore.login` began by setting the store-wide `loading: true`.
-   *   2. `App.tsx` read that same `loading` and returned `<div>Loading...</div>`
-   *      INSTEAD of the router - so the whole tree, `<Login>` included,
-   *      unmounted while the request was in flight.
-   *   3. The request failed, `loading` went false, and `App` mounted a BRAND
-   *      NEW `<Login>` - whose local `error` state is `""`, because it is a new
-   *      component. `Login.tsx`'s `setError(err.message)` had run on the corpse
-   *      of the old one.
-   *
-   * The user got a flash of "Loading...", then an empty login form: no error,
-   * and the username they typed gone too.
-   *
-   * The fix was to stop conflating two different things called `loading`.
-   * `authStore.loading` means "the persisted session is still being resolved" -
-   * the one case where `App` genuinely has nothing to route - and `login` no
-   * longer touches it. Both forms already had their own local in-flight state.
-   */
+  /** What the app DOES with a 401 - the other half of the test above. */
   test("an invalid login shows the user an error", async ({ page }) => {
     const user = await createUser("noerror");
 
@@ -110,12 +82,9 @@ test.describe("Authentication", () => {
     await page.getByPlaceholder("Username").fill(user.username);
     await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
 
-    // `/api/auth/login` is throttled to 1/sec per IP (`@Throttle` in
-    // `auth.controller.ts`) and the test above just posted one. Without this
-    // wait the API answers 429 instead of 401 - which now renders as an error
-    // too, so the assertion below would go green without a rejected login ever
-    // having been rejected. There is no event to wait for: the window is the
-    // throttler's clock.
+    // Throttler window, as above. A 429 renders as an error too, so without
+    // this wait the assertion below goes green on a login that was never
+    // rejected. There is no event to wait for: the window is the clock.
     await page.waitForTimeout(1_100);
 
     const refused = page.waitForResponse(
@@ -125,15 +94,14 @@ test.describe("Authentication", () => {
     );
     await page.getByRole("button", { name: "Sign In" }).click();
 
-    // The answer this test is about. Pinned so a 429, a 500 or a network
-    // failure cannot masquerade as "the app showed an error".
+    // Pinned so a 429, a 500 or a network failure cannot masquerade as "the app
+    // showed an error".
     const response = await refused;
     expect(response.status(), await response.text()).toBe(401);
 
     await expect(page.getByText("Invalid credentials")).toBeVisible();
-    // The form survived the round trip, so a retry is a retype of the password
-    // and not of everything. It did not before: the inputs belonged to a
-    // component that had been unmounted and replaced.
+    // The form survived the round trip: a retry is a retype of the password and
+    // not of everything.
     await expect(page.getByPlaceholder("Username")).toHaveValue(user.username);
   });
 
