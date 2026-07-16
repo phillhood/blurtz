@@ -10,7 +10,8 @@ interface PlayersListProps {
 }
 
 const PlayersList: React.FC<PlayersListProps> = ({ players }) => {
-  const { currentPlayer } = useGameContext();
+  const { gameState, currentPlayer } = useGameContext();
+  const maxPlayers = gameState?.maxPlayers ?? players.length;
 
   // Sort players so current user appears first
   const sortedPlayers = [...players].sort((a, b) => {
@@ -22,7 +23,7 @@ const PlayersList: React.FC<PlayersListProps> = ({ players }) => {
   return (
     <div style={{ marginBottom: "20px" }}>
       <h3 style={{ color: "white", marginBottom: "20px" }}>
-        Players ({players.length}/2)
+        Players ({players.length}/{maxPlayers})
       </h3>
 
       <div

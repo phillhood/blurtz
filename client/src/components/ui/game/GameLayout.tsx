@@ -47,6 +47,11 @@ export const OpponentsRow: React.FC<OpponentsRowProps> = ({
     <div
       className={clsx(
         "flex justify-center items-center py-2.5 min-h-[180px] w-full row-start-1",
+        // Three opponents are wider than the board. Without `min-w-0` this flex
+        // row keeps its automatic minimum, grows past the grid track and
+        // GameBoard's max-width, and scrolls the whole page sideways. Contained,
+        // the row scrolls by itself instead.
+        "min-w-0 overflow-x-auto",
         gapClass,
         className
       )}

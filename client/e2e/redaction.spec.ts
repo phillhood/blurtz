@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { readyUpAndStart, seatTwoPlayers } from "./fixtures/game";
+import { readyUpAndStart, seatPlayers, seatTwoPlayers } from "./fixtures/game";
 import { findCards, recordSocketFrames, type SocketRecorder } from "./fixtures/socket";
 
 /**
@@ -68,6 +68,44 @@ test.describe("Redaction", () => {
     }
 
     await seated.close();
+  });
+
+  /**
+   * The same claim at a full table. Worth its own test rather than a parameter:
+   * four players is three opponents' decks in every payload instead of one, and
+   * the redaction is player-INDEPENDENT - the gateway redacts once and
+   * broadcasts to the room, so a leak here would be a leak to everyone.
+   */
+  test("no face-down card's value reaches any of four clients", async ({
+    browser,
+  }) => {
+    const recorders: SocketRecorder[] = [];
+    const table = await seatPlayers(browser, {
+      playerCount: 4,
+      onPageCreated: (page) => recorders.push(recordSocketFrames(page)),
+    });
+
+    await readyUpAndStart(table);
+
+    for (const recorder of recorders) {
+      await recorder.waitFor("game_started");
+    }
+
+    expect(recorders).toHaveLength(4);
+    for (const recorder of recorders) {
+      const { hidden, visible } = assertNoLeaks(recorder);
+
+      // A 4-player deal buries 9 blurtz cards and a 27-card draw pile per
+      // player - 144 in the game, and every one of them in every payload.
+      expect(hidden.length).toBeGreaterThan(140);
+      expect(visible.length).toBeGreaterThan(0);
+      for (const { card } of visible) {
+        expect(card).toHaveProperty("value");
+        expect(card).toHaveProperty("color");
+      }
+    }
+
+    await table.close();
   });
 
   /**

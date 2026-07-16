@@ -38,7 +38,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
       }}
     >
       <PileLabel>Work</PileLabel>
-      <WorkPilesStyled style={{ paddingTop: "8px" }}>
+      <WorkPilesStyled style={{ paddingTop: "8px" }} className="work-piles">
         {workPiles.map((pile, index) => {
           // A work pile is face-up all the way down - dealt that way, and the
           // server refuses to move a face-down card onto one. The filter is
