@@ -293,7 +293,7 @@ describe("GameGateway", () => {
     // -------------------------------------------------------------------
     it("broadcasts the state the move returned, without re-reading it", async () => {
       const client = createAuthedSocket();
-      const movedState = { id: GAME_ID, status: "playing" };
+      const movedState = { id: GAME_ID, status: "playing", players: [], bankPiles: [] };
       gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
       gameService.moveCard.mockResolvedValue({
         ok: true,
@@ -308,9 +308,12 @@ describe("GameGateway", () => {
       });
 
       expect(gameService.getGameState).not.toHaveBeenCalled();
+      // Redaction rebuilds the object, so this is `toEqual` on the content
+      // rather than identity - the point of the test is the SOURCE of the
+      // state, and re-reading it is proven absent above.
       expect(serverEmit).toHaveBeenCalledWith(
         SOCKET_EVENTS.CARD_MOVED,
-        expect.objectContaining({ gameState: movedState })
+        expect.objectContaining({ gameState: expect.objectContaining({ id: GAME_ID, status: "playing" }) })
       );
     });
 
@@ -320,7 +323,12 @@ describe("GameGateway", () => {
     // unchanged, so the card it had hidden stayed invisible forever.
     // -------------------------------------------------------------------
     describe("when the service rejects the move", () => {
-      const rejectedState = { id: GAME_ID, status: "playing" };
+      const rejectedState = {
+        id: GAME_ID,
+        status: "playing",
+        players: [],
+        bankPiles: [],
+      };
 
       beforeEach(() => {
         gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
@@ -347,7 +355,7 @@ describe("GameGateway", () => {
 
         const payload = lastEmit(client, SOCKET_EVENTS.MOVE_REJECTED);
         expect(payload).toBeDefined();
-        expect(payload.gameState).toBe(rejectedState);
+        expect(payload.gameState).toEqual(rejectedState);
         expect(payload.reason).toBe("That card no longer fits on that bank pile");
       });
 
@@ -366,6 +374,191 @@ describe("GameGateway", () => {
 
         expect(serverEmit).not.toHaveBeenCalled();
         expect(client.roomEmit).not.toHaveBeenCalled();
+      });
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Task 8: the gateway is where state stops being internal.
+  //
+  // GameService returns UNREDACTED state by contract - these prove the
+  // gateway never emits it. The redactor's own behaviour is pinned in
+  // rules/redact.spec.ts; what is tested here is that it is actually WIRED
+  // IN on the paths that broadcast.
+  // ---------------------------------------------------------------------
+  describe("redaction of emitted state", () => {
+    const HIDDEN_CARD_ID = "77777777-7777-4777-8777-777777777777";
+    const VISIBLE_CARD_ID = "88888888-8888-4888-8888-888888888888";
+    const DRAW_PILE_ID = "aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa";
+
+    /** Internal state as the service really returns it: values and all. */
+    function internalState() {
+      return {
+        id: GAME_ID,
+        status: "playing",
+        players: [
+          {
+            id: CONNECTED_PLAYER_ID,
+            deck: {
+              blurtzPile: { id: "blurtz-1", type: "blurtz", cards: [] },
+              workPiles: [],
+              drawPile: {
+                id: DRAW_PILE_ID,
+                type: "draw",
+                cards: [
+                  {
+                    id: HIDDEN_CARD_ID,
+                    value: 7,
+                    number: 7,
+                    color: { name: "Red", code: "#DC2626", type: "a" },
+                    faceUp: false,
+                  },
+                  {
+                    id: VISIBLE_CARD_ID,
+                    value: 3,
+                    number: 3,
+                    color: { name: "Blue", code: "#2563EB", type: "a" },
+                    faceUp: true,
+                  },
+                ],
+              },
+            },
+          },
+        ],
+        bankPiles: [],
+      };
+    }
+
+    /** The draw pile as it was actually emitted. */
+    function emittedDrawPile(payload: { gameState: { players: Array<{ deck: { drawPile: { cards: Array<Record<string, unknown>> } } }> } }) {
+      return payload.gameState.players[0].deck.drawPile.cards;
+    }
+
+    it("redacts CARD_MOVED - the broadcast every player receives", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockResolvedValue({
+        ok: true,
+        state: internalState(),
+      } as never);
+
+      await gateway.handleMoveCard(asSocket(client), {
+        gameId: GAME_ID,
+        cardId: CARD_ID,
+        fromPileId: FROM_PILE_ID,
+        toPileId: TO_PILE_ID,
+      });
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.CARD_MOVED
+      );
+      const [hidden, visible] = emittedDrawPile(payload);
+
+      expect(hidden).toEqual({ id: `hidden:${DRAW_PILE_ID}:0`, faceUp: false });
+      expect(visible).toMatchObject({ id: VISIBLE_CARD_ID, value: 3 });
+    });
+
+    it("redacts GAME_STARTED - the deal itself", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.startGame.mockResolvedValue(internalState() as never);
+
+      await gateway.handleStartGame(asSocket(client), { gameId: GAME_ID });
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_STARTED
+      );
+
+      expect(emittedDrawPile(payload)[0]).toEqual({
+        id: `hidden:${DRAW_PILE_ID}:0`,
+        faceUp: false,
+      });
+    });
+
+    it("emits the redacted state, NOT the object the service returned", async () => {
+      const client = createAuthedSocket();
+      const state = internalState();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockResolvedValue({ ok: true, state } as never);
+
+      await gateway.handleMoveCard(asSocket(client), {
+        gameId: GAME_ID,
+        cardId: CARD_ID,
+        fromPileId: FROM_PILE_ID,
+        toPileId: TO_PILE_ID,
+      });
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.CARD_MOVED
+      );
+
+      expect(payload.gameState).not.toBe(state);
+      // And the service's own copy is untouched - redaction does not reach
+      // back into the state the game is still being played with.
+      expect(state.players[0].deck.drawPile.cards[0].value).toBe(7);
+    });
+
+    it("leaks no hidden card value into the CARD_MOVED frame", async () => {
+      // Serialise-and-grep: the frame is what an attacker reads.
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockResolvedValue({
+        ok: true,
+        state: internalState(),
+      } as never);
+
+      await gateway.handleMoveCard(asSocket(client), {
+        gameId: GAME_ID,
+        cardId: CARD_ID,
+        fromPileId: FROM_PILE_ID,
+        toPileId: TO_PILE_ID,
+      });
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.CARD_MOVED
+      );
+      const frame = JSON.stringify(payload);
+
+      expect(frame).not.toContain(HIDDEN_CARD_ID);
+      expect(frame).toContain(VISIBLE_CARD_ID);
+    });
+
+    it("redacts MOVE_REJECTED - one socket is still a leak", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockResolvedValue({
+        ok: false,
+        state: internalState(),
+        reason: "That card no longer fits on that bank pile",
+      } as never);
+
+      await gateway.handleMoveCard(asSocket(client), {
+        gameId: GAME_ID,
+        cardId: CARD_ID,
+        fromPileId: FROM_PILE_ID,
+        toPileId: TO_PILE_ID,
+      });
+
+      const payload = lastEmit(client, SOCKET_EVENTS.MOVE_REJECTED);
+
+      expect(emittedDrawPile(payload)[0]).toEqual({
+        id: `hidden:${DRAW_PILE_ID}:0`,
+        faceUp: false,
+      });
+    });
+
+    it("redacts state read back through getGameState (ROOM_JOINED)", async () => {
+      const client = createAuthedSocket();
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue(internalState() as never);
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      const payload = lastEmit(client, SOCKET_EVENTS.ROOM_JOINED);
+
+      expect(emittedDrawPile(payload)[0]).toEqual({
+        id: `hidden:${DRAW_PILE_ID}:0`,
+        faceUp: false,
       });
     });
   });

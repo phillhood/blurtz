@@ -11,6 +11,8 @@ import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/commo
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
+// Relative on purpose - see rules/index.ts.
+import { toClientGameState } from "./rules";
 import { SOCKET_EVENTS, validateWsPayload } from "@utils";
 import { getErrorMessage } from "@utils/error-handler";
 import {
@@ -52,6 +54,23 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     private gameService: GameService,
     private jwtService: JwtService
   ) {}
+
+  /**
+   * Read a game's state, redacted and ready to emit.
+   *
+   * Every handler below binds state through this method or through
+   * `toClientGameState` on a mutator's return, so the local variable an
+   * emission closes over is ALREADY redacted - there is no unredacted state in
+   * scope to leak by accident. That is the invariant: state is redacted at
+   * birth in this file, not on its way out.
+   *
+   * `GameService` returns internal state with every face-down card's value
+   * intact, deliberately - it is the game's own view of itself. This gateway
+   * is the boundary where that stops being true.
+   */
+  private async clientGameState(gameId: string) {
+    return toClientGameState(await this.gameService.getGameState(gameId));
+  }
 
   /**
    * Authenticate the handshake. A socket that cannot prove who it is never
@@ -144,7 +163,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await client.join(gameId);
       (client.data as SocketData).gameId = gameId;
 
-      const gameState = await this.gameService.getGameState(gameId);
+      const gameState = await this.clientGameState(gameId);
 
       client.emit(SOCKET_EVENTS.ROOM_JOINED, {
         gameState,
@@ -183,7 +202,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       });
 
       try {
-        const updatedGameState = await this.gameService.getGameState(gameId);
+        const updatedGameState = await this.clientGameState(gameId);
 
         client.to(gameId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
           userId,
@@ -213,7 +232,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       await this.requirePlayerId(client, gameId);
 
       // The host check and the readiness check live in GameService.startGame.
-      const gameState = await this.gameService.startGame(gameId, userId);
+      // This is the deal, so it is the single biggest thing redaction protects:
+      // unredacted, GAME_STARTED hands every player every opponent's whole
+      // shuffled deck.
+      const gameState = toClientGameState(
+        await this.gameService.startGame(gameId, userId)
+      );
 
       this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STARTED, {
         gameState,
@@ -252,20 +276,24 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // `=== false` rather than `!result.ok`: this project compiles with
       // strictNullChecks off, and without it TypeScript will not narrow a
       // union by a boolean discriminant's truthiness - only by comparison.
+      // `result.state` is internal state, read inside the move's transaction.
+      // Both branches redact it before it goes anywhere - a rejection is
+      // delivered to one socket rather than the room, which makes it no less
+      // of a broadcast of everyone else's cards.
       if (result.ok === false) {
         // Only the mover hears about this - the board did not change for
         // anyone else. The state is what lets them un-hide the card they
         // moved; a bare ERROR would leave it invisible on the pile it never
         // left.
         client.emit(SOCKET_EVENTS.MOVE_REJECTED, {
-          gameState: result.state,
+          gameState: toClientGameState(result.state),
           reason: result.reason,
           move: { cardId, fromPileId, toPileId, playerId },
           timestamp: new Date(),
         });
       } else {
         this.server.to(gameId).emit(SOCKET_EVENTS.CARD_MOVED, {
-          gameState: result.state,
+          gameState: toClientGameState(result.state),
           move: { cardId, fromPileId, toPileId, playerId },
           timestamp: new Date(),
         });
@@ -287,7 +315,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       await this.gameService.flipDrawPile(gameId, playerId);
 
-      const gameState = await this.gameService.getGameState(gameId);
+      const gameState = await this.clientGameState(gameId);
 
       this.server.to(gameId).emit(SOCKET_EVENTS.CARD_FLIPPED, {
         gameState,
@@ -313,7 +341,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const result = await this.gameService.callBlitz(gameId, playerId);
 
       if (result.success) {
-        const gameState = await this.gameService.getGameState(gameId);
+        const gameState = await this.clientGameState(gameId);
 
         // Notify all players that Blitz was called
         this.server.to(gameId).emit(SOCKET_EVENTS.BLITZ_CALLED, {
@@ -349,7 +377,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
 
       await this.gameService.setPlayerReady(gameId, playerId, isReady);
 
-      const gameState = await this.gameService.getGameState(gameId);
+      const gameState = await this.clientGameState(gameId);
       this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
         gameState,
         timestamp: new Date(),
@@ -369,7 +397,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { gameId } = await validateWsPayload(ForfeitGameDto, data);
       const playerId = await this.requirePlayerId(client, gameId);
 
-      const gameState = await this.gameService.forfeitGame(gameId, playerId);
+      const gameState = toClientGameState(
+        await this.gameService.forfeitGame(gameId, playerId)
+      );
 
       this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
         gameState,
