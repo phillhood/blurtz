@@ -7,6 +7,7 @@ import {
   UseGuards,
   Request,
   Delete,
+  ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
 import {
@@ -16,6 +17,8 @@ import {
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { GameService } from "./game.service";
+// Relative on purpose - see rules/index.ts.
+import { toClientGameState } from "./rules";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { ApiResponse } from "@types";
 import { CreateGameDto, JoinGameByIdDto, JoinGameByCodeDto, GameIdParamDto } from "./dto";
@@ -138,24 +141,53 @@ export class GameController {
     @Request() req
   ): Promise<ApiResponse> {
     const { id: gameId } = params;
+    // Redacted like every other outbound path. `startGame` is host-only, so
+    // there is no membership hole here - but the host is not entitled to the
+    // deal either, and this returns the freshly-shuffled decks.
     const gameState = await this.gameService.startGame(gameId, req.user.sub);
     return {
       success: true,
-      data: gameState,
+      data: toClientGameState(gameState),
       message: "Game started successfully",
     };
   }
 
+  /**
+   * The socket path is what the client actually plays through; this route is
+   * the REST mirror of it, and it used to be the widest hole in the app.
+   *
+   * `JwtAuthGuard` proves you are SOMEBODY. It does not prove you are somebody
+   * in THIS game - so any logged-in user who could name a game id got back the
+   * full deal, every player's face-down cards included. Both halves of that are
+   * fixed here: membership is checked, and what a member gets back is redacted
+   * exactly like a broadcast.
+   */
   @Get(":id/state")
   @ApiOperation({ summary: "Get current game state" })
   @SwaggerResponse({ status: 200, description: "Game state retrieved" })
+  @SwaggerResponse({ status: 403, description: "Not a player in this game" })
   @SwaggerResponse({ status: 404, description: "Game not found" })
-  async getGameState(@Param() params: GameIdParamDto): Promise<ApiResponse> {
+  async getGameState(
+    @Param() params: GameIdParamDto,
+    @Request() req
+  ): Promise<ApiResponse> {
     const { id: gameId } = params;
+
+    // Membership is resolved BEFORE the game is read, which also means a game
+    // that does not exist and a game you are not in answer identically: 403
+    // either way, so this route cannot be used to probe which ids are real.
+    const playerId = await this.gameService.getPlayerIdForUser(
+      gameId,
+      req.user.sub
+    );
+    if (!playerId) {
+      throw new ForbiddenException("You are not a player in this game");
+    }
+
     const gameState = await this.gameService.getGameState(gameId);
     return {
       success: true,
-      data: gameState,
+      data: toClientGameState(gameState),
     };
   }
 }
