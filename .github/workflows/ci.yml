@@ -1,0 +1,120 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: lint, typecheck, test, e2e
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: blurtz
+          POSTGRES_PASSWORD: blurtz
+          # The suites talk to blurtz_test, never a dev database.
+          POSTGRES_DB: blurtz_test
+        # 5442 matches docker-compose, so the URLs below are the same ones a
+        # developer uses and the suites' built-in defaults still resolve.
+        ports:
+          - 5442:5432
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+      redis:
+        image: redis:7-alpine
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://blurtz:blurtz@localhost:5442/blurtz_test?schema=public
+      # game.concurrency.spec.ts
+      TEST_DATABASE_URL: postgresql://blurtz:blurtz@localhost:5442/blurtz_test?schema=public
+      # playwright.config.ts + e2e/fixtures/env.ts
+      E2E_DATABASE_URL: postgresql://blurtz:blurtz@localhost:5442/blurtz_test?schema=public
+      REDIS_URL: redis://localhost:6379
+      E2E_REDIS_URL: redis://localhost:6379
+      # There is no .env in CI, and the e2e fixture reads this to sign tokens the
+      # booted server will accept. CI-only value; the app refuses to boot without one.
+      JWT_SECRET: ci-secret-not-used-anywhere-real-0123456789
+      LOG_LEVEL: warn
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # One root lockfile; never install per package.
+      - run: npm ci
+
+      # Nothing resolves @blurtz/shared until it is built - it ships from dist/.
+      - name: Build shared
+        run: npm run build:shared
+
+      - name: Generate Prisma client
+        run: npx prisma generate
+        working-directory: server
+
+      - name: Apply migrations
+        run: npx prisma migrate deploy
+        working-directory: server
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: |
+          npx tsc --noEmit --project shared
+          npx tsc --noEmit --project server
+          npx tsc --noEmit --project client
+
+      - name: Test shared
+        run: npx jest
+        working-directory: shared
+
+      # Includes game.concurrency.spec.ts, which races real transactions
+      # against the postgres service above.
+      - name: Test server
+        run: npx jest
+        working-directory: server
+
+      - name: Test client
+        run: npm run test:coverage
+        working-directory: client
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+        working-directory: client
+
+      # Boots the API and Vite itself (see playwright.config.ts webServer).
+      - name: E2E
+        run: npx playwright test --project=chromium
+        working-directory: client
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: client/playwright-report/
+          retention-days: 7
