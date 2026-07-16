@@ -23,6 +23,9 @@ const handlers = new Map<string, Handler>();
 const fakeSocket = {
   connected: false,
   id: "socket-1",
+  // socket.io's own "will the manager retry?" flag, which the disconnect
+  // handler reads instead of matching on the reason string.
+  active: true,
   on: vi.fn((event: string, handler: Handler) => {
     handlers.set(event, handler);
   }),
@@ -49,9 +52,16 @@ describe("socketService subscriptions", () => {
   beforeEach(() => {
     handlers.clear();
     fakeSocket.connected = false;
+    fakeSocket.active = true;
     vi.clearAllMocks();
     socketService.disconnect();
-    useGameStore.setState({ gameState: null, socketInitialized: false, error: null });
+    useGameStore.setState({
+      gameState: null,
+      socketInitialized: false,
+      error: null,
+      currentGameId: null,
+      connectedUserIds: null,
+    });
   });
 
   it("registers a handler for every event the store implements a callback for", async () => {
@@ -68,6 +78,7 @@ describe("socketService subscriptions", () => {
       SOCKET_EVENTS.GAME_ENDED,
       SOCKET_EVENTS.PLAYER_JOINED,
       SOCKET_EVENTS.PLAYER_LEFT,
+      SOCKET_EVENTS.PRESENCE_UPDATED,
       SOCKET_EVENTS.CARD_MOVED,
       SOCKET_EVENTS.MOVE_REJECTED,
       SOCKET_EVENTS.CARD_FLIPPED,
@@ -235,8 +246,58 @@ describe("socketService subscriptions", () => {
 
     handlers.get("disconnect")!("transport close");
 
-    expect(onDisconnect).toHaveBeenCalledWith("transport close");
+    expect(onDisconnect).toHaveBeenCalledWith("transport close", true);
     expect(socketService.connected).toBe(false);
+  });
+
+  it("reports that nothing will retry when socket.io has given up on the socket", async () => {
+    const onDisconnect = vi.fn();
+    socketService.setCallbacks({ onDisconnect });
+    await socketService.connect("token");
+    fakeSocket.active = false;
+
+    handlers.get("disconnect")!("io server disconnect");
+
+    expect(onDisconnect).toHaveBeenCalledWith("io server disconnect", false);
+  });
+
+  it("delivers a presence frame all the way to the game store", async () => {
+    await useGameStore.getState().initializeSocket("user-1", "token");
+    useGameStore.setState({ currentGameId: "game-1" });
+
+    handlers.get(SOCKET_EVENTS.PRESENCE_UPDATED)!({
+      gameId: "game-1",
+      connectedUserIds: ["user-1"],
+    });
+
+    expect(useGameStore.getState().connectedUserIds).toEqual(["user-1"]);
+  });
+
+  it("retries for as long as the tab is open", async () => {
+    const { io } = await import("socket.io-client");
+    await socketService.connect("token");
+
+    // A finite cap here strands a player in a live game the moment their
+    // network blips for longer than the cap allows, with nothing on screen to
+    // tell them a refresh is the only way back.
+    const [, options] = vi.mocked(io).mock.calls[0];
+    expect(options?.reconnection).toBe(true);
+    expect(options?.reconnectionAttempts).toBe(Infinity);
+  });
+
+  it("reports a failed initial connect, but not every failed retry after it", async () => {
+    const onError = vi.fn();
+    socketService.setCallbacks({ onError });
+    await socketService.connect("token");
+
+    // Connected once, then dropped: every retry from here fires connect_error
+    // until the server is back. Reporting them would put an error toast on
+    // screen every few seconds, forever.
+    handlers.get("disconnect")!("transport close");
+    handlers.get("connect_error")!(new Error("xhr poll error"));
+    handlers.get("connect_error")!(new Error("xhr poll error"));
+
+    expect(onError).not.toHaveBeenCalled();
   });
 });
 
