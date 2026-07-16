@@ -161,14 +161,22 @@ export function canMoveFromPile(
  * work→bank - carries exactly ONE card. Getting this wrong is how a single
  * play to a foundation swept a whole tableau stack onto it.
  *
+ * Generic in the card, because this rule reads nothing but `id`: it is about
+ * how FAR a move reaches, not about what the cards are. That is what lets the
+ * client call it with the redacted `ClientCard`s it actually holds - where a
+ * face-down card has no `value` and never could - and get the same answer from
+ * the same function the server moves cards with. The client's own copy of this
+ * (`getMovingCardIds`) was destination-blind and swept the whole stack for
+ * every move out of a work pile; there is one function now, and one test.
+ *
  * Returns a copy; nothing here mutates `cards`. Empty when the card is absent.
  */
-export function cardsMovedBy(
+export function cardsMovedBy<T extends { id: string }>(
   fromType: PileType,
   toType: PileType,
-  cards: Card[],
+  cards: T[],
   cardId: string
-): Card[] {
+): T[] {
   const cardIndex = cards.findIndex((c) => c.id === cardId);
   if (cardIndex === -1) return [];
 

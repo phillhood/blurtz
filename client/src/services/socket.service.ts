@@ -1,5 +1,8 @@
 import { io, Socket } from "socket.io-client";
-import { SOCKET_EVENTS } from "@utils";
+// The event names come from the shared package now, so the name this client
+// listens for and the name the server emits are the same constant rather than
+// two hand-synced copies.
+import { SOCKET_EVENTS } from "@blurtz/shared";
 import { GameState, Player } from "@types";
 
 export interface SocketCallbacks {

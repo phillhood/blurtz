@@ -1,62 +1,20 @@
-import { ClientCard } from "@types";
-
-/**
- * These two answer "may this drop land here?" for the cursor. The server
- * re-decides every move regardless - this is what greys out a target, not what
- * authorises a play.
- *
- * Both begin by refusing face-down cards. That is not defensive padding: a
- * face-down card has no `value` to compare, on the wire or in the type, so
- * there is no rule to apply to one. Nothing draggable is ever face-down
- * anyway, which is why this reads as a guard rather than a branch.
- */
-export const canDropOnBankPile = (
-  bankPiles: Array<{ cards: ClientCard[] }>,
-  pileIndex: number,
-  draggedCard: ClientCard
-): boolean => {
-  if (!draggedCard.faceUp) return false;
-
-  const pile = bankPiles[pileIndex];
-  if (!pile || pile.cards.length === 0) {
-    return draggedCard.number === 1;
-  }
-  const topCard = pile.cards[pile.cards.length - 1];
-  if (!topCard.faceUp) return false;
-
-  // Must be same color and +1 value
-  return (
-    draggedCard.color.name === topCard.color.name &&
-    draggedCard.number === topCard.number + 1
-  );
-};
-
-export const canDropOnWorkPile = (
-  workPiles: Array<{ cards: ClientCard[] }>,
-  pileIndex: number,
-  draggedCard: ClientCard
-): boolean => {
-  if (!draggedCard.faceUp) return false;
-
-  const pile = workPiles[pileIndex];
-  // Empty work pile accepts any card
-  if (pile.cards.length === 0) return true;
-
-  const topCard = pile.cards[pile.cards.length - 1];
-  if (!topCard.faceUp) return false;
-
-  // Must be descending (-1) and opposite type (boy/girl)
-  return (
-    draggedCard.color.type !== topCard.color.type &&
-    draggedCard.number === topCard.number - 1
-  );
-};
+// `canDropOnBankPile` and `canDropOnWorkPile` used to live here, as the
+// client's own copy of the placement rules. They are gone. The rule is
+// `canPlace` in `@blurtz/shared`, which the server decides every real move
+// with; the call sites now ask it directly (see `Game.tsx` and the work-pile
+// affordance in `views/game/components/PlayerArea.tsx`). Nothing below is a
+// rule - these are display helpers, which is why they stayed.
 
 export const getGameStatusTitle = (
   status: string,
   playerCount: number,
   maxPlayers: number,
-  winner?: string
+  // `string | null` because that is what the server sends: `readGameState`
+  // resolves `winner: winner?.id || null`, and a game can finish with no
+  // winner at all (everyone forfeited). The client's hand-copied GameState
+  // said `winner?: string`, which was simply untrue - now that the type comes
+  // from the shared package, the compiler says so.
+  winner?: string | null
 ): string => {
   switch (status) {
     case "waiting":

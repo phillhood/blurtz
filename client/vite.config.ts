@@ -27,7 +27,13 @@ export default defineConfig({
   },
   build: {
     commonjsOptions: {
-      include: [/@blurtz\/shared/, /node_modules/],
+      // Matched against the RESOLVED module id, which for a workspace package
+      // is the real path the symlink points at - `<repo>/shared/dist/index.js`,
+      // not `@blurtz/shared` and not under node_modules. A pattern for the
+      // package name looks right and silently matches nothing: the build then
+      // fails with "SOCKET_EVENTS is not exported by ../shared/dist/index.js",
+      // because rollup read a CJS file as ESM.
+      include: [/shared[\\/]dist[\\/]/, /node_modules/],
     },
   },
   resolve: {

@@ -1,31 +1,45 @@
-import { User } from ".";
+/**
+ * The game types, as the client sees them.
+ *
+ * These are re-exports of `@blurtz/shared`, not copies. They used to be a
+ * hand-maintained mirror of `server/src/types/game.types.ts` and had drifted
+ * from it - most of the client compared `card.number` while the server
+ * compared `card.value`, two names for one field that only agreed because
+ * `createFullDeck` wrote both.
+ *
+ * The mapping is the point: what the client calls a `Pile` is the REDACTED
+ * pile the server publishes (`ClientPile`), not the server's internal one. A
+ * face-down card on the wire carries an id and nothing else, and these names
+ * are what make the client incapable of expecting otherwise.
+ *
+ * `@blurtz/shared` resolves through the workspace symlink like any other
+ * dependency - there is no path alias for it, deliberately. This file stays
+ * only so the client's `@types` barrel keeps one meaning: "the types this app
+ * uses", wherever they are authored.
+ */
+export type {
+  // The card union. A `ClientCard` is a `VisibleCard | HiddenCard`
+  // discriminated on `faceUp`, so reading `.value` off a card that has not
+  // been narrowed is a compile error rather than a leak.
+  CardColor,
+  CardColorString,
+  ClientCard,
+  HiddenCard,
+  VisibleCard,
+  PileType,
+  GameStatus,
+  GameAction,
+  GameEvent,
+  MoveCardEvent,
+  // The redacted state, under the names the client has always used for it.
+  GameListing as Game,
+  ClientGameState as GameState,
+  ClientPile as Pile,
+  ClientPlayer as Player,
+  ClientPlayerDeck as PlayerDeck,
+} from "@blurtz/shared";
 
-export type GameStatus =
-  | "waiting"
-  | "starting"
-  | "playing"
-  | "paused"
-  | "finished";
-
-export interface Game {
-  id: string;
-  name: string;
-  alias: string;
-  maxPlayers: number;
-  currentPlayers: number;
-  status: GameStatus;
-  createdAt: Date;
-  updatedAt?: Date;
-}
-export interface GameState extends Game {
-  hostId: string;
-  players: Player[];
-  bankPiles: Pile[];
-  currentRound: number;
-  currentTurn: string;
-  winner?: string;
-}
-
+// Client-only, because only a lobby list has filters and buttons.
 export interface GameFilters {
   status?: string;
   currentPlayers?: number;
@@ -35,98 +49,4 @@ export interface GameActions {
   onJoin: (gameId: string) => void;
   onRefresh: () => void;
   onCreate: () => void;
-}
-
-/**
- * A card as the server publishes it.
- *
- * The split is face-up vs face-down, NOT self vs opponent: you cannot see your
- * own blurtz pile below its top card, or the face-down part of your own draw
- * pile, so `faceUp` is the whole of what anyone may see. The server redacts on
- * exactly this axis (`server/src/game/rules/redact.ts`) and these types mirror
- * that payload.
- *
- * Because it is a discriminated union and this package is `strict`, reading
- * `.value` off a card you have not established is face-up is a COMPILE ERROR -
- * the server no longer sends it, and the type says so. `Card.tsx`'s
- * `if (!card.faceUp) return <back/>` early return is what narrows the rest of
- * the component to `VisibleCard`.
- */
-export interface VisibleCard {
-  id: string;
-  value: number;
-  number: number; // Alias for value
-  color: CardColor;
-  faceUp: true;
-}
-
-/**
- * A face-down card: its existence and position, nothing else.
- *
- * `id` is SYNTHETIC and positional - the server never publishes a hidden
- * card's real id, because cards it has shown face-up can go face-down again on
- * a draw pile reset. It is a React key and a dnd-kit id, and nothing else:
- * a face-down card is never draggable.
- */
-export interface HiddenCard {
-  id: string;
-  faceUp: false;
-}
-
-export type ClientCard = VisibleCard | HiddenCard;
-
-export interface CardColor {
-  name: string;
-  code: string;
-  type: "a" | "b";
-}
-
-export type CardColorString = string;
-
-export interface Pile {
-  id: string;
-  type: PileType;
-  cards: ClientCard[];
-}
-
-export interface Player {
-  id: string;
-  username: string;
-  user: User;
-  isReady: boolean;
-  deck: PlayerDeck;
-  score: number;
-  bankPileCount: number;
-}
-
-export interface PlayerDeck {
-  blurtzPile: Pile;
-  workPiles: Pile[];
-  drawPile: Pile;
-}
-
-export type PileType = "blurtz" | "work" | "draw" | "bank";
-
-export type GameAction =
-  | "MOVE_CARD"
-  | "FLIP_CARD"
-  | "BLITZ_CALLED"
-  | "GAME_START"
-  | "GAME_END"
-  | "PLAYER_JOIN"
-  | "PLAYER_LEAVE";
-
-export interface GameEvent {
-  type: GameAction;
-  playerId: string;
-  data: any;
-  timestamp: Date;
-}
-
-export interface MoveCardEvent {
-  cardId: string;
-  fromPileId: string;
-  toPileId: string;
-  fromPosition: number;
-  toPosition: number;
 }
