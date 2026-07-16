@@ -12,18 +12,6 @@ import { GameState } from "@types";
  * put a rejection reason in, and the view decided fatality by grepping that
  * field. Either half looks fine alone.
  */
-/**
- * The shared setup's ResizeObserver is an arrow function, so it cannot be
- * `new`ed - and <Game> renders a real DndContext, which does exactly that.
- * Overridden here rather than in setup.ts to keep the blast radius to this file.
- */
-class StubResizeObserver {
-  observe() {}
-  unobserve() {}
-  disconnect() {}
-}
-global.ResizeObserver = StubResizeObserver as unknown as typeof ResizeObserver;
-
 vi.mock("@services/socket.service", () => ({
   socketService: {
     setCallbacks: vi.fn(),

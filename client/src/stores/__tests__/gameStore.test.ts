@@ -738,7 +738,6 @@ describe("gameStore", () => {
         useGameStore.setState({ gameState: gameState("game-1"), error: null });
         vi.mocked(socketService[method] as unknown as () => void).mockImplementation(
           () => {
-            // eslint-disable-next-line @typescript-eslint/only-throw-error
             throw "a bare string, which has no .message";
           }
         );
