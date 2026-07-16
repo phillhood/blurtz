@@ -1,173 +1,158 @@
 import { test, expect } from "@playwright/test";
-import { testUser, testGame, privateGame } from "./fixtures/test-data";
+import { API_URL } from "./fixtures/env";
+import { authenticate, createUser } from "./fixtures/users";
+import {
+  createGameViaUi,
+  gameCode,
+  joinByCodeViaUi,
+  listingCard,
+  rosterCard,
+} from "./fixtures/game";
 
-test.describe("Game Lobby", () => {
-  // Helper to login before tests
-  async function loginUser(page: import("@playwright/test").Page) {
-    await page.goto("/register");
-    const uniqueUsername = `lobby_user_${Date.now()}`;
-    await page.getByPlaceholder(/username/i).fill(uniqueUsername);
-    await page.getByPlaceholder(/password/i).first().fill(testUser.password);
-    const confirmPassword = page.getByPlaceholder(/confirm/i);
-    if (await confirmPassword.isVisible()) {
-      await confirmPassword.fill(testUser.password);
-    }
-    await page.getByRole("button", { name: /register|sign up/i }).click();
-    await expect(page).toHaveURL(/dashboard/, { timeout: 10000 });
-  }
+test.describe("Game lobby", () => {
+  test("creating a public game lands the host in it", async ({ page }) => {
+    const host = await createUser("host");
+    await authenticate(page, host);
 
-  test.beforeEach(async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
+    const game = await createGameViaUi(page, { name: "e2e_lobby_public" });
+
+    // The header is fed from socket-delivered game state, so all three of
+    // these are also evidence the socket authenticated and joined the room.
+    await expect(page.getByText("e2e_lobby_public")).toBeVisible();
+    await expect(gameCode(page)).toHaveText(game.alias);
+    await expect(
+      page.getByRole("heading", { name: "Waiting for players... (1/2)" })
+    ).toBeVisible();
+    await expect(page.getByRole("button", { name: "Leave Game" })).toBeVisible();
   });
 
-  test.describe("Dashboard", () => {
-    test("should display dashboard with game list", async ({ page }) => {
-      await loginUser(page);
+  test("a public game shows up in another player's listings and can be joined", async ({
+    page,
+    browser,
+  }) => {
+    const host = await createUser("host");
+    await authenticate(page, host);
+    const game = await createGameViaUi(page, { name: "e2e_lobby_listed" });
 
-      // Should see the dashboard with game options
-      await expect(page.getByText(/games|available|create/i).first()).toBeVisible();
-    });
+    const joiner = await createUser("joiner");
+    const context = await browser.newContext();
+    const joinerPage = await context.newPage();
+    await authenticate(joinerPage, joiner);
 
-    test("should display create game button", async ({ page }) => {
-      await loginUser(page);
+    await joinerPage.goto("/dashboard");
 
-      await expect(
-        page.getByRole("button", { name: /create|new game/i }).first()
-      ).toBeVisible();
-    });
+    const listing = listingCard(joinerPage, game.name);
+    await expect(listing).toBeVisible();
+    await expect(listing.getByText("Players: 1/2")).toBeVisible();
 
-    test("should display refresh button", async ({ page }) => {
-      await loginUser(page);
+    await listing.getByRole("button", { name: "Join Game" }).click();
 
-      const refreshButton = page.getByRole("button", { name: /refresh/i });
-      if (await refreshButton.isVisible()) {
-        await expect(refreshButton).toBeEnabled();
-      }
-    });
+    await expect(joinerPage).toHaveURL(new RegExp(`/game/${game.id}$`));
+    // The host's page is told about the arrival over the socket, without a
+    // reload - which is the actual claim being tested. A full lobby swaps the
+    // "waiting for players" headline for the ready-up section, so the host's
+    // view has genuinely moved on, not just gained a name.
+    await expect(rosterCard(page, joiner.username)).toBeVisible();
+    await expect(
+      page.getByText("Waiting for all players to be ready (0/2)")
+    ).toBeVisible();
+    await expect(
+      page.getByRole("heading", { name: /Waiting for players/ })
+    ).toBeHidden();
+
+    await context.close();
   });
 
-  test.describe("Create Game", () => {
-    test("should open create game modal", async ({ page }) => {
-      await loginUser(page);
+  test("joining by invite code puts both players in the game", async ({
+    page,
+    browser,
+  }) => {
+    const host = await createUser("host");
+    await authenticate(page, host);
+    const game = await createGameViaUi(page, { isPrivate: true });
 
-      await page.getByRole("button", { name: /create|new game/i }).first().click();
+    const joiner = await createUser("joiner");
+    const context = await browser.newContext();
+    const joinerPage = await context.newPage();
+    await authenticate(joinerPage, joiner);
 
-      // Should see the create game modal/form
-      await expect(page.getByText(/create.*game/i).first()).toBeVisible();
-    });
+    await joinByCodeViaUi(joinerPage, game.alias);
 
-    test("should create a public game", async ({ page }) => {
-      await loginUser(page);
+    await expect(joinerPage).toHaveURL(new RegExp(`/game/${game.id}$`));
+    await expect(rosterCard(joinerPage, host.username)).toBeVisible();
+    await expect(rosterCard(joinerPage, joiner.username)).toBeVisible();
+    // The host is told about it too, over the socket.
+    await expect(rosterCard(page, joiner.username)).toBeVisible();
 
-      await page.getByRole("button", { name: /create|new game/i }).first().click();
-
-      // Fill in game details
-      const gameNameInput = page.getByPlaceholder(/game name/i);
-      if (await gameNameInput.isVisible()) {
-        await gameNameInput.fill(testGame.name);
-      } else {
-        // Try finding by label
-        await page.getByLabel(/game name/i).fill(testGame.name);
-      }
-
-      // Submit the form
-      await page.getByRole("button", { name: /create/i }).click();
-
-      // Should navigate to game page
-      await expect(page).toHaveURL(/game\//, { timeout: 10000 });
-    });
-
-    test("should create a private game", async ({ page }) => {
-      await loginUser(page);
-
-      await page.getByRole("button", { name: /create|new game/i }).first().click();
-
-      // Fill in game details
-      const gameNameInput = page.getByPlaceholder(/game name/i);
-      if (await gameNameInput.isVisible()) {
-        await gameNameInput.fill(privateGame.name);
-      } else {
-        await page.getByLabel(/game name/i).fill(privateGame.name);
-      }
-
-      // Check private checkbox
-      const privateCheckbox = page.getByRole("checkbox", { name: /private/i });
-      if (await privateCheckbox.isVisible()) {
-        await privateCheckbox.check();
-      }
-
-      // Submit
-      await page.getByRole("button", { name: /create/i }).click();
-
-      // Should navigate to game page
-      await expect(page).toHaveURL(/game\//, { timeout: 10000 });
-    });
-
-    test("should close create game modal on cancel", async ({ page }) => {
-      await loginUser(page);
-
-      await page.getByRole("button", { name: /create|new game/i }).first().click();
-
-      // Click cancel
-      const cancelButton = page.getByRole("button", { name: /cancel/i });
-      if (await cancelButton.isVisible()) {
-        await cancelButton.click();
-        // Modal should be closed
-        await expect(page.getByText(/create.*game/i).first()).not.toBeVisible();
-      }
-    });
+    await context.close();
   });
 
-  test.describe("Join Game", () => {
-    test("should open join by code modal", async ({ page }) => {
-      await loginUser(page);
+  test("an invite code that does not exist is refused", async ({ page }) => {
+    const user = await createUser("badcode");
+    await authenticate(page, user);
 
-      const joinByCodeButton = page.getByRole("button", { name: /join.*code/i });
-      if (await joinByCodeButton.isVisible()) {
-        await joinByCodeButton.click();
-        await expect(page.getByText(/enter.*code|game code/i).first()).toBeVisible();
-      }
-    });
+    await joinByCodeViaUi(page, "no-such-code-xyz");
 
-    test("should show error for invalid game code", async ({ page }) => {
-      await loginUser(page);
-
-      const joinByCodeButton = page.getByRole("button", { name: /join.*code/i });
-      if (await joinByCodeButton.isVisible()) {
-        await joinByCodeButton.click();
-
-        const codeInput = page.getByPlaceholder(/code/i);
-        if (await codeInput.isVisible()) {
-          await codeInput.fill("invalid-code-xyz");
-          await page.getByRole("button", { name: /join/i }).click();
-
-          // Should show error
-          await expect(
-            page.getByText(/not found|invalid|error/i).first()
-          ).toBeVisible({ timeout: 10000 });
-        }
-      }
-    });
+    // Refused: still on the dashboard, no game entered.
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "Join Game by Code" })).toBeVisible();
   });
 
-  test.describe("Game List", () => {
-    test("should display available games section", async ({ page }) => {
-      await loginUser(page);
-
-      // Should see available games section
-      await expect(page.getByText(/available|open|games/i).first()).toBeVisible();
+  /**
+   * Knowing a private game's id is not permission to enter it.
+   *
+   * Asserted against the API rather than the UI on purpose: the UI never
+   * offers the button, precisely BECAUSE a private game is kept out of the
+   * listings - so a UI-only test would pass just as happily against a server
+   * that let anyone in by id. The attacker in this story does not use the
+   * dashboard.
+   */
+  test("a private game is hidden from listings and cannot be joined by id", async ({
+    page,
+    request,
+  }) => {
+    const host = await createUser("host");
+    await authenticate(page, host);
+    const game = await createGameViaUi(page, {
+      name: "e2e_lobby_private",
+      isPrivate: true,
     });
 
-    test("should display active games section", async ({ page }) => {
-      await loginUser(page);
+    const outsider = await createUser("outsider");
 
-      // Should see active games section or similar
-      const activeSection = page.getByText(/active|your games|playing/i);
-      // This may or may not be visible depending on if user has active games
-      if (await activeSection.isVisible()) {
-        await expect(activeSection.first()).toBeVisible();
-      }
+    const listings = await request.get(`${API_URL}/api/game/listings`, {
+      headers: { Authorization: `Bearer ${outsider.token}` },
     });
+    expect(listings.ok()).toBe(true);
+    const listed = (await listings.json()).data as Array<{ id: string }>;
+    expect(listed.map((g) => g.id)).not.toContain(game.id);
+
+    // The id, handed over. It is still not a key.
+    const byId = await request.post(`${API_URL}/api/game/joinById`, {
+      headers: { Authorization: `Bearer ${outsider.token}` },
+      data: { id: game.id },
+    });
+    expect(byId.status()).toBe(403);
+
+    // ...and the invite code still is.
+    const byCode = await request.post(`${API_URL}/api/game/joinByCode`, {
+      headers: { Authorization: `Bearer ${outsider.token}` },
+      data: { alias: game.alias },
+    });
+    expect(byCode.ok()).toBe(true);
+  });
+
+  test("cancelling the create dialog creates nothing", async ({ page }) => {
+    const user = await createUser("canceller");
+    await authenticate(page, user);
+
+    await page.goto("/dashboard");
+    await page.getByRole("button", { name: "New Game" }).click();
+    await page.getByPlaceholder("Enter game name...").fill("e2e_never_created");
+    await page.getByRole("button", { name: "Cancel" }).click();
+
+    await expect(page.getByRole("heading", { name: "Create New Game" })).toBeHidden();
+    await expect(page).toHaveURL(/\/dashboard$/);
+    await expect(page.getByRole("heading", { name: "e2e_never_created" })).toBeHidden();
   });
 });
