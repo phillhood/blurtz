@@ -3,12 +3,16 @@ import { io, Socket } from "socket.io-client";
 // listens for and the name the server emits are the same constant rather than
 // two hand-synced copies.
 import { SOCKET_EVENTS } from "@blurtz/shared";
-import { GameState, Player } from "@types";
+import { GameError, GameState, Player } from "@types";
 
 export interface SocketCallbacks {
   onConnect?: () => void;
   onDisconnect?: (reason: string) => void;
-  onError?: (error: string) => void;
+  /**
+   * Something failed. Carries the server's `code` so the store can classify it
+   * without reading the message; a failure this client raised itself has none.
+   */
+  onError?: (error: GameError) => void;
   onGameJoined?: (gameState: GameState) => void;
   onGameLeft?: (gameId: string) => void;
   onGameStateUpdated?: (gameState: GameState) => void;
@@ -101,7 +105,10 @@ class SocketService {
         console.error("Socket connection error:", err);
         this.isConnected = false;
         this.connectionPromise = null;
-        this.callbacks.onError?.("Failed to connect to game server");
+        this.callbacks.onError?.({
+          code: null,
+          message: "Failed to connect to game server",
+        });
         reject(err);
       });
 
@@ -211,10 +218,19 @@ class SocketService {
       }
     );
 
-    this.socket.on(SOCKET_EVENTS.ERROR, (data: { message: string }) => {
-      console.error("Game error:", data.message);
-      this.callbacks.onError?.(data.message);
-    });
+    // `code` is passed through unvalidated on purpose: a code this build does
+    // not know is still a code, and the store already treats anything outside
+    // its fatal list as transient.
+    this.socket.on(
+      SOCKET_EVENTS.ERROR,
+      (data: { code?: string; message: string }) => {
+        console.error("Game error:", data.code, data.message);
+        this.callbacks.onError?.({
+          code: data.code ?? null,
+          message: data.message,
+        });
+      }
+    );
   }
 
   setCallbacks(callbacks: SocketCallbacks) {

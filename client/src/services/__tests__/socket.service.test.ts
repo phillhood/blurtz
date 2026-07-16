@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
-import { SOCKET_EVENTS } from "@blurtz/shared";
+import { SOCKET_EVENTS, SOCKET_ERROR_CODES } from "@blurtz/shared";
 import { GameState } from "@types";
 
 /**
@@ -200,16 +200,32 @@ describe("socketService subscriptions", () => {
     expect(callbacks.onPlayerLeft).toHaveBeenCalledWith({ userId: "user-2" });
   });
 
-  it("routes a server error frame to onError by its message", async () => {
+  it("routes a server error frame to onError with its code and message", async () => {
     const onError = vi.fn();
     socketService.setCallbacks({ onError });
     await socketService.connect("token");
 
-    handlers.get(SOCKET_EVENTS.ERROR)!({ message: "Game not found" });
+    handlers.get(SOCKET_EVENTS.ERROR)!({
+      code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+      message: "Game not found",
+    });
 
-    // The store greps this string to decide whether the game is gone. Passing
-    // the wrapper would make every error unrecognisable to that check.
-    expect(onError).toHaveBeenCalledWith("Game not found");
+    // The code is the only thing downstream is allowed to classify on. Dropping
+    // it here would leave every server error looking client-raised.
+    expect(onError).toHaveBeenCalledWith({
+      code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+      message: "Game not found",
+    });
+  });
+
+  it("reports a codeless error frame as having no code, not as a missing field", async () => {
+    const onError = vi.fn();
+    socketService.setCallbacks({ onError });
+    await socketService.connect("token");
+
+    handlers.get(SOCKET_EVENTS.ERROR)!({ message: "something broke" });
+
+    expect(onError).toHaveBeenCalledWith({ code: null, message: "something broke" });
   });
 
   it("reports a disconnect with the reason socket.io gave", async () => {
@@ -409,7 +425,10 @@ describe("socketService connection", () => {
     handlers.get("connect_error")!(new Error("xhr poll error"));
 
     await expect(attempt).rejects.toThrow("xhr poll error");
-    expect(onError).toHaveBeenCalledWith("Failed to connect to game server");
+    expect(onError).toHaveBeenCalledWith({
+      code: null,
+      message: "Failed to connect to game server",
+    });
     expect(socketService.connected).toBe(false);
 
     // The in-flight promise has to be released or every later attempt would

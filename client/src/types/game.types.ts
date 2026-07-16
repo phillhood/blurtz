@@ -33,6 +33,18 @@ export type {
   ClientPlayerDeck as PlayerDeck,
 } from "@blurtz/shared";
 
+/**
+ * A failure the game is showing the player.
+ *
+ * `code` is the server's typed reason, or null when the client itself produced
+ * the error. It is the ONLY input to whether this is fatal - `message` is for
+ * the player to read, never for code to inspect.
+ */
+export interface GameError {
+  code: string | null;
+  message: string;
+}
+
 // Client-only, because only a lobby list has filters and buttons.
 export interface GameFilters {
   status?: string;

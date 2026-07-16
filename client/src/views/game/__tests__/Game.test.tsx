@@ -3,6 +3,8 @@ import { render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { MemoryRouter, Routes, Route, useNavigate } from "react-router-dom";
 import Game from "../Game";
+import { GameError } from "@types";
+import { SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 const mockJoinGame = vi.fn();
 const mockLeaveGame = vi.fn();
@@ -14,7 +16,7 @@ const mockClearMoveRejection = vi.fn();
 const gameContextState = {
   gameState: null as unknown,
   connected: true,
-  error: null as string | null,
+  error: null as GameError | null,
   moveRejection: null as string | null,
   currentPlayer: undefined as unknown,
 };
@@ -120,7 +122,10 @@ describe("Game", () => {
   });
 
   it("does not show the fatal error screen behind a redirect - GameErrorScreen renders instead of navigating away", () => {
-    gameContextState.error = "Game not found";
+    gameContextState.error = {
+      code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+      message: "Game not found",
+    };
 
     renderGame("/game/missing-game");
 
@@ -153,7 +158,10 @@ describe("Game", () => {
     it("puts a fatal error ahead of the loading screen", () => {
       // Both conditions hold at once - no gameState AND a fatal error. Showing
       // "Loading game..." for a game that does not exist spins forever.
-      gameContextState.error = "Game not found";
+      gameContextState.error = {
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      };
       gameContextState.gameState = null;
 
       renderGame("/game/game-1");
@@ -162,12 +170,17 @@ describe("Game", () => {
       expect(screen.queryByText("Loading game...")).not.toBeInTheDocument();
     });
 
-    it("treats a 'does not exist' error as fatal too", () => {
-      gameContextState.error = "That game does not exist";
+    it("treats being no player of this game as fatal too", () => {
+      gameContextState.error = {
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      };
 
       renderGame("/game/game-1");
 
-      expect(screen.getByText("That game does not exist")).toBeInTheDocument();
+      expect(
+        screen.getByText("You are not a player in this game")
+      ).toBeInTheDocument();
     });
 
     it("renders the board once the game is playing", () => {
@@ -286,7 +299,10 @@ describe("Game", () => {
 
     it("shows a non-fatal error", () => {
       gameContextState.gameState = playingState();
-      gameContextState.error = "It is not your turn";
+      gameContextState.error = {
+        code: SOCKET_ERROR_CODES.INVALID_PAYLOAD,
+        message: "It is not your turn",
+      };
 
       renderGame("/game/game-1");
 
@@ -299,7 +315,10 @@ describe("Game", () => {
       // The one the player caused is the one they need explained.
       gameContextState.gameState = playingState();
       gameContextState.moveRejection = "Destination pile not found";
-      gameContextState.error = "It is not your turn";
+      gameContextState.error = {
+        code: SOCKET_ERROR_CODES.INVALID_PAYLOAD,
+        message: "It is not your turn",
+      };
 
       renderGame("/game/game-1");
 
@@ -315,5 +334,76 @@ describe("Game", () => {
       expect(mockClearMoveRejection).not.toHaveBeenCalled();
       expect(mockClearError).not.toHaveBeenCalled();
     });
+  });
+
+  // ---------------------------------------------------------------------
+  // Fatality is decided by `error.code` and nothing else. The message is for
+  // the player to read: the moment code reads it, any routine failure worded
+  // "... not found" throws someone out of a game they are still playing.
+  // ---------------------------------------------------------------------
+  describe("which errors are fatal", () => {
+    const inALiveGame = () => {
+      gameContextState.gameState = playingState();
+      gameContextState.currentPlayer = (
+        playingState() as { players: unknown[] }
+      ).players[0];
+    };
+
+    // The bank only renders on the playing branch, so its presence is the
+    // board's presence.
+    const boardIsStillUp = () => {
+      expect(screen.queryByText("Game Error")).not.toBeInTheDocument();
+      expect(screen.getByText("Bank")).toBeInTheDocument();
+    };
+
+    it("keeps the board up for a transient error whose message says 'not found'", () => {
+      inALiveGame();
+      gameContextState.error = {
+        code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+        message: "Player not found in this game",
+      };
+
+      renderGame("/game/game-1");
+
+      boardIsStillUp();
+      // Not swallowed either - it just is not fatal.
+      expect(
+        screen.getByText("Player not found in this game")
+      ).toBeInTheDocument();
+    });
+
+    it("keeps the board up for a code it does not recognise", () => {
+      inALiveGame();
+      gameContextState.error = {
+        code: "SOME_CODE_FROM_A_NEWER_SERVER",
+        message: "Game not found, apparently",
+      };
+
+      renderGame("/game/game-1");
+
+      boardIsStillUp();
+    });
+
+    it("keeps the board up for an error the client raised itself", () => {
+      inALiveGame();
+      gameContextState.error = { code: null, message: "Failed to make move" };
+
+      renderGame("/game/game-1");
+
+      boardIsStillUp();
+    });
+
+    it.each([SOCKET_ERROR_CODES.GAME_NOT_FOUND, SOCKET_ERROR_CODES.NOT_A_PLAYER])(
+      "replaces the board with the error screen on %s",
+      (code) => {
+        inALiveGame();
+        gameContextState.error = { code, message: "this game is not yours" };
+
+        renderGame("/game/game-1");
+
+        expect(screen.getByText("Game Error")).toBeInTheDocument();
+        expect(screen.queryByText("Bank")).not.toBeInTheDocument();
+      }
+    );
   });
 });

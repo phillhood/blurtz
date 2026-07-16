@@ -3,7 +3,7 @@ import { useParams, useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor } from "@dnd-kit/core";
 import { useGameContext, useAuthContext } from "@hooks";
 import { ClientCard, PileType, VisibleCard } from "@types";
-import { isVisibleCard } from "@utils";
+import { isVisibleCard, isFatalErrorCode } from "@utils";
 // The rules, from the one place they live. Imported by package name through
 // the workspace symlink - there is no path alias for @blurtz/shared, on
 // purpose.
@@ -83,13 +83,11 @@ const Game: React.FC = () => {
     // decides that, not this array.
   }, [gameId, connected, joinGame]);
 
-  // Check if error is fatal (should block the game) or transient (show toast).
-  //
-  // This only ever looks at `error`. A refused move arrives on `moveRejection`
-  // precisely so it can never reach this heuristic: the server's reasons
-  // include "Source pile not found" and "Destination pile not found", and a
-  // player who mis-drags a card is still in a game they can go on playing.
-  const isFatalError = error?.includes("not found") || error?.includes("does not exist");
+  // Fatal errors block the game; everything else is a toast. The decision is
+  // the server's `code` and nothing else - the message is never inspected,
+  // because plenty of transient failures say "not found" and a player who hits
+  // one is still in a game they can go on playing.
+  const isFatalError = isFatalErrorCode(error?.code);
 
   const handleLeave = () => {
     if (gameState?.status === "playing") {
@@ -264,7 +262,7 @@ const Game: React.FC = () => {
   }
 
   if (isFatalError && error) {
-    return <GameErrorScreen error={error} onBackClick={goToDashboard} />;
+    return <GameErrorScreen error={error.message} onBackClick={goToDashboard} />;
   }
 
   // Transient error shown as toast (rendered later in main return)
@@ -306,7 +304,7 @@ const Game: React.FC = () => {
           onDismiss={clearMoveRejection}
         />
       ) : error && !isFatalError ? (
-        <GameToast message={error} duration={3000} onDismiss={clearError} />
+        <GameToast message={error.message} duration={3000} onDismiss={clearError} />
       ) : null}
 
       <GameContainer>
