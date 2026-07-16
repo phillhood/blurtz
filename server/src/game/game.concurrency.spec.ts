@@ -830,4 +830,295 @@ describe("GameService concurrency (real database)", () => {
       expect(otherUser.gamesWon).toBe(0);
     });
   });
+
+  // -------------------------------------------------------------------
+  // Task 15: `round_over` is a real status that four sites written before it
+  // existed never learned about. These are the round-trips through a real
+  // database, where the FK behaviour and the row locks are the point.
+  // -------------------------------------------------------------------
+
+  /** A user tagged for cleanup. */
+  async function makeUser(prefix: string) {
+    return prisma.user.create({
+      data: { username: `${prefix}-${uuidv4()}`, password: TEST_TAG },
+    });
+  }
+
+  describe("a game whose round is over", () => {
+    let userOneId: string;
+    let userTwoId: string;
+    let quitterPlayerId: string;
+    let stayerPlayerId: string;
+    let roundOverGameId: string;
+
+    /** Two players sat in the round_over interstitial, scores on the board. */
+    async function seedRoundOver() {
+      const quitter = await makeUser("ro-quitter");
+      const stayer = await makeUser("ro-stayer");
+      userOneId = quitter.id;
+      userTwoId = stayer.id;
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 2,
+          status: "round_over",
+          targetScore: 100,
+          currentRound: 1,
+          hostId: quitter.id,
+          gameState: { bankPiles: [] },
+        },
+      });
+      roundOverGameId = game.id;
+
+      const rowOne = await prisma.player.create({
+        data: {
+          userId: quitter.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(buildDeck().deck)),
+          score: 12,
+          isReady: false,
+        },
+      });
+      const rowTwo = await prisma.player.create({
+        data: {
+          userId: stayer.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(buildDeck().deck)),
+          score: 8,
+          isReady: false,
+        },
+      });
+      quitterPlayerId = rowOne.id;
+      stayerPlayerId = rowTwo.id;
+    }
+
+    beforeEach(seedRoundOver);
+
+    // getActiveGames filtered on waiting/starting/playing/paused. A player who
+    // opened the Dashboard during the interstitial saw NOTHING - the game they
+    // were in the middle of simply was not listed, and there was no way back
+    // into it.
+    it("is listed as an active game for the players in it", async () => {
+      const active = await service.getActiveGames(userTwoId);
+
+      expect(active).toHaveLength(1);
+      expect(active[0].id).toBe(roundOverGameId);
+      expect(active[0].status).toBe("round_over");
+    });
+
+    // The strand: the Player row was deleted through the waiting-lobby path,
+    // leaving a round_over game with one player. joinGame refuses a
+    // non-waiting game, so they could not come back; startNextRound refuses
+    // below MIN_PLAYERS, so it could not advance. Stuck, unwinnable, forever.
+    it("finishes rather than stranding when a player leaves a two-player game", async () => {
+      await service.leaveGame(roundOverGameId, userOneId);
+
+      const game = await prisma.game.findUnique({
+        where: { id: roundOverGameId },
+        include: { players: true },
+      });
+
+      expect(game.status).toBe("finished");
+      // The last player standing won it.
+      expect(game.winnerPlayerId).toBe(stayerPlayerId);
+      expect(game.players.map((p) => p.id)).toEqual([stayerPlayerId]);
+
+      // A game that was really played, credited like one.
+      const users = await prisma.user.findMany({
+        where: { id: { in: [userOneId, userTwoId] } },
+      });
+      const stayerUser = users.find((u) => u.id === userTwoId);
+      const quitterUser = users.find((u) => u.id === userOneId);
+      expect(stayerUser.gamesPlayed).toBe(1);
+      expect(stayerUser.gamesWon).toBe(1);
+      expect(quitterUser.gamesPlayed).toBe(1);
+      expect(quitterUser.gamesWon).toBe(0);
+    });
+
+    // The stale-readiness half of the skip: setPlayerReady took no lock and
+    // no status guard, so a ready write could land AFTER the deal that reset
+    // it - pre-readying that player for the NEXT interstitial.
+    it("cannot be readied up again once the next round has been dealt", async () => {
+      await prisma.player.updateMany({
+        where: { gameId: roundOverGameId },
+        data: { isReady: true },
+      });
+
+      await service.startNextRound(roundOverGameId, userOneId);
+
+      await expect(
+        service.setPlayerReady(roundOverGameId, quitterPlayerId, true)
+      ).rejects.toThrow(BadRequestException);
+
+      const players = await prisma.player.findMany({
+        where: { gameId: roundOverGameId },
+      });
+      // The deal cleared readiness and nothing may put it back while the
+      // round is being played.
+      expect(players.every((p) => p.isReady === false)).toBe(true);
+    });
+
+    // The same thing as a genuine race rather than a sequence: the `players`
+    // row is not covered by the `games` row lock, so a setPlayerReady running
+    // on the pooled client could commit either side of the deal's reset.
+    it("survives a readiness write racing the deal", async () => {
+      await prisma.player.updateMany({
+        where: { gameId: roundOverGameId },
+        data: { isReady: true },
+      });
+
+      await Promise.allSettled([
+        service.startNextRound(roundOverGameId, userOneId),
+        service.setPlayerReady(roundOverGameId, quitterPlayerId, true),
+      ]);
+
+      const game = await prisma.game.findUnique({
+        where: { id: roundOverGameId },
+        include: { players: true },
+      });
+
+      // Whichever order they landed in, the round is being played and nobody
+      // is carrying a readiness into the next interstitial. Unlocked, the
+      // ready write blocked on the player row, waited for the deal to commit,
+      // and then wrote `true` straight over the reset.
+      expect(game.status).toBe("playing");
+      expect(game.players.every((p) => p.isReady === false)).toBe(true);
+    });
+  });
+
+  // A finished game is a record, and `Game.winnerPlayerId` is ON DELETE SET
+  // NULL - so deleting the Player row it names does not fail, it silently
+  // erases who won.
+  describe("a finished game", () => {
+    it("does not let a participant delete the row its winner points at", async () => {
+      const winner = await makeUser("done-winner");
+      const loser = await makeUser("done-loser");
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 2,
+          status: "finished",
+          hostId: winner.id,
+          gameState: { bankPiles: [] },
+        },
+      });
+
+      const winnerRow = await prisma.player.create({
+        data: { userId: winner.id, gameId: game.id, deck: null, score: 100 },
+      });
+      await prisma.player.create({
+        data: { userId: loser.id, gameId: game.id, deck: null, score: 3 },
+      });
+      await prisma.game.update({
+        where: { id: game.id },
+        data: { winnerPlayerId: winnerRow.id },
+      });
+
+      await expect(service.leaveGame(game.id, winner.id)).rejects.toThrow(
+        BadRequestException
+      );
+
+      const after = await prisma.game.findUnique({
+        where: { id: game.id },
+        include: { players: true },
+      });
+
+      // Pre-fix this player was deleted and the FK nulled the winner: the
+      // game forgot it had been won at all.
+      expect(after.winnerPlayerId).toBe(winnerRow.id);
+      expect(after.players).toHaveLength(2);
+      expect(after.status).toBe("finished");
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Task 15 item 4: a forfeit the game SURVIVES never reassigned hostId. The
+  // game played on to its next round_over and then died there - startNextRound
+  // wants the host, and the host was not in the game any more.
+  // -------------------------------------------------------------------
+  describe("the host forfeiting a three-player game", () => {
+    it("leaves a host who can still deal the next round", async () => {
+      const host = await makeUser("ff-host");
+      const second = await makeUser("ff-second");
+      const third = await makeUser("ff-third");
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 4,
+          status: "playing",
+          // High enough that the Blitz below ends the ROUND, not the game.
+          targetScore: 100,
+          currentRound: 1,
+          hostId: host.id,
+          gameState: { bankPiles: [] },
+        },
+      });
+
+      const hostRow = await prisma.player.create({
+        data: {
+          userId: host.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(buildDeck().deck)),
+        },
+      });
+      // This one empties their blurtz pile, so they can call the round.
+      const blitzDeck = buildDeck().deck;
+      blitzDeck.blurtzPile.cards = [];
+      const secondRow = await prisma.player.create({
+        data: {
+          userId: second.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(blitzDeck)),
+          bankPileCount: 4,
+        },
+      });
+      const thirdRow = await prisma.player.create({
+        data: {
+          userId: third.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(buildDeck().deck)),
+        },
+      });
+
+      // The host walks out. Two players remain, so the game plays on.
+      await service.forfeitGame(game.id, hostRow.id);
+
+      let after = await prisma.game.findUnique({
+        where: { id: game.id },
+        include: { players: true },
+      });
+      expect(after.status).toBe("playing");
+      expect(after.players).toHaveLength(2);
+
+      // The invariant that was broken: the host is someone still IN the game.
+      // (Which of the two inherits it is Postgres' row order, not a contract.)
+      const remainingUserIds = after.players.map((p) => p.userId);
+      expect(remainingUserIds).toContain(after.hostId);
+
+      // Play on to the interstitial, where the missing host used to be fatal.
+      const blitz = await service.callBlitz(game.id, secondRow.id);
+      expect(blitz.status).toBe("round_over");
+
+      await service.setPlayerReady(game.id, secondRow.id, true);
+      await service.setPlayerReady(game.id, thirdRow.id, true);
+
+      // Pre-fix, NOBODY could get past this: hostId named a user who was no
+      // longer a player, so the host check and the membership check could not
+      // both be satisfied by anyone alive.
+      await service.startNextRound(game.id, after.hostId);
+
+      after = await prisma.game.findUnique({
+        where: { id: game.id },
+        include: { players: true },
+      });
+      expect(after.status).toBe("playing");
+      expect(after.currentRound).toBe(2);
+    });
+  });
 });

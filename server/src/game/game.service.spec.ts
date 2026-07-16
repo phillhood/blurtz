@@ -3,6 +3,7 @@ import {
   BadRequestException,
   ForbiddenException,
   InternalServerErrorException,
+  NotFoundException,
 } from "@nestjs/common";
 import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
@@ -937,6 +938,133 @@ describe("GameService", () => {
       expect(hostWrites).toHaveLength(0);
     });
   });
+
+  // ---------------------------------------------------------------------
+  // Task 15 item 3: leaveGame handled `playing` as a forfeit and let EVERY
+  // other status fall through to the waiting-lobby deletion path.
+  // ---------------------------------------------------------------------
+  describe("leaveGame by status", () => {
+    // A round_over game is a game in progress: rounds have been played, score
+    // is on the board and RoundResults are written. Deleting a player out of
+    // it through the lobby path stranded it - one player left, joinGame
+    // refuses a non-waiting game, and startNextRound refuses below
+    // MIN_PLAYERS. No winner, no stats, forever.
+    it("finishes a two-player round_over game rather than stranding it", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "round_over",
+        hostId: "user-stayer",
+        players: [
+          { id: "p1", userId: "user-quitter", user: { id: "user-quitter" } },
+          { id: "p2", userId: "user-stayer", user: { id: "user-stayer" } },
+        ],
+      });
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+      (prismaService.user.update as jest.Mock).mockResolvedValue({});
+
+      await service.leaveGame("game-1", "user-quitter").catch(() => {});
+
+      // The last player standing takes it, exactly as a forfeit out of
+      // `playing` would end it.
+      expect(prismaService.game.update).toHaveBeenCalledWith({
+        where: { id: "game-1" },
+        data: { status: "finished", winnerPlayerId: "p2" },
+      });
+      // And it was a real game, so it is credited like one.
+      const calls = (prismaService.user.update as jest.Mock).mock.calls.map(
+        (c) => c[0]
+      );
+      expect(calls).toContainEqual({
+        where: { id: "user-stayer" },
+        data: { gamesPlayed: { increment: 1 }, gamesWon: { increment: 1 } },
+      });
+      expect(calls).toContainEqual({
+        where: { id: "user-quitter" },
+        data: { gamesPlayed: { increment: 1 } },
+      });
+    });
+
+    // A finished game is a record. Deleting the Player row it points at nulls
+    // `winnerPlayerId` through the schema's ON DELETE SET NULL - the game
+    // silently forgets who won it.
+    it("refuses to leave a finished game, preserving the winner's row", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "finished",
+        hostId: "user-winner",
+        winnerPlayerId: "p1",
+        players: [
+          { id: "p1", userId: "user-winner", user: { id: "user-winner" } },
+          { id: "p2", userId: "user-loser", user: { id: "user-loser" } },
+        ],
+      });
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+
+      await expect(service.leaveGame("game-1", "user-winner")).rejects.toThrow(
+        BadRequestException
+      );
+      expect(prismaService.player.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Task 15 item 4: a forfeit that leaves the game running never reassigned
+  // `hostId`. If the forfeiter was the host, `hostId` pointed at a non-member
+  // and startNextRound - which demands host AND membership - could never be
+  // satisfied by anyone left. The game died at the next round_over.
+  // ---------------------------------------------------------------------
+  describe("host reassignment on a forfeit that the game survives", () => {
+    it("hands the host role on when the host forfeits a three-player game", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        gameRow({
+          status: "playing",
+          hostId: "user-host",
+          players: [
+            { id: "p1", userId: "user-host" },
+            { id: "p2", userId: "user-second" },
+            { id: "p3", userId: "user-third" },
+          ],
+        })
+      );
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+
+      await service.forfeitGame("game-1", "p1").catch(() => {});
+
+      expect(prismaService.game.update).toHaveBeenCalledWith({
+        where: { id: "game-1" },
+        data: { hostId: "user-second" },
+      });
+      // Two players are still playing it: nobody has won and nothing is
+      // credited.
+      const finishes = (prismaService.game.update as jest.Mock).mock.calls
+        .filter((c) => c[0]?.data?.status !== undefined);
+      expect(finishes).toHaveLength(0);
+    });
+
+    it("does not touch the host when a non-host forfeits", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        gameRow({
+          status: "playing",
+          hostId: "user-host",
+          players: [
+            { id: "p1", userId: "user-host" },
+            { id: "p2", userId: "user-second" },
+            { id: "p3", userId: "user-third" },
+          ],
+        })
+      );
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+
+      await service.forfeitGame("game-1", "p2").catch(() => {});
+
+      const hostWrites = (prismaService.game.update as jest.Mock).mock.calls
+        .filter((c) => c[0]?.data?.hostId !== undefined);
+      expect(hostWrites).toHaveLength(0);
+    });
+  });
   // ---------------------------------------------------------------------
   // Task 10: multi-round.
   //
@@ -945,6 +1073,93 @@ describe("GameService", () => {
   // and `callBlitz` OVERWROTE `Player.score` with the round's score instead of
   // adding to it. A game could not reach a target it threw away every round.
   // ---------------------------------------------------------------------
+  // ---------------------------------------------------------------------
+  // Task 15 item 2: setPlayerReady was the only mutator that took no lock and
+  // checked no status. `callBlitz` does not clear readiness, so a `true` set
+  // during play survived into the round_over interstitial and pre-satisfied
+  // the all-ready gate - reopening the multi-round skip that 0b7fb3b closed.
+  // ---------------------------------------------------------------------
+  describe("setPlayerReady", () => {
+    function readyGame(status: string) {
+      return {
+        id: "game-1",
+        status,
+        players: [playerRow("p1", null, { isReady: false })],
+      };
+    }
+
+    function mockReady(status: string) {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        readyGame(status)
+      );
+      (prismaService.player.update as jest.Mock).mockResolvedValue({});
+    }
+
+    it("does all of its work inside the game lock", async () => {
+      mockReady("waiting");
+
+      await service.setPlayerReady("game-1", "p1", true);
+
+      expect(gameRepository.withGameLock).toHaveBeenCalledWith(
+        "game-1",
+        expect.any(Function)
+      );
+    });
+
+    it("lets a player ready up in the lobby", async () => {
+      mockReady("waiting");
+
+      await service.setPlayerReady("game-1", "p1", true);
+
+      expect(prismaService.player.update).toHaveBeenCalledWith({
+        where: { id: "p1" },
+        data: { isReady: true },
+      });
+    });
+
+    it("lets a player ready up between rounds", async () => {
+      mockReady("round_over");
+
+      await service.setPlayerReady("game-1", "p1", true);
+
+      expect(prismaService.player.update).toHaveBeenCalledWith({
+        where: { id: "p1" },
+        data: { isReady: true },
+      });
+    });
+
+    // The UI does not draw the control during play - but the server must not
+    // rely on a hidden button. A hand-crafted socket message set `true` mid
+    // round, and nothing ever cleared it before the next interstitial's gate
+    // read it.
+    it("refuses a readiness change while the game is playing", async () => {
+      mockReady("playing");
+
+      await expect(service.setPlayerReady("game-1", "p1", true)).rejects.toThrow(
+        BadRequestException
+      );
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+
+    it("refuses a readiness change once the game is finished", async () => {
+      mockReady("finished");
+
+      await expect(service.setPlayerReady("game-1", "p1", true)).rejects.toThrow(
+        BadRequestException
+      );
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+
+    it("throws when the player is not in the game", async () => {
+      mockReady("waiting");
+
+      await expect(
+        service.setPlayerReady("game-1", "nobody", true)
+      ).rejects.toThrow(NotFoundException);
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe("callBlitz scoring and the round/game transition", () => {
     const blurtzCardId = (n: number) =>
       `ffffffff-ffff-4fff-8fff-${String(n).padStart(12, "0")}`;

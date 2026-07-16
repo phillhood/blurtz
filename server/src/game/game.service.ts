@@ -220,10 +220,17 @@ export class GameService {
       return [];
     }
 
-    // Include waiting, starting, playing, and paused games - exclude only finished games
+    // Every status except `finished` - a game you are in and that is not over
+    // is a game you can get back to.
+    //
+    // `round_over` was missing here and nowhere else: it is a status Phase 6
+    // added, and this filter was written before it existed. A player who
+    // opened the Dashboard during the round-over interstitial got an empty
+    // list and no way back into a game they were in the middle of - and it
+    // compounded, because the round cannot advance until they ready up.
     const games = await this.prisma.game.findMany({
       where: {
-        status: { in: ["waiting", "starting", "playing", "paused"] },
+        status: { in: ["waiting", "starting", "playing", "round_over", "paused"] },
         id: { in: gameIds },
       },
       include: {
