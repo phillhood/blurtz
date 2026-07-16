@@ -75,33 +75,7 @@ export const API_ENDPOINTS = {
   },
 } as const;
 
-export const PILE_RULES = {
-  WORK: {
-    // descending order, alternating type, any card can fill empty pile
-    canPlace: (topCard: any, newCard: any) => {
-      if (!topCard) return true; // Empty work pile accepts any card
-      return (
-        newCard.value === topCard.value - 1 &&
-        newCard.color.type !== topCard.color.type
-      );
-    },
-  },
-  BANK: {
-    // ascending order, same color, starts with 1
-    canPlace: (topCard: any, newCard: any) => {
-      if (!topCard) return newCard.value === 1;
-      return (
-        newCard.value === topCard.value + 1 &&
-        newCard.color.name === topCard.color.name
-      );
-    },
-  },
-  BLURTZ: {
-    // can only take from top
-    canTake: () => true,
-  },
-  DRAW: {
-    // can flip in groups of 3 - TODO
-    canFlip: () => true,
-  },
-} as const;
+// PILE_RULES used to live here: an untyped `canPlace` pair, plus a `canTake`
+// and a `canFlip` that both unconditionally returned true. The real rules are
+// now `canPlace` / `canMoveFromPile` in `src/game/rules/engine.ts`, where they
+// are typed, tested, and next to the rest of the engine.

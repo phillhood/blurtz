@@ -6,20 +6,24 @@ import {
   NotFoundException,
   Logger,
 } from "@nestjs/common";
-import { v4 as uuidv4 } from "uuid";
 import { PrismaService } from "@prisma";
-import {
-  GameListing,
-  GameState,
-  Card,
-  MoveResult,
-  Pile,
-  PlayerDeck,
-} from "@types";
+import { GameListing, GameState, MoveResult, Pile, PlayerDeck } from "@types";
 import { PlayerDeckSchema } from "@schemas";
-import { CARD_COLORS, CARD_VALUES, GAME_CONSTANTS, PILE_RULES } from "@utils";
+import { GAME_CONSTANTS } from "@utils";
 import { generateAlias, generateAliasWithNumber } from "@utils";
 import { DbClient, GameRepository } from "./game.repository";
+// The rules engine. Relative on purpose - see rules/index.ts.
+import {
+  createBankPiles,
+  dealCards,
+  executeMove,
+  // Aliased: this service has a `flipDrawPile` method of its own, which is the
+  // database-facing wrapper around this pure function.
+  flipDrawPile as flipDrawPileCards,
+  initializeGameState,
+  scoreRound,
+  validateMove,
+} from "./rules";
 
 @Injectable()
 export class GameService {
@@ -165,59 +169,6 @@ export class GameService {
 
   // Game init
 
-  private initializeGameState(): any {
-    return {
-      bankPiles: this.createBankPiles(),
-      currentTurn: 0,
-    };
-  }
-
-  private createFullDeck(): Card[] {
-    const cards: Card[] = [];
-
-    Object.values(CARD_COLORS).forEach((color) => {
-      CARD_VALUES.forEach((value) => {
-        cards.push({
-          id: uuidv4(),
-          value,
-          number: value,
-          color,
-          faceUp: false,
-        });
-      });
-    });
-
-    return cards;
-  }
-
-  private createBankPiles(): Pile[] {
-    return Array.from({ length: GAME_CONSTANTS.BANK_PILE_COUNT }, () => ({
-      id: uuidv4(),
-      type: "bank" as const,
-      cards: [],
-    }));
-  }
-
-  private createPlayerDeck(workPileCount: number): PlayerDeck {
-    return {
-      blurtzPile: {
-        id: uuidv4(),
-        type: "blurtz",
-        cards: [],
-      },
-      workPiles: Array.from({ length: workPileCount }, () => ({
-        id: uuidv4(),
-        type: "work" as const,
-        cards: [],
-      })),
-      drawPile: {
-        id: uuidv4(),
-        type: "draw",
-        cards: [],
-      },
-    };
-  }
-
   async createGame(
     name: string,
     userId: string,
@@ -233,7 +184,7 @@ export class GameService {
         isPrivate,
         status: "waiting",
         hostId: userId,
-        gameState: this.initializeGameState(),
+        gameState: initializeGameState() as unknown as object,
       },
     });
 
@@ -521,7 +472,7 @@ export class GameService {
       }
 
       for (const player of game.players) {
-        const deck = this.dealCards(game.players.length);
+        const deck = dealCards(game.players.length);
         await tx.player.update({
           where: { id: player.id },
           data: { deck: JSON.parse(JSON.stringify(deck)) },
@@ -594,7 +545,7 @@ export class GameService {
         score: p.score,
         bankPileCount: p.bankPileCount,
       })),
-      bankPiles: gameState?.bankPiles || this.createBankPiles(),
+      bankPiles: gameState?.bankPiles || createBankPiles(),
       status: game.status,
       currentRound: 0,
       currentTurn: game.players[0]?.id || "",
@@ -625,29 +576,7 @@ export class GameService {
       }
 
       const playerDeck = this.parseDeck(playerId, player.deck);
-      const drawCards = playerDeck.drawPile.cards;
-
-      // Array structure: [draw pile (face-down at front)][active pile (face-up at end)]
-      // Count face-down cards at front (draw pile)
-      let drawCount = 0;
-      for (const c of drawCards) {
-        if (!c.faceUp) drawCount++;
-        else break;
-      }
-
-      if (drawCount === 0) {
-        // Reset: turn all cards face-down (preserves order for cycling)
-        drawCards.forEach((c) => (c.faceUp = false));
-        drawCount = drawCards.length;
-      }
-
-      // Flip up to 3 cards: remove from front, turn face-up, append to end
-      const numToFlip = Math.min(3, drawCount);
-      if (numToFlip > 0) {
-        const toFlip = drawCards.splice(0, numToFlip);
-        toFlip.forEach((c) => (c.faceUp = true));
-        drawCards.push(...toFlip);
-      }
+      playerDeck.drawPile.cards = flipDrawPileCards(playerDeck.drawPile.cards);
 
       await tx.player.update({
         where: { id: playerId },
@@ -733,8 +662,7 @@ export class GameService {
       for (const player of game.players) {
         const deck = player.deck as unknown as PlayerDeck;
         const blurtzRemaining = deck.blurtzPile.cards.length;
-        // Score = cards played to Dutch piles - (2 * remaining Blitz cards)
-        const finalScore = player.bankPileCount - 2 * blurtzRemaining;
+        const finalScore = scoreRound(player.bankPileCount, blurtzRemaining);
         scores[player.id] = finalScore;
 
         // Update player score in database
@@ -812,12 +740,12 @@ export class GameService {
       const gameState = game.gameState as any;
 
       // Validate the move
-      const rejection = this.validateMove(
+      const rejection = validateMove(
         playerDeck,
+        gameState,
         cardId,
         fromPileId,
-        toPileId,
-        gameState
+        toPileId
       );
 
       if (rejection) {
@@ -831,7 +759,7 @@ export class GameService {
         };
       }
 
-      this.executeMove(playerDeck, gameState, cardId, fromPileId, toPileId);
+      executeMove(playerDeck, gameState, cardId, fromPileId, toPileId);
 
       // Check if this was a move to a Bank pile (for scoring)
       const isBankPileMove = gameState.bankPiles?.some(
@@ -853,185 +781,6 @@ export class GameService {
 
       return { ok: true as const, state: await this.readGameState(tx, gameId) };
     });
-  }
-
-  private dealCards(numPlayers: number): PlayerDeck {
-    const workPileCount = GAME_CONSTANTS.WORK_PILE_COUNT[numPlayers];
-    const deck = this.createFullDeck();
-    this.shuffleDeck(deck);
-
-    const playerDeck = this.createPlayerDeck(workPileCount);
-
-    // Deal 10 cards to blurtz pile (face down except top card)
-    for (let i = 0; i < GAME_CONSTANTS.BLURTZ_PILE_SIZE; i++) {
-      const card = deck.pop()!;
-      card.faceUp = i === GAME_CONSTANTS.BLURTZ_PILE_SIZE - 1; // Only top card face up
-      playerDeck.blurtzPile.cards.push(card);
-    }
-
-    // Deal 1 card to each work pile (face up)
-    for (let i = 0; i < workPileCount; i++) {
-      const card = deck.pop()!;
-      card.faceUp = true;
-      playerDeck.workPiles[i].cards.push(card);
-    }
-
-    // Remaining cards go to draw pile (face down)
-    playerDeck.drawPile.cards = deck.map((card) => ({
-      ...card,
-      faceUp: false,
-    }));
-
-    return playerDeck;
-  }
-
-  private shuffleDeck(deck: Card[]): void {
-    for (let i = deck.length - 1; i > 0; i--) {
-      const j = Math.floor(Math.random() * (i + 1));
-      [deck[i], deck[j]] = [deck[j], deck[i]];
-    }
-  }
-
-  /**
-   * Validate a move, returning null when it is legal, or a reason when it is
-   * not.
-   *
-   * The reason travels back to the player who tried the move. "Someone beat
-   * you to that pile" is the single most common outcome in a game built on
-   * racing for shared piles, and it deserves to be distinguishable from
-   * "that card isn't yours to move".
-   */
-  private validateMove(
-    playerDeck: PlayerDeck,
-    cardId: string,
-    fromPileId: string,
-    toPileId: string,
-    gameState: any
-  ): string | null {
-    // Find the card
-    const card = this.findCard(playerDeck, cardId);
-    if (!card) return "That card is not in your deck";
-
-    // Check if card is face up and can be moved
-    if (!card.faceUp) return "That card is face down";
-
-    // Get source and destination piles
-    const fromPile = this.findPile(playerDeck, gameState, fromPileId);
-    const toPile = this.findPile(playerDeck, gameState, toPileId);
-
-    if (!fromPile) return "Source pile not found";
-    if (!toPile) return "Destination pile not found";
-
-    // Check if card can be moved from source pile
-    // For draw pile, the top playable card is the last face-up card
-    if (fromPile.type === "draw") {
-      const faceUpCards = fromPile.cards.filter((c) => c.faceUp);
-      const topFaceUpCard = faceUpCards[faceUpCards.length - 1];
-      if (topFaceUpCard?.id !== cardId) {
-        return "Only the top card of the draw pile can be played";
-      }
-    } else if (fromPile.type === "work") {
-      // Post piles allow moving any face-up card (with all cards above it)
-      // Card just needs to exist in the pile and be face up (already checked above)
-      const cardIndex = fromPile.cards.findIndex((c) => c.id === cardId);
-      if (cardIndex === -1) return "That card is not in the source pile";
-    } else {
-      // Blitz pile - only top card can be moved
-      const topCard = fromPile.cards[fromPile.cards.length - 1];
-      if (topCard?.id !== cardId) {
-        return "Only the top card of the blurtz pile can be played";
-      }
-    }
-
-    // Validate move based on pile types
-    if (!this.isValidPlacement(toPile, card)) {
-      // The bank piles are shared, so a placement that was legal when the
-      // player picked the card up may have been taken in the meantime.
-      return toPile.type === "bank"
-        ? "That card no longer fits on that bank pile"
-        : "That card cannot be placed there";
-    }
-
-    return null;
-  }
-
-  private findCard(playerDeck: PlayerDeck, cardId: string): Card | null {
-    const allPiles = [
-      playerDeck.blurtzPile,
-      playerDeck.drawPile,
-      ...playerDeck.workPiles,
-    ];
-
-    for (const pile of allPiles) {
-      const card = pile.cards.find((c) => c.id === cardId);
-      if (card) return card;
-    }
-
-    return null;
-  }
-
-  private findPile(
-    playerDeck: PlayerDeck,
-    gameState: any,
-    pileId: string
-  ): Pile | null {
-    if (playerDeck.blurtzPile.id === pileId) return playerDeck.blurtzPile;
-    if (playerDeck.drawPile.id === pileId) return playerDeck.drawPile;
-
-    const workPile = playerDeck.workPiles.find((p) => p.id === pileId);
-    if (workPile) return workPile;
-
-    const bankPile = gameState.bankPiles?.find((p: Pile) => p.id === pileId);
-    if (bankPile) return bankPile;
-
-    return null;
-  }
-
-  private isValidPlacement(pile: Pile, card: Card): boolean {
-    const topCard = pile.cards[pile.cards.length - 1];
-
-    switch (pile.type) {
-      case "work":
-        return PILE_RULES.WORK.canPlace(topCard, card);
-      case "bank":
-        return PILE_RULES.BANK.canPlace(topCard, card);
-      default:
-        return false;
-    }
-  }
-
-  private executeMove(
-    playerDeck: PlayerDeck,
-    gameState: any,
-    cardId: string,
-    fromPileId: string,
-    toPileId: string
-  ): void {
-    const fromPile = this.findPile(playerDeck, gameState, fromPileId);
-    const toPile = this.findPile(playerDeck, gameState, toPileId);
-
-    if (!fromPile || !toPile) return;
-
-    // Find the card index
-    const cardIndex = fromPile.cards.findIndex((c) => c.id === cardId);
-    if (cardIndex === -1) return;
-
-    // A stack move (card + everything above it) only applies work-to-work.
-    // Any move that lands on a non-work pile (e.g. a bank pile) moves just
-    // the single card, even if the source is a work pile.
-    const isStackMove = fromPile.type === "work" && toPile.type === "work";
-    const cardsToMove = isStackMove
-      ? fromPile.cards.splice(cardIndex) // Remove from cardIndex to end
-      : fromPile.cards.splice(cardIndex, 1); // Remove just the one card
-
-    // Add cards to destination pile
-    toPile.cards.push(...cardsToMove);
-
-    // If we moved from blurtz pile, flip next card
-    if (fromPile.type === "blurtz" && fromPile.cards.length > 0) {
-      const nextCard = fromPile.cards[fromPile.cards.length - 1];
-      nextCard.faceUp = true;
-    }
   }
 
   // Snapshot management
