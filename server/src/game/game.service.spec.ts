@@ -148,12 +148,26 @@ describe("GameService", () => {
   // Item 3 & 4: moveCard / executeMove stack-move + bank-pile behaviour.
   // ---------------------------------------------------------------------
   describe("moveCard", () => {
+    // This test used to play the card at the BOTTOM of a work pile straight to
+    // a bank pile - the only fixture that could tell `splice(i)` from
+    // `splice(i, 1)` at this level. That move is now correctly rejected (a
+    // foundation only takes the accessible card), so the fixture has been
+    // re-pointed onto a legal one: the TOP card of a real, legal work pile,
+    // with cards underneath that must survive.
+    //
+    // A legal work→bank move is always the top card, so it can no longer
+    // distinguish the two splice branches here - by construction, nothing at
+    // this level can. That distinction now lives where it can actually be
+    // asked as a counterfactual: `cardsMovedBy` in rules/engine.spec.ts. This
+    // test keeps the other half of the regression: one card leaves, the pile
+    // beneath it is not swept along, and the bank counter moves by exactly one.
     it("moves exactly ONE card from a work pile to a bank pile, not the whole stack", async () => {
-      const cardA = card(CARD_A, 1, CARD_COLORS.RED); // bottom of stack, playable target
-      const cardB = card(CARD_B, 9, CARD_COLORS.BLUE); // stacked above cardA
-      const cardC = card(CARD_C, 2, CARD_COLORS.YELLOW); // stacked above cardB
+      // A legal work pile: descending by one, alternating colour type.
+      const cardB = card(CARD_B, 3, CARD_COLORS.BLUE); // bottom
+      const cardC = card(CARD_C, 2, CARD_COLORS.YELLOW); // middle
+      const cardA = card(CARD_A, 1, CARD_COLORS.RED); // top - the one that plays
 
-      const workPile = { id: "work-1", type: "work", cards: [cardA, cardB, cardC] };
+      const workPile = { id: "work-1", type: "work", cards: [cardB, cardC, cardA] };
       const bankPile = { id: "bank-1", type: "bank", cards: [] };
 
       const playerDeck = {
@@ -186,6 +200,7 @@ describe("GameService", () => {
       const playerUpdateArg = (prismaService.player.update as jest.Mock).mock
         .calls[0][0];
       const updatedWorkPile = playerUpdateArg.data.deck.workPiles[0];
+      // The cards under the one that played are still there, in order.
       expect(updatedWorkPile.cards).toHaveLength(2);
       expect(updatedWorkPile.cards.map((c: Card) => c.id)).toEqual([
         CARD_B,
@@ -198,6 +213,53 @@ describe("GameService", () => {
       const updatedBankPile = gameUpdateArg.data.gameState.bankPiles[0];
       expect(updatedBankPile.cards).toHaveLength(1);
       expect(updatedBankPile.cards[0].id).toBe(CARD_A);
+    });
+
+    // -------------------------------------------------------------------
+    // Task 7 item 2: a buried work-pile card may not be played to a bank
+    // pile. This is the exact fixture that used to be accepted: the move
+    // spliced a card out of the MIDDLE of the pile, left the cards above it
+    // behind as a stack that was never legal, and credited a bank point for
+    // it - repeatable for every face-up card in the pile.
+    // -------------------------------------------------------------------
+    it("rejects a work-pile card played to a bank pile from under other cards", async () => {
+      const cardA = card(CARD_A, 1, CARD_COLORS.RED); // bottom - buried
+      const cardB = card(CARD_B, 9, CARD_COLORS.BLUE);
+      const cardC = card(CARD_C, 2, CARD_COLORS.YELLOW); // top
+
+      const workPile = { id: "work-1", type: "work", cards: [cardA, cardB, cardC] };
+      const bankPile = { id: "bank-1", type: "bank", cards: [] };
+
+      const playerDeck = {
+        blurtzPile: { id: "blurtz-1", type: "blurtz", cards: [] },
+        workPiles: [workPile],
+        drawPile: { id: "draw-1", type: "draw", cards: [] },
+      };
+
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        gameRow({
+          gameState: { bankPiles: [bankPile], currentTurn: 0 },
+          players: [playerRow("player-1", playerDeck)],
+        })
+      );
+
+      const result = await service.moveCard(
+        "game-1",
+        "player-1",
+        CARD_A,
+        "work-1",
+        "bank-1"
+      );
+
+      expect(result.ok).toBe(false);
+      expect((result as { reason: string }).reason).toBe(
+        "Only the top card of a work pile can be played to a bank pile"
+      );
+
+      // The crux: nothing was written, so no free bank point and no corrupt
+      // work pile.
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+      expect(prismaService.game.update).not.toHaveBeenCalled();
     });
 
     it("moves the card AND everything stacked above it for a work-to-work move", async () => {

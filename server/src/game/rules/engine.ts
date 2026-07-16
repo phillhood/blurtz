@@ -94,7 +94,13 @@ export function canPlace(
  * The rules, by source:
  * - draw: only the LAST face-up card is accessible (the top of the waste).
  * - blurtz: only the top card.
- * - work: any face-up card, because it travels with the stack above it.
+ * - work → work: any face-up card, because it travels with the stack above it.
+ * - work → bank: ONLY the top card. This is the one that matters. A buried card
+ *   played straight to a foundation used to be accepted, splicing itself out of
+ *   the middle of the pile and leaving the cards above it behind as a stack
+ *   that was never legal - free score, corrupt board, repeatable for every card
+ *   in the pile. In Nertz a foundation only ever takes the accessible card; a
+ *   buried card moves as part of a stack, and only to another work pile.
  */
 export function moveFromPileRejection(
   fromType: PileType,
@@ -114,6 +120,9 @@ export function moveFromPileRejection(
     case "work": {
       const cardIndex = cards.findIndex((c) => c.id === cardId);
       if (cardIndex === -1) return "That card is not in the source pile";
+      if (toType === "bank" && cardIndex !== cards.length - 1) {
+        return "Only the top card of a work pile can be played to a bank pile";
+      }
       return null;
     }
     default: {
