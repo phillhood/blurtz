@@ -796,28 +796,58 @@ export class GameService {
     });
   }
 
+  /**
+   * Ready up, or un-ready, in the lobby or between rounds.
+   *
+   * `isReady` is the gate on BOTH deals (`assertReadyToDeal`), so a write to
+   * it is a write to the only thing standing between a player and a fresh
+   * hand. It gets the same lock and the same status check as every other
+   * mutator, and it needs both halves:
+   *
+   * - The GUARD, because nothing clears readiness during play - `callBlitz`
+   *   does not. A `true` set while the game was `playing` survived into the
+   *   round_over interstitial and pre-satisfied its gate before anyone had
+   *   looked at the scoreboard, which is the exact multi-round skip 0b7fb3b
+   *   closed from the other end.
+   * - The LOCK, because the guard alone still loses the race. This ran on the
+   *   pooled client, so a ready write could commit AFTER `startGame` or
+   *   `startNextRound` had reset `isReady: false` - the `players` row is not
+   *   covered by the `games` row lock, so the two only serialize if this takes
+   *   the lock too. Behind it, a write that arrives after a deal reads
+   *   `playing` and is refused instead of resurrecting a stale `true`.
+   */
   async setPlayerReady(
     gameId: string,
     playerId: string,
     isReady: boolean
   ): Promise<void> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: { players: true },
-    });
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
 
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
 
-    const player = game.players.find((p) => p.id === playerId);
-    if (!player) {
-      throw new NotFoundException("Player not found");
-    }
+      // The two states a deal can be waiting on, and the only two where
+      // readiness means anything.
+      if (game.status !== "waiting" && game.status !== "round_over") {
+        throw new BadRequestException(
+          "Readiness can only be changed in the lobby or between rounds"
+        );
+      }
 
-    await this.prisma.player.update({
-      where: { id: playerId },
-      data: { isReady },
+      const player = game.players.find((p) => p.id === playerId);
+      if (!player) {
+        throw new NotFoundException("Player not found");
+      }
+
+      await tx.player.update({
+        where: { id: playerId },
+        data: { isReady },
+      });
     });
   }
 
