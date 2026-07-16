@@ -111,8 +111,8 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
         </div>
 
         <div>
-          <label
-            htmlFor="maxPlayers"
+          {/* Heads the +/- buttons, which are not a labellable control. */}
+          <div
             style={{
               display: "block",
               marginBottom: "8px",
@@ -121,7 +121,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
             }}
           >
             Game Size
-          </label>
+          </div>
 
           <div
             style={{
@@ -204,8 +204,9 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
             </button>
           </div>
           <div style={{ marginBottom: "24px" }}>
-            <label
-              htmlFor="gameName"
+            {/* Heads the checkbox group. The checkbox below is labelled by the
+                <label> wrapping it, so this must not claim a control of its own. */}
+            <div
               style={{
                 display: "block",
                 marginBottom: "8px",
@@ -214,7 +215,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               }}
             >
               Private Game
-            </label>
+            </div>
             <label
               style={{
                 display: "flex",

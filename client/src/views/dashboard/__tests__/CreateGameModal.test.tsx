@@ -231,4 +231,26 @@ describe("CreateGameModal", () => {
     ).not.toBeInTheDocument();
     expect(onCreateGame).toHaveBeenCalledWith("xyz", 2, false);
   });
+
+  it("labels the game name field with its own label and nothing else", () => {
+    setup();
+
+    // "Game Name" and "Private Game" are distinct controls. A second
+    // htmlFor="gameName" would make the heading resolve to this input and
+    // append itself to the input's accessible name.
+    expect(screen.getByLabelText("Game Name")).toHaveAttribute("id", "gameName");
+    expect(screen.queryByLabelText("Private Game")).toBeNull();
+    expect(screen.queryByLabelText("Game Size")).toBeNull();
+  });
+
+  it("toggles the private checkbox through its own label", async () => {
+    const { user } = setup();
+
+    const checkbox = screen.getByRole("checkbox");
+    expect(checkbox).not.toBeChecked();
+
+    await user.click(screen.getByText("Only players with the game code can join"));
+
+    expect(checkbox).toBeChecked();
+  });
 });
