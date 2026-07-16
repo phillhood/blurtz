@@ -19,7 +19,6 @@ vi.mock("@services/socket.service", () => ({
     callBlitz: vi.fn(),
     playerReady: vi.fn(),
     startGame: vi.fn(),
-    startNextRound: vi.fn(),
     // Overwritten per-test to stand in for the real getter.
     connected: true,
   },
@@ -638,14 +637,12 @@ describe("gameStore", () => {
       useGameStore.getState().callBlitz();
       useGameStore.getState().playerReady(true);
       useGameStore.getState().startGame();
-      useGameStore.getState().startNextRound();
 
       expect(socketService.moveCard).not.toHaveBeenCalled();
       expect(socketService.flipCard).not.toHaveBeenCalled();
       expect(socketService.callBlitz).not.toHaveBeenCalled();
       expect(socketService.playerReady).not.toHaveBeenCalled();
       expect(socketService.startGame).not.toHaveBeenCalled();
-      expect(socketService.startNextRound).not.toHaveBeenCalled();
     });
 
     it("reports a move that could not be sent", () => {
@@ -659,20 +656,18 @@ describe("gameStore", () => {
       expect(useGameStore.getState().error).toBe("Socket not connected");
     });
 
-    it("flips a pile, calls blitz, readies up, starts and advances against the current game", () => {
+    it("flips a pile, calls blitz, readies up and starts against the current game", () => {
       useGameStore.setState({ gameState: gameState("game-1") });
 
       useGameStore.getState().flipCard("pile-a");
       useGameStore.getState().callBlitz();
       useGameStore.getState().playerReady(true);
       useGameStore.getState().startGame();
-      useGameStore.getState().startNextRound();
 
       expect(socketService.flipCard).toHaveBeenCalledWith("game-1", "pile-a");
       expect(socketService.callBlitz).toHaveBeenCalledWith("game-1");
       expect(socketService.playerReady).toHaveBeenCalledWith("game-1", true);
       expect(socketService.startGame).toHaveBeenCalledWith("game-1");
-      expect(socketService.startNextRound).toHaveBeenCalledWith("game-1");
     });
 
     /**
@@ -706,12 +701,6 @@ describe("gameStore", () => {
           "startGame",
           () => useGameStore.getState().startGame(),
           "Failed to start game",
-        ],
-        [
-          "startNextRound",
-          "startNextRound",
-          () => useGameStore.getState().startNextRound(),
-          "Failed to start the next round",
         ],
       ];
 

@@ -13,20 +13,30 @@ interface ReadySectionProps {
   actWaitingLabel?: string;
   /** Hide the roster when the caller is already showing a scoreboard. */
   showPlayers?: boolean;
+  /**
+   * Between rounds there is no host action: the last ready-up deals the next
+   * round on the server. When set, the "everybody ready" branch shows a
+   * dealing message instead of a start button, and `onAct` / `actLabel` /
+   * `actWaitingLabel` go unused.
+   */
+  autoAdvance?: boolean;
 }
 
 /**
- * "Everybody ready, then the host acts."
+ * "Everybody ready, then it deals."
  *
- * Rendered twice, for the two phases that share that shape: the lobby before
- * round 1, and the interstitial between rounds. The props are only the labels
- * and the action - the readiness gate itself is identical, and deliberately so:
- * it mirrors `assertReadyToDeal`, the ONE server-side predicate that both
- * `startGame` and `startNextRound` are gated on.
+ * Rendered twice, for the two phases that share the readiness gate: the lobby
+ * before round 1, and the interstitial between rounds. The gate itself is
+ * identical, and deliberately so - it mirrors the server's `assertReadyToDeal`.
+ * What differs is who deals once it is satisfied:
  *
- * Nothing here decides anything. The server re-checks all of it and rejects a
- * deal that does not qualify; this only decides what the player can see and
- * press.
+ *  - Lobby (`waiting`): the HOST presses a start button - `onAct`/`actLabel`.
+ *  - Interstitial (`round_over`, `autoAdvance`): nobody presses anything. The
+ *    last ready-up deals the next round on the server, so the "everybody ready"
+ *    branch just says the round is dealing.
+ *
+ * Nothing here decides anything. The server re-checks all of it; this only
+ * decides what the player can see and press.
  */
 const ReadySection: React.FC<ReadySectionProps> = ({
   onAct,
@@ -34,6 +44,7 @@ const ReadySection: React.FC<ReadySectionProps> = ({
   actLabel,
   actWaitingLabel,
   showPlayers = true,
+  autoAdvance = false,
 }) => {
   const { user } = useAuthContext();
   const { gameState, currentPlayer, startGame } = useGameContext();
@@ -53,17 +64,32 @@ const ReadySection: React.FC<ReadySectionProps> = ({
         </div>
       )}
 
-      {allPlayersReady && (
-        <StartGameButton
-          onStartGame={onAct ?? startGame}
-          playerCount={players.length}
-          readyCount={readyCount}
-          disabled={status !== activeStatus}
-          isHost={isHost}
-          label={actLabel}
-          waitingLabel={actWaitingLabel}
-        />
-      )}
+      {allPlayersReady &&
+        (autoAdvance ? (
+          // No host action between rounds - the server has already dealt (or
+          // is about to) off the final ready-up. This is the transient screen
+          // the last player sees before the fresh `playing` board arrives.
+          <p
+            style={{
+              fontSize: "16px",
+              color: "#6b7280",
+              fontStyle: "italic",
+              marginTop: "20px",
+            }}
+          >
+            Everyone's ready - dealing the next round...
+          </p>
+        ) : (
+          <StartGameButton
+            onStartGame={onAct ?? startGame}
+            playerCount={players.length}
+            readyCount={readyCount}
+            disabled={status !== activeStatus}
+            isHost={isHost}
+            label={actLabel}
+            waitingLabel={actWaitingLabel}
+          />
+        ))}
 
       {!allPlayersReady && (
         <p style={{ fontSize: "14px", color: "#6b7280" }}>

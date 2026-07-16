@@ -7,7 +7,6 @@ const gameContext = {
   gameState: null as GameState | null,
   currentPlayer: null as unknown,
   playerReady: vi.fn(),
-  startNextRound: vi.fn(),
 };
 
 vi.mock("@hooks", () => ({

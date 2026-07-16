@@ -17,7 +17,6 @@ vi.mock("@services/socket.service", () => ({
     callBlitz: vi.fn(),
     playerReady: vi.fn(),
     startGame: vi.fn(),
-    startNextRound: vi.fn(),
     connected: true,
   },
 }));
@@ -220,17 +219,16 @@ describe("useGameContext", () => {
     expect(socketService.callBlitz).not.toHaveBeenCalled();
   });
 
-  it("starts the game and the next round without needing a seat", () => {
-    // These two are deliberately unguarded - the server decides who may start
-    // what, and the buttons only render for the people who may.
+  it("starts the game without needing a seat", () => {
+    // Deliberately unguarded - the server decides who may start, and the button
+    // only renders for the host. (Round advance is no longer a client action:
+    // the last ready-up deals the next round on the server.)
     useGameStore.setState({ gameState: inGame() });
     const { result } = renderHook(() => useGameContext());
 
     act(() => result.current.startGame());
-    act(() => result.current.startNextRound());
 
     expect(socketService.startGame).toHaveBeenCalledWith("game-1");
-    expect(socketService.startNextRound).toHaveBeenCalledWith("game-1");
   });
 
   it("exposes the two error channels separately", () => {

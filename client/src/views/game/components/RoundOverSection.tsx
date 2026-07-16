@@ -6,15 +6,17 @@ import { ReadySection, RoundScoreboard } from ".";
  * The interstitial between rounds.
  *
  * Reached when a Blitz was scored and nobody has reached `targetScore` yet.
- * The scoreboard shows where everyone stands; below it, the same
- * ready-up-then-host-acts flow the lobby uses, because it is the same
- * transition with a different verb.
+ * The scoreboard shows where everyone stands; below it, the ready-up controls.
+ * There is no host action here any more - the moment the last player readies
+ * up the server deals the next round and broadcasts the fresh `playing` board,
+ * which this component is replaced by. `autoAdvance` is what tells
+ * `ReadySection` not to draw a start button.
  *
  * `showPlayers={false}` because the scoreboard above already names every
  * player - the roster would just say it again without the scores.
  */
 const RoundOverSection: React.FC = () => {
-  const { gameState, startNextRound } = useGameContext();
+  const { gameState } = useGameContext();
   const round = gameState?.currentRound ?? 1;
 
   return (
@@ -26,13 +28,7 @@ const RoundOverSection: React.FC = () => {
 
       <RoundScoreboard />
 
-      <ReadySection
-        onAct={startNextRound}
-        activeStatus="round_over"
-        actLabel={`Start Round ${round + 1}`}
-        actWaitingLabel="Waiting for host to deal the next round..."
-        showPlayers={false}
-      />
+      <ReadySection showPlayers={false} autoAdvance />
     </div>
   );
 };

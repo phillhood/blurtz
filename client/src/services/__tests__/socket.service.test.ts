@@ -263,12 +263,6 @@ describe("socketService emits", () => {
       gameId: "game-1",
     });
 
-    socketService.startNextRound("game-1");
-    expect(fakeSocket.emit).toHaveBeenCalledWith(
-      SOCKET_EVENTS.START_NEXT_ROUND,
-      { gameId: "game-1" }
-    );
-
     socketService.callBlitz("game-1");
     expect(fakeSocket.emit).toHaveBeenCalledWith(SOCKET_EVENTS.CALL_BLITZ, {
       gameId: "game-1",
@@ -314,9 +308,6 @@ describe("socketService emits", () => {
     expect(() => socketService.joinGame("game-1")).toThrow("Socket not connected");
     expect(() => socketService.leaveGame("game-1")).toThrow("Socket not connected");
     expect(() => socketService.startGame("game-1")).toThrow("Socket not connected");
-    expect(() => socketService.startNextRound("game-1")).toThrow(
-      "Socket not connected"
-    );
     expect(() => socketService.callBlitz("game-1")).toThrow("Socket not connected");
     expect(() => socketService.forfeitGame("game-1")).toThrow(
       "Socket not connected"
@@ -355,9 +346,6 @@ describe("socketService emits", () => {
     expect(() => socketService.joinGame("game-1")).toThrow("Socket not connected");
     expect(() => socketService.leaveGame("game-1")).toThrow("Socket not connected");
     expect(() => socketService.startGame("game-1")).toThrow("Socket not connected");
-    expect(() => socketService.startNextRound("game-1")).toThrow(
-      "Socket not connected"
-    );
     expect(() => socketService.callBlitz("game-1")).toThrow("Socket not connected");
     expect(() => socketService.flipCard("game-1", "pile-a")).toThrow(
       "Socket not connected"

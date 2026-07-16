@@ -3,6 +3,7 @@ import {
   emptyBlurtzPile,
   readGameRow,
   readPlayerId,
+  readyButton,
   readyUp,
   readyUpAndStart,
   seatTwoPlayers,
@@ -101,18 +102,17 @@ test.describe("Rounds", () => {
     await expect(hostPage.getByRole("button", { name: /Ready Up/ })).toBeVisible();
     await expect(startButton(hostPage)).toHaveCount(0);
 
+    // No host action between rounds. The host readies up first; the guest's
+    // ready-up is the LAST one, and the moment it lands the server deals round
+    // 2 and broadcasts the fresh board. So the guest's page jumps straight to
+    // "Game in progress!" and never shows its own "Cancel Ready" - which is why
+    // this clicks the button directly rather than using `readyUp`, whose wait
+    // for the flipped label would never resolve.
     await readyUp(hostPage);
-    await readyUp(guestPage);
+    await readyButton(guestPage).click();
 
-    const nextRound = hostPage.getByRole("button", { name: "Start Round 2" });
-    await expect(nextRound).toBeEnabled();
-    await expect(
-      guestPage.getByText("Waiting for host to deal the next round...")
-    ).toBeVisible();
-    await nextRound.click();
-
-    // Round 2 is dealt, and the per-round bank count went back to zero while
-    // the cumulative score survived the deal.
+    // Round 2 is dealt automatically - no button was pressed - and the per-round
+    // bank count went back to zero while the cumulative score survived the deal.
     for (const page of [hostPage, guestPage]) {
       await expect(statusHeading(page)).toHaveText("Game in progress!");
       await expect(page.getByText("Round 2")).toBeVisible();
@@ -131,14 +131,13 @@ test.describe("Rounds", () => {
    * The round-over gate exists to make players confirm they are ready for the
    * next round. This asserts it is actually shut when the interstitial opens.
    *
-   * It used to be a `test.fail()`. The asymmetry was the tell:
-   * `startNextRound` dealt with
+   * It used to be a `test.fail()`. The asymmetry was the tell: the round
+   * advance dealt with
    * `dealDecks(tx, players, { bankPileCount: 0, roundScore: 0, isReady: false })`,
    * but `startGame` dealt with `dealDecks(tx, game.players)` - no reset - so
    * the `isReady: true` everyone set in the LOBBY survived all of round 1 and
    * was still there at `round_over` (`callBlitz` does not clear it either).
-   * The host could deal round 2 before either player had looked at the
-   * scoreboard.
+   * Round 2 could deal before either player had looked at the scoreboard.
    *
    * The gate was therefore skipped exactly once, on the round 1 -> 2
    * transition, and worked for every round after that - because round 2 was
@@ -148,9 +147,10 @@ test.describe("Rounds", () => {
    * roster: `RoundOverSection` renders `<ReadySection showPlayers={false}>`
    * (the scoreboard above it already names everybody), so there are no
    * "✓ Ready"/"✗ Not Ready" cards on this screen to read. `ReadyButton`'s
-   * label is `currentPlayer.isReady` straight off the server's state, and the
-   * host's deal button is rendered behind `allPlayersReady` - which is the
-   * gate itself, so pressing on it is the assertion that matters.
+   * label is `currentPlayer.isReady` straight off the server's state. There is
+   * no host deal button any more - the round would advance the instant the
+   * table went ready - so a shut gate is a table showing "Ready Up" and NOT the
+   * "dealing the next round" message.
    */
   test("a round ending clears everyone's readiness", async ({ browser }) => {
     const seated = await seatTwoPlayers(browser);
@@ -172,8 +172,12 @@ test.describe("Rounds", () => {
       ).toBeVisible();
     }
 
-    // The gate is shut, not merely drawn: the host's deal button is rendered
-    // behind `allPlayersReady`, so there is nothing to click.
+    // The gate is shut, not auto-dealing: with nobody ready, the interstitial
+    // is not showing the "dealing the next round" message, and the old host
+    // "Start Round 2" button is gone for good.
+    for (const page of [hostPage, guestPage]) {
+      await expect(page.getByText(/dealing the next round/i)).toHaveCount(0);
+    }
     await expect(
       hostPage.getByRole("button", { name: "Start Round 2" })
     ).toHaveCount(0);

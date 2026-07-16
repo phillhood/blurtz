@@ -34,7 +34,6 @@ vi.mock("@services/socket.service", () => ({
     callBlitz: vi.fn(),
     playerReady: vi.fn(),
     startGame: vi.fn(),
-    startNextRound: vi.fn(),
     connected: true,
   },
 }));
@@ -218,7 +217,10 @@ describe("the round-over interstitial", () => {
     expect(socketService.playerReady).not.toHaveBeenCalled();
   });
 
-  it("only offers the host the deal, once everyone is ready", async () => {
+  // There is no host action between rounds any more. The moment the last
+  // player readies up the server deals the next round and broadcasts the fresh
+  // `playing` board; while the table is complete the interstitial just says so.
+  it("shows a dealing message once everyone is ready, with no host button", async () => {
     const callbacks = await registeredCallbacks();
     renderGame();
 
@@ -234,14 +236,17 @@ describe("the round-over interstitial", () => {
       });
     });
 
-    const startButton = screen.getByRole("button", { name: /Start Round 3/i });
-    await userEvent.click(startButton);
-
-    expect(socketService.startNextRound).toHaveBeenCalledWith("game-1");
+    expect(screen.getByText(/dealing the next round/i)).toBeInTheDocument();
+    // No "Start Round N" button, and no "waiting for host" copy - both are gone
+    // with the host trigger.
+    expect(
+      screen.queryByRole("button", { name: /Start Round/i })
+    ).not.toBeInTheDocument();
+    expect(screen.queryByText(/Waiting for host/i)).not.toBeInTheDocument();
   });
 
-  it("tells a non-host to wait for the deal instead of offering it", async () => {
-    // bob is not the host.
+  it("shows the same dealing message to a non-host, leaving nobody on a dead screen", async () => {
+    // bob is not the host - and now sees exactly what the host does.
     useAuthStore.setState({
       user: { id: "user-p2", username: "bob" },
     } as never);
@@ -261,9 +266,7 @@ describe("the round-over interstitial", () => {
       });
     });
 
-    expect(
-      screen.getByText(/Waiting for host to deal the next round/i)
-    ).toBeInTheDocument();
+    expect(screen.getByText(/dealing the next round/i)).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: /Start Round/i })
     ).not.toBeInTheDocument();

@@ -276,13 +276,6 @@ class SocketService {
     this.socket.emit(SOCKET_EVENTS.START_GAME, { gameId });
   }
 
-  startNextRound(gameId: string) {
-    if (!this.socket?.connected) {
-      throw new Error("Socket not connected");
-    }
-    this.socket.emit(SOCKET_EVENTS.START_NEXT_ROUND, { gameId });
-  }
-
   moveCard(
     gameId: string,
     cardId: string,

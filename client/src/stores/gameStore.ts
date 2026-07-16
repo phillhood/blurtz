@@ -55,7 +55,6 @@ interface GameStoreActions {
   callBlitz: () => void;
   playerReady: (isReady: boolean) => void;
   startGame: () => void;
-  startNextRound: () => void;
   // Util
   clearError: () => void;
   setError: (error: string | null) => void;
@@ -378,22 +377,6 @@ export const useGameStore = create<GameStore>()(
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to start game",
-          });
-        }
-      },
-
-      startNextRound: () => {
-        const { gameState } = get();
-        if (!gameState) return;
-
-        try {
-          socketService.startNextRound(gameState.id);
-        } catch (error) {
-          set({
-            error:
-              error instanceof Error
-                ? error.message
-                : "Failed to start the next round",
           });
         }
       },
