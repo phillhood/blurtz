@@ -206,40 +206,43 @@ test.describe("Rounds", () => {
   });
 
   /**
-   * BUG (real, user-facing, not fixed here - out of scope for this task).
+   * The other end of the test above: the server said the game was won, and
+   * this asserts that a PLAYER finds out.
    *
-   * Winning by Blitz - the game's whole point - is never shown to anybody.
+   * It used to be a `test.fail()`. `client/src/services/socket.service.ts`
+   * never subscribed to `SOCKET_EVENTS.GAME_ENDED`, so the callback declared
+   * on `SocketCallbacks` and implemented in `gameStore` was dead code - no
+   * `this.socket.on(SOCKET_EVENTS.GAME_ENDED, ...)` existed to call it. A game
+   * won on points sat on "Game in progress!" until somebody reloaded: the win
+   * condition, which is the entire point of the game, was invisible.
    *
-   * `client/src/services/socket.service.ts` never subscribes to
-   * `SOCKET_EVENTS.GAME_ENDED`. The callback is declared on `SocketCallbacks`
-   * and `gameStore` implements it (`set({ gameState: data.gameState })`), but
-   * no `this.socket.on(SOCKET_EVENTS.GAME_ENDED, ...)` exists to ever call it.
-   * The handler is dead code. The server emits the event correctly on both
-   * paths - the test above reads it off the wire.
+   * Forfeiting LOOKED fine, which is why this survived so long:
+   * `handleForfeitGame` emits `GAME_STATE_UPDATED` before `GAME_ENDED`, and it
+   * is that first event - one the client did subscribe to - which updated the
+   * board. `handleCallBlitz` emits only `BLITZ_CALLED` and `GAME_ENDED`, so
+   * the Blitz path had nothing to fall back on.
    *
-   * So a game won on points sits on "Game in progress!" until someone reloads.
-   *
-   * Forfeiting LOOKS fine, which is why this survived: `handleForfeitGame`
-   * emits `GAME_STATE_UPDATED` before `GAME_ENDED`, and it is that first event
-   * - one the client does subscribe to - which updates the board.
-   * `handleCallBlitz` emits only `BLITZ_CALLED` and `GAME_ENDED`, so the
-   * blitz path has nothing to fall back on.
+   * Asserted through the heading and not the store, because the heading is
+   * what a player actually sees. The winner is named: it used to interpolate
+   * `gameState.winner` - a Player id - straight into the text.
    */
   test("the client shows a game won by Blitz as finished", async ({ browser }) => {
-    test.fail(
-      true,
-      "socket.service.ts never subscribes to GAME_ENDED, so gameStore.onGameEnded is dead code"
-    );
-
     const seated = await seatTwoPlayers(browser);
-    const { hostPage } = seated;
+    const { hostPage, guestPage, host } = seated;
 
     await readyUpAndStart(seated);
     await setTargetScore(seated.game.id, 5);
     await armBlurtz(seated, 6);
     await hostPage.getByRole("button", { name: "BLURTZ!" }).click();
 
-    await expect(statusHeading(hostPage)).toContainText("Game finished!");
+    // Both browsers, not just the winner's: `game_ended` goes to the room.
+    for (const page of [hostPage, guestPage]) {
+      await expect(statusHeading(page)).toContainText("Game finished!");
+      // The winner by name. A UUID here is the bug this test was written for.
+      await expect(statusHeading(page)).toContainText(
+        `Winner: ${host.username}`
+      );
+    }
 
     await seated.close();
   });

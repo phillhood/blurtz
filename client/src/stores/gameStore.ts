@@ -150,11 +150,11 @@ export const useGameStore = create<GameStore>()(
             }
           },
 
-          onGameEnded: (data: {
-            gameState: GameState;
-            reason: string;
-            winner?: Player;
-          }) => {
+          // Swap the state in, exactly like every other event here. It arrives
+          // with `status: "finished"` and `winner` set, and the final
+          // scoreboard renders itself off that - the client does not decide
+          // who won.
+          onGameEnded: (data: { gameState: GameState }) => {
             set({ gameState: data.gameState, error: null });
           },
 

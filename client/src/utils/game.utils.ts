@@ -9,12 +9,17 @@ export const getGameStatusTitle = (
   status: string,
   playerCount: number,
   maxPlayers: number,
-  // `string | null` because that is what the server sends: `readGameState`
-  // resolves `winner: winner?.id || null`, and a game can finish with no
-  // winner at all (everyone forfeited). The client's hand-copied GameState
-  // said `winner?: string`, which was simply untrue - now that the type comes
-  // from the shared package, the compiler says so.
-  winner?: string | null
+  // The winner's USERNAME, resolved by the caller from `gameState.players`.
+  //
+  // `gameState.winner` is a Player id, and this used to interpolate it raw -
+  // so the one screen that announces the whole point of the game greeted the
+  // winner with a UUID.
+  //
+  // `string | null | undefined` because a finished game need not have a
+  // winner: `readGameState` resolves `winner: winner?.id || null`, and a game
+  // where everybody forfeited finishes with nobody. That case used to render
+  // the literal text "Winner: null".
+  winnerName?: string | null
 ): string => {
   switch (status) {
     case "waiting":
@@ -26,7 +31,7 @@ export const getGameStatusTitle = (
     case "round_over":
       return `Round over!`;
     case "finished":
-      return `Game finished! - Winner: ${winner}`;
+      return winnerName ? `Game finished! - Winner: ${winnerName}` : `Game finished!`;
     default:
       return "Unknown status";
   }

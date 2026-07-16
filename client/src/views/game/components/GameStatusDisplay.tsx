@@ -24,6 +24,10 @@ const GameStatusDisplay: React.FC = () => {
   // Rounds are only meaningful once there is a game to count them in.
   const showRoundCounter =
     status === "playing" || status === "round_over" || status === "finished";
+  // `winner` is a Player id. The heading wants a name, and the roster is the
+  // only place one exists - `undefined` if the game finished with no winner,
+  // which the title handles.
+  const winnerName = players.find((p) => p.id === winner)?.username;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(gameState?.alias || "");
@@ -38,7 +42,7 @@ const GameStatusDisplay: React.FC = () => {
           status || "waiting",
           playerCount,
           maxPlayers || 2,
-          winner
+          winnerName
         )}
       </h2>
 

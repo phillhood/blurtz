@@ -13,10 +13,27 @@ export interface SocketCallbacks {
   onGameLeft?: (gameId: string) => void;
   onGameStateUpdated?: (gameState: GameState) => void;
   onGameStarted?: (gameState: GameState) => void;
+  /**
+   * The game is over. Shaped after what the gateway ACTUALLY emits, which is
+   * not one shape but two:
+   *
+   *   - `handleCallBlitz` sends `{ gameState, reason: "blitz", winnerId,
+   *     scores, calledBy, timestamp }`
+   *   - `handleForfeitGame` sends `{ gameState, reason: "forfeit", winner,
+   *     timestamp }` - and `winner` is `undefined` when the game finished with
+   *     nobody left to win it.
+   *
+   * So everything except `gameState` and `reason` is optional here. Nothing
+   * needs to pick between them: `gameState.winner` carries the winning
+   * player's id on both paths, and that is what the UI reads.
+   */
   onGameEnded?: (data: {
     gameState: GameState;
     reason: string;
-    winner: Player;
+    winnerId?: string | null;
+    winner?: Player;
+    scores?: Record<string, number>;
+    calledBy?: string;
   }) => void;
   onPlayerJoined?: (data: { gameState?: GameState; userId: string }) => void;
   onPlayerLeft?: (data: { gameState?: GameState; userId: string }) => void;
@@ -127,6 +144,26 @@ class SocketService {
       SOCKET_EVENTS.GAME_STARTED,
       (data: { gameState: GameState }) => {
         this.callbacks.onGameStarted?.(data.gameState);
+      }
+    );
+
+    // The end of the game. This subscription did not exist, so
+    // `gameStore.onGameEnded` was dead code and a game won by Blitz sat on
+    // "Game in progress!" until the player reloaded - the win condition was
+    // invisible. Forfeiting only looked fine because the gateway emits
+    // GAME_STATE_UPDATED before GAME_ENDED on that path, and that first event
+    // is subscribed; the Blitz path has no such fallback.
+    this.socket.on(
+      SOCKET_EVENTS.GAME_ENDED,
+      (data: {
+        gameState: GameState;
+        reason: string;
+        winnerId?: string | null;
+        winner?: Player;
+        scores?: Record<string, number>;
+        calledBy?: string;
+      }) => {
+        this.callbacks.onGameEnded?.(data);
       }
     );
 
