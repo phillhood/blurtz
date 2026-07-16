@@ -44,6 +44,11 @@ export const SOCKET_EVENTS = {
   FORFEIT_GAME: "forfeit_game",
   CREATE_ROOM: "create_game",
   START_GAME: "start_game",
+  // Deal the next round of a `round_over` game. Deliberately NOT START_GAME:
+  // the two share a gate (host + everyone ready) but not an outcome - one
+  // deals round 1 of a `waiting` game, the other advances an in-progress one
+  // and must never be able to re-deal a game that is already `playing`.
+  START_NEXT_ROUND: "start_next_round",
   MOVE_CARD: "move_card",
   FLIP_CARD: "flip_card",
   CALL_BLITZ: "call_blitz",
@@ -54,6 +59,11 @@ export const SOCKET_EVENTS = {
   ROOM_LEFT: "game_left",
   ROOM_CREATED: "game_created",
   GAME_STARTED: "game_started",
+  // A Blitz was scored but nobody reached targetScore: the round is over and
+  // the next one is waiting on everybody to ready up.
+  ROUND_OVER: "round_over",
+  // The next round has been dealt. Carries fresh state, like GAME_STARTED.
+  ROUND_STARTED: "round_started",
   GAME_STATE_UPDATED: "game_state_updated",
   CARD_MOVED: "card_moved",
   // Sent only to the player whose move was refused, and always with state:

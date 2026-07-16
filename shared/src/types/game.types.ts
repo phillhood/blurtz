@@ -66,15 +66,36 @@ export interface Player {
   user: User;
   isReady: boolean;
   deck: PlayerDeck;
+  /**
+   * CUMULATIVE across every round played so far - this is what `targetScore`
+   * is compared against, and a round advance must never reset it.
+   *
+   * It used to be neither: `callBlitz` OVERWROTE it with the round's score
+   * every time, which was invisible while there was only ever one round.
+   */
   score: number;
+  /** This round's score alone. Reset to 0 on every round advance. */
+  roundScore: number;
+  /** Cards banked THIS round. Reset on every round advance; `score` is not. */
   bankPileCount: number;
 }
 
-// Game status
+/**
+ * Game status.
+ *
+ * `round_over` is the interstitial between rounds: the Blitz has been scored
+ * but nobody has reached `targetScore`, so the game is waiting for every
+ * player to ready up before it deals the next round.
+ *
+ * `starting` and `paused` are still unreachable. They are kept because
+ * removing a value from a Postgres enum means rebuilding the type and every
+ * column that uses it - and `starting` has a use ahead of it as a countdown.
+ */
 export type GameStatus =
   | "waiting"
   | "starting"
   | "playing"
+  | "round_over"
   | "paused"
   | "finished";
 
@@ -117,7 +138,17 @@ export interface GameState extends GameListing {
   hostId: string;
   players: Player[];
   bankPiles: Pile[];
+  /**
+   * 1-BASED. A game is in round 1 from creation until the first Blitz, so
+   * there is no round 0 and no gap between the number stored and the number a
+   * player is shown.
+   *
+   * `readGameState` used to hard-code this to 0 and no round ever advanced.
+   */
   currentRound: number;
+  /** The cumulative score that ends the game when any player reaches it. */
+  targetScore: number;
+  /** The winning PLAYER's id, or null - including while a game is unfinished. */
   winner?: string | null;
 }
 
@@ -163,11 +194,7 @@ export interface MoveCardEvent {
   toPosition: number;
 }
 
-// Snapshot types
-export interface GameSnapshot {
-  id: string;
-  gameId: string;
-  round: number;
-  state: GameState;
-  createdAt: Date;
-}
+// `GameSnapshot` used to live here, mirroring a `game_snapshots` table that
+// held one whole-state JSON blob per game and had no readers on either side.
+// Both are gone: the per-round scoring inputs are in `round_results` now, which
+// is a scoreboard you can query rather than a dump you have to replay.

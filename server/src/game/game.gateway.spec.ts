@@ -692,8 +692,13 @@ describe("GameGateway", () => {
         success: true,
         winnerId: CONNECTED_PLAYER_ID,
         scores: {},
+        roundScores: {},
+        status: "finished",
+        round: 1,
+        // The handler redacts and emits the state the call returns, rather
+        // than re-reading it - so the mock has to supply one.
+        state: { id: GAME_ID, players: [], bankPiles: [] } as never,
       });
-      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
 
       await gateway.handleCallBlitz(asSocket(client), { gameId: GAME_ID });
 

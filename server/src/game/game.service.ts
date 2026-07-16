@@ -8,6 +8,7 @@ import {
 } from "@nestjs/common";
 import { PrismaService } from "@prisma";
 import { PlayerDeckSchema } from "@schemas";
+import { UserService } from "@user/user.service";
 import { generateAlias, generateAliasWithNumber } from "@utils";
 import { DbClient, GameRepository } from "./game.repository";
 // The rules engine, its constants and the domain types: one package, resolved
@@ -36,8 +37,54 @@ export class GameService {
 
   constructor(
     private prisma: PrismaService,
-    private gameRepository: GameRepository
+    private gameRepository: GameRepository,
+    private userService: UserService
   ) {}
+
+  /**
+   * Refuse to deal unless the table is ready.
+   *
+   * ONE predicate, TWO call sites: `startGame` (deal round 1 of a `waiting`
+   * game) and `startNextRound` (advance a `round_over` one). They are separate
+   * transitions with separate outcomes, but "may these players be dealt to?"
+   * is the same question both times, and this is the only place that answers
+   * it. `isReady` had no server-side meaning at all before this - it was a
+   * lobby decoration the client drew and nothing enforced.
+   */
+  private assertReadyToDeal(
+    players: Array<{ isReady: boolean }>,
+    action: string
+  ): void {
+    if (players.length < GAME_CONSTANTS.MIN_PLAYERS) {
+      throw new BadRequestException(`Not enough players to ${action}`);
+    }
+
+    if (!players.every((p) => p.isReady)) {
+      throw new BadRequestException(`All players must be ready to ${action}`);
+    }
+  }
+
+  /**
+   * Deal every player a fresh 40-card deck.
+   *
+   * `reset` is merged into the same write, so a round advance is one update
+   * per player rather than two. What it carries is the per-round counters -
+   * and what it must NEVER carry is `score`, which is cumulative and is the
+   * only thing `targetScore` is measured against.
+   */
+  private async dealDecks(
+    tx: DbClient,
+    players: Array<{ id: string }>,
+    reset: Record<string, unknown> = {}
+  ): Promise<void> {
+    for (const player of players) {
+      const deck = dealCards(players.length);
+      await tx.player.update({
+        where: { id: player.id },
+        data: { deck: JSON.parse(JSON.stringify(deck)), ...reset },
+      });
+    }
+  }
 
   /**
    * Guard the JSON→domain boundary for a deck read out of the database.
@@ -114,7 +161,9 @@ export class GameService {
         isPrivate: true,
         status: true,
         hostId: true,
-        winnerId: true,
+        winnerPlayerId: true,
+        currentRound: true,
+        targetScore: true,
         createdAt: true,
         updatedAt: true,
         players: {
@@ -123,6 +172,7 @@ export class GameService {
             userId: true,
             isReady: true,
             score: true,
+            roundScore: true,
             bankPileCount: true,
             user: {
               select: { id: true, username: true },
@@ -364,7 +414,14 @@ export class GameService {
       // Otherwise, normal leave logic for waiting games
       const remainingPlayers = game.players.filter((p) => p.id !== player.id);
 
-      // If no players left in waiting game, mark as finished
+      // If no players left in waiting game, mark as finished.
+      //
+      // No `recordGameResults` here, deliberately. This game was never played
+      // - it is a lobby nobody turned up to, reaching `finished` because that
+      // is the only terminal status there is. Crediting a gamesPlayed for it
+      // would let anyone inflate their stats by creating and leaving games in
+      // a loop. Stats are credited where a game is actually DECIDED: a Blitz
+      // that reaches the target, or a forfeit out of a `playing` game.
       if (remainingPlayers.length === 0) {
         await tx.game.update({
           where: { id: gameId },
@@ -403,7 +460,9 @@ export class GameService {
     return this.gameRepository.withGameLock(gameId, async (tx) => {
       const game = await tx.game.findUnique({
         where: { id: gameId },
-        include: { players: { select: { id: true } } },
+        // `userId` is selected because a forfeit that ends the game credits
+        // every player's User row with it.
+        include: { players: { select: { id: true, userId: true } } },
       });
 
       if (!game) {
@@ -425,7 +484,11 @@ export class GameService {
    */
   private async applyForfeit(
     tx: DbClient,
-    game: { id: string; status: string; players: Array<{ id: string }> },
+    game: {
+      id: string;
+      status: string;
+      players: Array<{ id: string; userId: string }>;
+    },
     playerId: string
   ): Promise<GameState> {
     if (game.status !== "playing") {
@@ -446,20 +509,33 @@ export class GameService {
         where: { id: game.id },
         data: {
           status: "finished",
-          winnerId: winner.id,
+          winnerPlayerId: winner.id,
         },
       });
+      // A forfeit is a real finish: the winner won it and the forfeiter played
+      // it. Both get a gamesPlayed. Fired here rather than in `forfeitGame` so
+      // it covers the socket forfeit AND `leaveGame`'s forfeit path, which is
+      // the same ending reached by a different door.
+      await this.userService.recordGameResults(tx, [
+        { userId: winner.userId, won: true },
+        { userId: player.userId, won: false },
+      ]);
       this.logger.log(`Player ${playerId} forfeited game ${game.id} - winner: ${winner.id}`);
     } else if (remainingPlayers.length === 0) {
       await tx.game.update({
         where: { id: game.id },
         data: {
           status: "finished",
-          winnerId: null,
+          winnerPlayerId: null,
         },
       });
+      // Nobody is left to win it, but the player who was here played it.
+      await this.userService.recordGameResults(tx, [
+        { userId: player.userId, won: false },
+      ]);
       this.logger.log(`Player ${playerId} forfeited game ${game.id} - no remaining players`);
     }
+    // More than one player left: the game plays on and nothing is credited.
     await tx.player.delete({ where: { id: player.id } });
 
     return this.readGameState(tx, game.id);
@@ -512,34 +588,89 @@ export class GameService {
         throw new ForbiddenException("You are not a player in this game");
       }
 
-      if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {
-        throw new BadRequestException("Not enough players to start the game");
-      }
+      this.assertReadyToDeal(game.players, "start the game");
 
-      if (!game.players.every((p) => p.isReady)) {
-        throw new BadRequestException(
-          "All players must be ready to start the game"
-        );
-      }
-
-      for (const player of game.players) {
-        const deck = dealCards(game.players.length);
-        await tx.player.update({
-          where: { id: player.id },
-          data: { deck: JSON.parse(JSON.stringify(deck)) },
-        });
-      }
+      await this.dealDecks(tx, game.players);
 
       await tx.game.update({
         where: { id: gameId },
         data: { status: "playing" },
       });
 
-      // Create initial snapshot when game starts
-      await this.createSnapshot(tx, gameId, 0);
+      this.logger.log(
+        `Game ${gameId} started with ${game.players.length} players ` +
+          `(round ${game.currentRound}, target ${game.targetScore})`
+      );
+      return this.readGameState(tx, gameId);
+    });
+  }
+
+  /**
+   * Deal the next round of a game whose round is over.
+   *
+   * The other half of the state machine `callBlitz` opened:
+   *
+   *   round_over --(host acts, all players ready)--> playing
+   *
+   * Deliberately not folded into `startGame`. The two share a gate and share
+   * `dealDecks`, but `startGame` only ever deals a `waiting` game and this one
+   * only ever deals a `round_over` one - and a method that could do either
+   * would be one status check away from re-dealing a game in progress, which
+   * is every player's hand gone mid-race.
+   *
+   * Runs under the game lock for the same reason `startGame` does: the deal,
+   * the counter resets, the round bump and the board reset are one atomic
+   * change or they are a game nobody can play.
+   */
+  async startNextRound(gameId: string, userId: string): Promise<GameState> {
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
+
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      // Also what stops two hosts' clicks racing into a double round bump: the
+      // second one blocks on the lock, then reads `playing` and bails.
+      if (game.status !== "round_over") {
+        throw new BadRequestException("The round is not over");
+      }
+
+      if (game.hostId !== userId) {
+        throw new ForbiddenException("Only the host can start the next round");
+      }
+
+      if (!game.players.some((p) => p.userId === userId)) {
+        throw new ForbiddenException("You are not a player in this game");
+      }
+
+      this.assertReadyToDeal(game.players, "start the next round");
+
+      // Fresh decks, and the per-round counters zeroed in the same write.
+      // `score` is NOT in this list and must never be: it is the running total
+      // the game is played to.
+      await this.dealDecks(tx, game.players, {
+        bankPileCount: 0,
+        roundScore: 0,
+        isReady: false,
+      });
+
+      await tx.game.update({
+        where: { id: gameId },
+        data: {
+          status: "playing",
+          currentRound: { increment: 1 },
+          // The shared board goes back to empty foundations. Bank piles are
+          // per-round: last round's 1-10 runs are scored and gone.
+          gameState: initializeGameState() as unknown as object,
+        },
+      });
 
       this.logger.log(
-        `Game ${gameId} started with ${game.players.length} players`
+        `Game ${gameId} advanced to round ${game.currentRound + 1}`
       );
       return this.readGameState(tx, gameId);
     });
@@ -577,7 +708,6 @@ export class GameService {
       throw new NotFoundException("Game not found");
     }
 
-    const winner = game.players.find((p) => p.id === game.winnerId) || null;
     const gameState = game.gameState as any;
 
     return {
@@ -594,12 +724,21 @@ export class GameService {
         isReady: p.isReady,
         deck: p.deck as unknown as PlayerDeck,
         score: p.score,
+        roundScore: p.roundScore,
         bankPileCount: p.bankPileCount,
       })),
       bankPiles: gameState?.bankPiles || createBankPiles(),
       status: game.status,
-      currentRound: 0,
-      winner: winner?.id || null,
+      // Both read straight off the row now. `currentRound` was hard-coded to 0
+      // here, which is why no round ever appeared to advance no matter what
+      // the rest of the code did.
+      currentRound: game.currentRound,
+      targetScore: game.targetScore,
+      // Read directly rather than resolved through `players.find`. The column
+      // is a real foreign key with ON DELETE SET NULL now, so a winner whose
+      // Player row is gone is already null here - the lookup that used to
+      // launder that case away has nothing left to do.
+      winner: game.winnerPlayerId ?? null,
       createdAt: game.createdAt,
       updatedAt: game.updatedAt,
     };
@@ -663,10 +802,23 @@ export class GameService {
   }
 
   /**
-   * Runs under the game lock: scoring reads every player's `bankPileCount`,
-   * which in-flight moves are still incrementing. Without the lock a move
-   * committing mid-scoring means the scores handed to one player disagree
-   * with the ones written to the database.
+   * Call Blitz: score the round, then either end the round or end the game.
+   *
+   *   playing --callBlitz--> round_over   when max(cumulative) <  targetScore
+   *   playing --callBlitz--> finished     when max(cumulative) >= targetScore
+   *
+   * Runs under the game lock, and this is the method that most needs it.
+   * Scoring reads every player's `bankPileCount` while in-flight moves are
+   * still incrementing it, so without the lock the scores handed back to one
+   * player disagree with the ones written to the database.
+   *
+   * The lock is also the whole defence against a double Blitz, and it works by
+   * making the `status !== "playing"` check below MEAN something: two callers
+   * in the same millisecond both used to pass it, because both read `playing`
+   * before either wrote. Now the second one blocks on the row until the first
+   * commits, then reads `round_over`/`finished` and bails - having scored
+   * nothing, accumulated nothing and advanced no round. Move that read outside
+   * the lock and the check silently goes back to being decorative.
    */
   async callBlitz(
     gameId: string,
@@ -674,12 +826,21 @@ export class GameService {
   ): Promise<{
     success: boolean;
     winnerId: string | null;
+    /** Each player's CUMULATIVE score after this round. */
     scores: Record<string, number>;
+    /** What each player scored in THIS round alone. */
+    roundScores: Record<string, number>;
+    status: "round_over" | "finished";
+    round: number;
+    /** Unredacted, read inside the transaction. The gateway redacts it. */
+    state: GameState;
   }> {
     return this.gameRepository.withGameLock(gameId, async (tx) => {
       const game = await tx.game.findUnique({
         where: { id: gameId },
-        include: { players: true },
+        // Ordered so a tie resolves the same way every time rather than
+        // however Postgres happened to return the rows.
+        include: { players: { orderBy: { id: "asc" } } },
       });
 
       if (!game) {
@@ -704,42 +865,92 @@ export class GameService {
         );
       }
 
-      // Calculate scores for all players
+      const round = game.currentRound;
       const scores: Record<string, number> = {};
+      const roundScores: Record<string, number> = {};
       let highestScore = -Infinity;
-      let winnerId: string | null = null;
+      let winnerPlayerId: string | null = null;
 
       for (const player of game.players) {
-        const deck = player.deck as unknown as PlayerDeck;
+        const deck = this.parseDeck(player.id, player.deck);
         const blurtzRemaining = deck.blurtzPile.cards.length;
-        const finalScore = scoreRound(player.bankPileCount, blurtzRemaining);
-        scores[player.id] = finalScore;
+        const roundScore = scoreRound(player.bankPileCount, blurtzRemaining);
+        // ADD, do not overwrite. `score` is the running total across rounds -
+        // this line used to be `score: finalScore`, which silently threw every
+        // previous round away and is why a game could never reach a target.
+        const cumulativeScore = player.score + roundScore;
 
-        // Update player score in database
+        scores[player.id] = cumulativeScore;
+        roundScores[player.id] = roundScore;
+
         await tx.player.update({
           where: { id: player.id },
-          data: { score: finalScore },
+          data: { score: cumulativeScore, roundScore },
         });
 
-        if (finalScore > highestScore) {
-          highestScore = finalScore;
-          winnerId = player.id;
+        // The scoring INPUTS, recorded before the round advance resets them.
+        // `bankPileCount` in particular exists nowhere else once the next
+        // round is dealt, so a disputed score is answerable only from here.
+        await tx.roundResult.create({
+          data: {
+            gameId,
+            playerId: player.id,
+            round,
+            bankPileCount: player.bankPileCount,
+            blurtzRemaining,
+            roundScore,
+            cumulativeScore,
+            calledBlurtz: player.id === playerId,
+          },
+        });
+
+        if (cumulativeScore > highestScore) {
+          highestScore = cumulativeScore;
+          winnerPlayerId = player.id;
         }
       }
 
-      // End the game
+      const isFinished = highestScore >= game.targetScore;
+
       await tx.game.update({
         where: { id: gameId },
         data: {
-          status: "finished",
-          winnerId,
+          status: isFinished ? "finished" : "round_over",
+          // A round_over game has no winner - it has a leader. Writing one
+          // here would make every scoreboard between rounds claim the game was
+          // already decided.
+          winnerPlayerId: isFinished ? winnerPlayerId : null,
         },
       });
 
+      if (isFinished) {
+        // The transition to `finished`, and the only place a Blitz reaches it.
+        // Inside the transaction on purpose: a Blitz that loses the race above
+        // rolls back, and must not leave a gamesPlayed behind it.
+        await this.userService.recordGameResults(
+          tx,
+          game.players.map((p) => ({
+            userId: p.userId,
+            won: p.id === winnerPlayerId,
+          }))
+        );
+      }
+
       this.logger.log(
-        `Blitz called by ${playerId} in game ${gameId} - winner: ${winnerId}`
+        `Blitz called by ${playerId} in game ${gameId} - round ${round} ` +
+          `${isFinished ? `won by ${winnerPlayerId}` : "over, game continues"}`
       );
-      return { success: true, winnerId, scores };
+
+      return {
+        success: true,
+        // Only a finished game has a winner.
+        winnerId: isFinished ? winnerPlayerId : null,
+        scores,
+        roundScores,
+        status: isFinished ? ("finished" as const) : ("round_over" as const),
+        round,
+        state: await this.readGameState(tx, gameId),
+      };
     });
   }
 
@@ -833,64 +1044,26 @@ export class GameService {
     });
   }
 
-  // Snapshot management
+  // The round scoreboard
+  //
+  // `createSnapshot` / `getSnapshots` / `getLatestSnapshot` /
+  // `deleteSnapshots` used to live here, over a `game_snapshots` table that
+  // `startGame` wrote one whole-state blob into and nothing ever read back.
+  // Its REST routes were already deleted as an unscoped leak. `RoundResult` is
+  // what a multi-round game actually wanted: the scoring inputs, per player
+  // per round, queryable.
 
   /**
-   * `client` is explicit because the only caller is `startGame`, which is
-   * inside a lock - the snapshot has to be written on that transaction, or it
-   * captures a state its own transaction has not committed yet.
+   * Every round's scoring, oldest first - the game's scoreboard.
+   *
+   * Returns the INPUTS as well as the totals, so "why is my score that?" is
+   * answerable from the row: `bankPileCount` is reset by each round advance
+   * and survives nowhere else.
    */
-  async createSnapshot(
-    client: DbClient,
-    gameId: string,
-    round: number = 0
-  ): Promise<void> {
-    const gameState = await this.readGameState(client, gameId);
-
-    await client.gameSnapshot.create({
-      data: {
-        gameId,
-        round,
-        state: JSON.parse(JSON.stringify(gameState)),
-      },
-    });
-  }
-
-  async getSnapshots(gameId: string): Promise<any[]> {
-    const snapshots = await this.prisma.gameSnapshot.findMany({
+  async getRoundResults(gameId: string) {
+    return this.prisma.roundResult.findMany({
       where: { gameId },
-      orderBy: { createdAt: "asc" },
-    });
-
-    return snapshots.map((snapshot) => ({
-      id: snapshot.id,
-      gameId: snapshot.gameId,
-      round: snapshot.round,
-      state: snapshot.state,
-      createdAt: snapshot.createdAt,
-    }));
-  }
-
-  async getLatestSnapshot(gameId: string): Promise<any | null> {
-    const snapshot = await this.prisma.gameSnapshot.findFirst({
-      where: { gameId },
-      orderBy: { createdAt: "desc" },
-    });
-
-    if (!snapshot) return null;
-
-    return {
-      id: snapshot.id,
-      gameId: snapshot.gameId,
-      round: snapshot.round,
-      state: snapshot.state,
-      createdAt: snapshot.createdAt,
-    };
-  }
-
-  async deleteSnapshots(gameId: string): Promise<void> {
-    await this.prisma.gameSnapshot.deleteMany({
-      where: { gameId },
+      orderBy: [{ round: "asc" }, { playerId: "asc" }],
     });
   }
 }

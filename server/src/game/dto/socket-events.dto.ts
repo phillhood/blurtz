@@ -8,6 +8,7 @@ import {
   MoveCardPayload,
   PlayerReadyPayload,
   StartGamePayload,
+  StartNextRoundPayload,
 } from "@blurtz/shared";
 
 /**
@@ -37,6 +38,12 @@ export class LeaveRoomDto implements LeaveRoomPayload {
 }
 
 export class StartGameDto implements StartGamePayload {
+  @IsString()
+  @IsUUID("4", { message: "Invalid game ID format" })
+  gameId: string;
+}
+
+export class StartNextRoundDto implements StartNextRoundPayload {
   @IsString()
   @IsUUID("4", { message: "Invalid game ID format" })
   gameId: string;

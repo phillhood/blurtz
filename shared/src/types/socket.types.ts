@@ -26,6 +26,10 @@ export interface StartGamePayload {
   gameId: string;
 }
 
+export interface StartNextRoundPayload {
+  gameId: string;
+}
+
 export interface MoveCardPayload {
   gameId: string;
   cardId: string;

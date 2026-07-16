@@ -54,10 +54,13 @@ function gameState(decks: PlayerDeck[], bankPiles: Pile[] = []): GameState {
       isReady: true,
       deck,
       score: 0,
+      roundScore: 0,
       bankPileCount: 0,
     })),
     bankPiles,
-    currentRound: 0,
+    // 1-based: a game is in round 1 from the moment it exists.
+    currentRound: 1,
+    targetScore: 100,
     winner: null,
   };
 }

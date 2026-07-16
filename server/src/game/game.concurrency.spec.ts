@@ -2,6 +2,7 @@ import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { v4 as uuidv4 } from "uuid";
 import { PrismaService } from "@prisma";
+import { UserService } from "@user/user.service";
 import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
 import {
@@ -146,7 +147,10 @@ describe("GameService concurrency (real database)", () => {
   }
 
   async function cleanup() {
-    // Games cascade to players and snapshots; users have to go after them.
+    // Games cascade to players and round results; users have to go after them.
+    // The winner FK is ON DELETE SET NULL precisely so this works: deleting a
+    // game deletes its players, and the game row those players are the winner
+    // of is nulled on its way out rather than blocking the delete.
     await prisma.game.deleteMany({ where: { name: TEST_TAG } });
     await prisma.user.deleteMany({ where: { password: TEST_TAG } });
   }
@@ -155,7 +159,10 @@ describe("GameService concurrency (real database)", () => {
     process.env.DATABASE_URL = TEST_DATABASE_URL;
 
     module = await Test.createTestingModule({
-      providers: [GameService, GameRepository, PrismaService],
+      // UserService for real, on the real database: finishing a game credits
+      // gamesPlayed/gamesWon inside the game's own transaction, so it is part
+      // of what these races are testing rather than a collaborator to stub.
+      providers: [GameService, GameRepository, PrismaService, UserService],
     }).compile();
 
     prisma = module.get(PrismaService);
@@ -193,7 +200,6 @@ describe("GameService concurrency (real database)", () => {
         gameState: {
           // One empty bank pile: the single contended resource.
           bankPiles: [{ id: bankPileId, type: "bank", cards: [] }],
-          currentTurn: 0,
         },
       },
     });
@@ -340,6 +346,13 @@ describe("GameService concurrency (real database)", () => {
      * forfeit lands, the forfeiter is gone and the last player standing wins.
      * Without that asymmetry a clobbered winner would look identical to a
      * correct one and the test would prove nothing.
+     *
+     * `targetScore: 5` is what keeps that asymmetry intact now that a Blitz
+     * can end a ROUND rather than the game. The high scorer makes 10, which
+     * clears 5, so a landed Blitz still finishes the game and still crowns
+     * them. At the default target of 100 this Blitz would score the round and
+     * leave the game `round_over`, and the race being tested - two ways of
+     * ENDING a game colliding - would not happen at all.
      */
     beforeEach(async () => {
       const userA = await prisma.user.create({
@@ -355,8 +368,9 @@ describe("GameService concurrency (real database)", () => {
           alias: uuidv4().slice(0, 8).toUpperCase(),
           maxPlayers: 2,
           status: "playing",
+          targetScore: 5,
           hostId: userA.id,
-          gameState: { bankPiles: [], currentTurn: 0 },
+          gameState: { bankPiles: [] },
         },
       });
       raceGameId = game.id;
@@ -430,14 +444,14 @@ describe("GameService concurrency (real database)", () => {
         // The Blitz committed first. It crowned the high scorer - who is the
         // player that tried to forfeit - and the forfeit bailed, so their row
         // is untouched and both scores are the Blitz's.
-        expect(game.winnerId).toBe(forfeiter);
+        expect(game.winnerPlayerId).toBe(forfeiter);
         expect(playerIds).toEqual([blitzCaller, forfeiter].sort());
         expect(game.players.find((p) => p.id === blitzCaller).score).toBe(1);
         expect(game.players.find((p) => p.id === forfeiter).score).toBe(10);
       } else {
         // The forfeit committed first: the forfeiter is gone and the last
         // player standing takes it. The Blitz bailed, so it never scored.
-        expect(game.winnerId).toBe(blitzCaller);
+        expect(game.winnerPlayerId).toBe(blitzCaller);
         expect(playerIds).toEqual([blitzCaller]);
         expect(game.players.find((p) => p.id === blitzCaller).score).toBe(0);
       }
@@ -463,7 +477,7 @@ describe("GameService concurrency (real database)", () => {
           maxPlayers: 4,
           status: "waiting",
           hostId: "nobody",
-          gameState: { bankPiles: [], currentTurn: 0 },
+          gameState: { bankPiles: [] },
         },
       });
       const user = await prisma.user.create({

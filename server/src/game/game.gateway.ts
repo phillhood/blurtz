@@ -21,6 +21,7 @@ import {
   JoinRoomDto,
   LeaveRoomDto,
   StartGameDto,
+  StartNextRoundDto,
   MoveCardDto,
   FlipCardDto,
   CallBlitzDto,
@@ -254,6 +255,38 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
+  @SubscribeMessage(SOCKET_EVENTS.START_NEXT_ROUND)
+  async handleStartNextRound(
+    @ConnectedSocket() client: Socket,
+    @MessageBody() data: unknown
+  ) {
+    try {
+      const { gameId } = await validateWsPayload(StartNextRoundDto, data);
+      const userId = this.requireUserId(client);
+      await this.requirePlayerId(client, gameId);
+
+      // The host check, the round_over check and the all-players-ready gate
+      // all live in GameService.startNextRound. Redacted for exactly the same
+      // reason GAME_STARTED is: this is a fresh deal, and unredacted it hands
+      // every player every opponent's whole new deck.
+      const gameState = toClientGameState(
+        await this.gameService.startNextRound(gameId, userId)
+      );
+
+      this.server.to(gameId).emit(SOCKET_EVENTS.ROUND_STARTED, {
+        gameState,
+        round: gameState.currentRound,
+        timestamp: new Date(),
+      });
+    } catch (error) {
+      this.logger.warn(`Start next round failed: ${getErrorMessage(error)}`);
+      client.emit(SOCKET_EVENTS.ERROR, {
+        message: getErrorMessage(error),
+        timestamp: new Date(),
+      });
+    }
+  }
+
   @SubscribeMessage(SOCKET_EVENTS.MOVE_CARD)
   async handleMoveCard(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
@@ -339,25 +372,43 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { gameId } = await validateWsPayload(CallBlitzDto, data);
       const playerId = await this.requirePlayerId(client, gameId);
 
-      // Validate Blitz call and calculate scores
+      // Validate Blitz call, score the round, and end the round or the game.
       const result = await this.gameService.callBlitz(gameId, playerId);
 
-      if (result.success) {
-        const gameState = await this.clientGameState(gameId);
+      // The state comes back from the call itself, read inside the same
+      // transaction that scored it - not re-read here. A re-read would race
+      // the round advance and could broadcast a board this Blitz never
+      // produced. Redacted once; both emissions below close over the redacted
+      // value, so there is no unredacted state in scope to leak.
+      const gameState = toClientGameState(result.state);
 
-        // Notify all players that Blitz was called
-        this.server.to(gameId).emit(SOCKET_EVENTS.BLITZ_CALLED, {
-          playerId,
-          scores: result.scores,
-          timestamp: new Date(),
-        });
+      // Notify all players that Blitz was called. `scores` is cumulative,
+      // `roundScores` is this round alone - the scoreboard needs both.
+      this.server.to(gameId).emit(SOCKET_EVENTS.BLITZ_CALLED, {
+        playerId,
+        scores: result.scores,
+        roundScores: result.roundScores,
+        round: result.round,
+        timestamp: new Date(),
+      });
 
-        // End the game
+      if (result.status === "finished") {
         this.server.to(gameId).emit(SOCKET_EVENTS.GAME_ENDED, {
           gameState,
           reason: "blitz",
           winnerId: result.winnerId,
           scores: result.scores,
+          calledBy: playerId,
+          timestamp: new Date(),
+        });
+      } else {
+        // Nobody reached the target: the round is over, not the game. Players
+        // ready up and the host deals the next one.
+        this.server.to(gameId).emit(SOCKET_EVENTS.ROUND_OVER, {
+          gameState,
+          round: result.round,
+          scores: result.scores,
+          roundScores: result.roundScores,
           calledBy: playerId,
           timestamp: new Date(),
         });

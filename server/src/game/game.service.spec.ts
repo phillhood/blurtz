@@ -7,6 +7,7 @@ import {
 import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
 import { PrismaService } from "@prisma";
+import { UserService } from "@user/user.service";
 import { CARD_COLORS, Card } from "@blurtz/shared";
 
 // Decks are validated against PlayerDeckSchema on the way out of the
@@ -35,8 +36,10 @@ function gameRow(overrides: Record<string, unknown> = {}) {
     alias: "ABC123",
     maxPlayers: 2,
     hostId: "host-user",
-    winnerId: null,
+    winnerPlayerId: null,
     status: "playing",
+    currentRound: 1,
+    targetScore: 100,
     createdAt: new Date(),
     updatedAt: new Date(),
     ...overrides,
@@ -49,6 +52,7 @@ function playerRow(id: string, deck: unknown, overrides: Record<string, unknown>
     userId: `user-${id}`,
     isReady: true,
     score: 0,
+    roundScore: 0,
     bankPileCount: 0,
     deck,
     user: { id: `user-${id}`, username: id },
@@ -60,6 +64,7 @@ describe("GameService", () => {
   let service: GameService;
   let prismaService: jest.Mocked<PrismaService>;
   let gameRepository: jest.Mocked<GameRepository>;
+  let userService: UserService;
 
   beforeEach(async () => {
     const mockPrismaService = {
@@ -76,9 +81,11 @@ describe("GameService", () => {
       },
       user: {
         findUnique: jest.fn(),
+        update: jest.fn(),
       },
-      gameSnapshot: {
+      roundResult: {
         create: jest.fn(),
+        findMany: jest.fn(),
       },
     };
 
@@ -102,12 +109,18 @@ describe("GameService", () => {
           provide: GameRepository,
           useValue: mockGameRepository,
         },
+        // The REAL UserService, over the mocked Prisma. Stubbing it out would
+        // hide the thing most worth testing about it - that
+        // `recordGameResults` orders its writes - so it runs for real and the
+        // assertions look at `prismaService.user.update`.
+        UserService,
       ],
     }).compile();
 
     service = module.get<GameService>(GameService);
     prismaService = module.get(PrismaService);
     gameRepository = module.get(GameRepository);
+    userService = module.get(UserService);
 
     jest.clearAllMocks();
   });
@@ -649,8 +662,10 @@ describe("GameService", () => {
         maxPlayers: 2,
         status: "waiting",
         hostId: "host-user",
-        winnerId: null,
-        gameState: { bankPiles: [], currentTurn: 0 },
+        winnerPlayerId: null,
+        currentRound: 1,
+        targetScore: 100,
+        gameState: { bankPiles: [] },
         createdAt: new Date(),
         updatedAt: new Date(),
         players: [
@@ -659,6 +674,7 @@ describe("GameService", () => {
             userId: "host-user",
             isReady: true,
             score: 0,
+            roundScore: 0,
             bankPileCount: 0,
             deck: null,
             user: { id: "host-user", username: "host" },
@@ -668,6 +684,7 @@ describe("GameService", () => {
             userId: "other-user",
             isReady: true,
             score: 0,
+            roundScore: 0,
             bankPileCount: 0,
             deck: null,
             user: { id: "other-user", username: "guest" },
@@ -676,7 +693,6 @@ describe("GameService", () => {
       });
       (prismaService.player.update as jest.Mock).mockResolvedValue({});
       (prismaService.game.update as jest.Mock).mockResolvedValue({});
-      (prismaService.gameSnapshot.create as jest.Mock).mockResolvedValue({});
 
       const result = await service.startGame("game-1", "host-user");
 
