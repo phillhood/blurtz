@@ -1,4 +1,5 @@
 import { IsString, IsUUID, MinLength, MaxLength } from "class-validator";
+import { MAX_ALIAS_LENGTH } from "@utils";
 
 export class JoinGameByIdDto {
   @IsString()
@@ -9,6 +10,8 @@ export class JoinGameByIdDto {
 export class JoinGameByCodeDto {
   @IsString()
   @MinLength(1, { message: "Game code is required" })
-  @MaxLength(20, { message: "Game code must be at most 20 characters" })
+  @MaxLength(MAX_ALIAS_LENGTH, {
+    message: `Game code must be at most ${MAX_ALIAS_LENGTH} characters`,
+  })
   alias: string;
 }
