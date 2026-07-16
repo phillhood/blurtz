@@ -38,10 +38,17 @@ export const useGameContext = () => {
     async (
       name: string,
       maxPlayers: number,
-      isPrivate: boolean
+      isPrivate: boolean,
+      targetScore: number
     ): Promise<Game | null> => {
       if (user?.id) {
-        return storeCreateAndJoinGame(name, maxPlayers, isPrivate, user.id);
+        return storeCreateAndJoinGame(
+          name,
+          maxPlayers,
+          isPrivate,
+          targetScore,
+          user.id
+        );
       }
       return null;
     },

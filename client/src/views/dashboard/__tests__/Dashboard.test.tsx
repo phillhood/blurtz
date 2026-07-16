@@ -105,7 +105,7 @@ describe("Dashboard", () => {
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday");
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
-    expect(mockCreateAndJoinGame).toHaveBeenCalledWith("Friday", 2, false);
+    expect(mockCreateAndJoinGame).toHaveBeenCalledWith("Friday", 2, false, 100);
     // Creating a game and staying on the lobby leaves the player's own game
     // waiting for them somewhere they cannot see.
     await waitFor(() =>

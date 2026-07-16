@@ -111,7 +111,7 @@ describe("useGameContext", () => {
 
     let created: unknown;
     await act(async () => {
-      created = await result.current.createAndJoinGame("Friday", 2, false);
+      created = await result.current.createAndJoinGame("Friday", 2, false, 100);
     });
 
     expect(created).toEqual({ id: "game-new" });
@@ -125,7 +125,7 @@ describe("useGameContext", () => {
 
     let created: unknown = "unset";
     await act(async () => {
-      created = await result.current.createAndJoinGame("Friday", 2, false);
+      created = await result.current.createAndJoinGame("Friday", 2, false, 100);
     });
 
     expect(created).toBeNull();
