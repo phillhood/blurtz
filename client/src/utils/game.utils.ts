@@ -1,15 +1,29 @@
-import { Card } from "@types";
+import { ClientCard } from "@types";
 
+/**
+ * These two answer "may this drop land here?" for the cursor. The server
+ * re-decides every move regardless - this is what greys out a target, not what
+ * authorises a play.
+ *
+ * Both begin by refusing face-down cards. That is not defensive padding: a
+ * face-down card has no `value` to compare, on the wire or in the type, so
+ * there is no rule to apply to one. Nothing draggable is ever face-down
+ * anyway, which is why this reads as a guard rather than a branch.
+ */
 export const canDropOnBankPile = (
-  bankPiles: Array<{ cards: Card[] }>,
+  bankPiles: Array<{ cards: ClientCard[] }>,
   pileIndex: number,
-  draggedCard: Card
+  draggedCard: ClientCard
 ): boolean => {
+  if (!draggedCard.faceUp) return false;
+
   const pile = bankPiles[pileIndex];
   if (!pile || pile.cards.length === 0) {
     return draggedCard.number === 1;
   }
   const topCard = pile.cards[pile.cards.length - 1];
+  if (!topCard.faceUp) return false;
+
   // Must be same color and +1 value
   return (
     draggedCard.color.name === topCard.color.name &&
@@ -18,15 +32,19 @@ export const canDropOnBankPile = (
 };
 
 export const canDropOnWorkPile = (
-  workPiles: Array<{ cards: Card[] }>,
+  workPiles: Array<{ cards: ClientCard[] }>,
   pileIndex: number,
-  draggedCard: Card
+  draggedCard: ClientCard
 ): boolean => {
+  if (!draggedCard.faceUp) return false;
+
   const pile = workPiles[pileIndex];
   // Empty work pile accepts any card
   if (pile.cards.length === 0) return true;
 
   const topCard = pile.cards[pile.cards.length - 1];
+  if (!topCard.faceUp) return false;
+
   // Must be descending (-1) and opposite type (boy/girl)
   return (
     draggedCard.color.type !== topCard.color.type &&

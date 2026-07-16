@@ -1,10 +1,10 @@
 import React from "react";
-import { Card as CardType } from "@types";
+import { ClientCard } from "@types";
 import { Card } from ".";
 
 interface CardPileProps {
   /** Array of cards in the pile (last card is top/visible) */
-  cards: CardType[];
+  cards: ClientCard[];
   /** Pile ID for drag/drop */
   pileId: string;
   /** Whether the top card can be dragged */
@@ -12,15 +12,13 @@ interface CardPileProps {
   /** Click handler for the pile */
   onClick?: () => void;
   /** Drop handler - enables drop zone on top card */
-  onDrop?: (card: CardType) => void;
+  onDrop?: (card: ClientCard) => void;
   /** Validates if a card can be dropped */
-  canDrop?: (card: CardType) => boolean;
+  canDrop?: (card: ClientCard) => boolean;
   /** Max number of stacked cards to show behind top card (default 2) */
   maxStackDisplay?: number;
   /** Offset in pixels between stacked cards (default 3) */
   stackOffset?: number;
-  /** Show stacked cards face-up (default false) */
-  showStackFaceUp?: boolean;
   /** Hide the count badge on top of cards (default false) */
   hideCountBadge?: boolean;
   /** Card IDs pending a move (hidden until game state updates) */
@@ -41,7 +39,6 @@ const CardPile: React.FC<CardPileProps> = ({
   canDrop,
   maxStackDisplay = 2,
   stackOffset = 3,
-  showStackFaceUp = false,
   hideCountBadge = false,
   pendingMoveCardIds,
 }) => {
@@ -54,7 +51,10 @@ const CardPile: React.FC<CardPileProps> = ({
 
   return (
     <div style={{ position: "relative" }}>
-      {/* Stacked cards behind (visual only) - at origin, peeking out top-left */}
+      {/* Stacked cards behind (visual only) - at origin, peeking out top-left.
+          Always drawn as backs: they are depth, not information, and the top
+          card is the only one this pile is claiming to show. Passing the id
+          alone keeps that honest - there is no face here to leak. */}
       {Array.from({ length: stackCount }).map((_, index) => (
         <div
           key={`stack-${index}`}
@@ -67,7 +67,7 @@ const CardPile: React.FC<CardPileProps> = ({
           }}
         >
           <Card
-            card={{ ...cards[cards.length - 2 - index], faceUp: showStackFaceUp }}
+            card={{ id: cards[cards.length - 2 - index].id, faceUp: false }}
             pileId={pileId}
             isDraggable={false}
           />

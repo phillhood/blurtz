@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useDraggable, useDroppable, useDndContext } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card as CardType } from "@types";
+import { ClientCard, VisibleCard } from "@types";
 import { GameCard, CardNumber } from "@styles";
 import { DragData } from "./Card";
 
@@ -9,12 +9,20 @@ const CARD_HEIGHT = 118;
 const DEFAULT_STACK_OFFSET = Math.floor(CARD_HEIGHT * 0.1); // 10% visible (90% overlap)
 const EXPANDED_OFFSET = Math.floor(CARD_HEIGHT * 0.3); // 30% visible (70% overlap)
 
+/**
+ * `cards` is VisibleCard[], not ClientCard[], and that is a claim about work
+ * piles rather than a convenience: every card on one is face-up, always. They
+ * are dealt face-up and the only way another card reaches one is a move, which
+ * the server refuses for a face-down card. This component draws a number on
+ * every card it is given - it has no back to fall back to - so the type says
+ * what it needs and the caller proves it.
+ */
 interface FannedCardPileProps {
-  cards: CardType[];
+  cards: VisibleCard[];
   pileId: string;
   isDraggable?: boolean;
-  onDrop?: (card: CardType) => void;
-  canDrop?: (card: CardType) => boolean;
+  onDrop?: (card: ClientCard) => void;
+  canDrop?: (card: ClientCard) => boolean;
   stackOffset?: number;
   pendingMoveCardIds?: Set<string>;
 }
@@ -173,7 +181,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
             pileId={pileId}
             index={index}
             topPosition={cardPositions[index]}
-            isDraggable={isDraggable && card.faceUp}
+            isDraggable={isDraggable}
             isTopCard={index === cards.length - 1}
             isVisualTopCard={isVisualTopCard}
             onDrop={onDrop}
@@ -188,15 +196,15 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 };
 
 interface FannedCardProps {
-  card: CardType;
+  card: VisibleCard;
   pileId: string;
   index: number;
   topPosition: number;
   isDraggable: boolean;
   isTopCard: boolean;
   isVisualTopCard: boolean;
-  onDrop?: (card: CardType) => void;
-  canDrop?: (card: CardType) => boolean;
+  onDrop?: (card: ClientCard) => void;
+  canDrop?: (card: ClientCard) => boolean;
   isHiddenInDrag: boolean;
   isPendingMove: boolean;
 }
@@ -262,7 +270,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
   // Visual top card = centered number, other cards = number at top
   const shouldShiftNumber = !isVisualTopCard;
 
-  const getCardColorString = (color: CardType["color"]): string => {
+  const getCardColorString = (color: VisibleCard["color"]): string => {
     return color.code || color.name || "#000000";
   };
 

@@ -1,13 +1,13 @@
 import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { CenterArea, BankPiles, WorkPile, PileLabel } from "@styles";
-import { Card as CardType, Pile } from "@types";
+import { ClientCard, Pile } from "@types";
 import { CardPile } from ".";
 import { DragData } from "./Card";
 
 interface BankPilesAreaProps {
   bankPiles: Pile[];
-  canDropOnPile: (pileIndex: number, card: CardType) => boolean;
+  canDropOnPile: (pileIndex: number, card: ClientCard) => boolean;
 }
 
 const BankPilesArea: React.FC<BankPilesAreaProps> = ({
@@ -61,7 +61,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
 const EmptyPileDropZone: React.FC<{
   pileId: string;
   pileIndex: number;
-  canDrop: (card: CardType) => boolean;
+  canDrop: (card: ClientCard) => boolean;
 }> = ({ pileId, pileIndex, canDrop }) => {
   const { setNodeRef, isOver, active } = useDroppable({
     id: `bank-pile-empty-${pileId}`,

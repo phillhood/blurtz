@@ -1,4 +1,15 @@
-import { CardColor } from "@types";
+import { CardColor, ClientCard, VisibleCard } from "@types";
+
+/**
+ * Narrow a card to one whose face you may read.
+ *
+ * A type predicate rather than a bare `c.faceUp` so that `filter` carries the
+ * narrowing with it - `cards.filter(isVisibleCard)` yields `VisibleCard[]`,
+ * where a plain arrow yields `ClientCard[]` and every read downstream has to
+ * re-prove itself.
+ */
+export const isVisibleCard = (card: ClientCard): card is VisibleCard =>
+  card.faceUp;
 
 export const getCardColorString = (color: CardColor): string => {
   return color.code || color.name || "#000000";

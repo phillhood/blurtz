@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor } from "@dnd-kit/core";
 import { useGameContext, useAuthContext } from "@hooks";
-import { Card } from "@types";
+import { ClientCard, VisibleCard } from "@types";
+import { isVisibleCard } from "@utils";
 import { GameContainer, GameBoard, CenterArea, OpponentsRow, GameCard, CardNumber } from "@styles";
 import {
   GameLoadingScreen,
@@ -38,7 +39,10 @@ const Game: React.FC = () => {
   } = useGameContext();
 
   const [showForfeitDialog, setShowForfeitDialog] = useState(false);
-  const [activeCards, setActiveCards] = useState<Card[]>([]);
+  // The cards travelling under the cursor. VisibleCard[] because the drag
+  // overlay draws their faces - and because a face-down card cannot be picked
+  // up in the first place.
+  const [activeCards, setActiveCards] = useState<VisibleCard[]>([]);
   const { pendingMoveCardIds, markPending } = usePendingMoveCards(gameState);
 
   // Configure sensors for @dnd-kit
@@ -98,12 +102,18 @@ const Game: React.FC = () => {
     navigator.clipboard.writeText(gameState?.alias || "");
   };
 
-  const canDropOnBankPile = (pileIndex: number, draggedCard: Card) => {
+  // A face-down card has no value to compare - not on the wire, not in the
+  // type. Nothing draggable is face-down, so this reads as a guard.
+  const canDropOnBankPile = (pileIndex: number, draggedCard: ClientCard) => {
+    if (!draggedCard.faceUp) return false;
+
     const pile = gameState?.bankPiles[pileIndex];
     if (!pile || pile.cards.length === 0) {
       return draggedCard.number === 1;
     }
     const topCard = pile.cards[pile.cards.length - 1];
+    if (!topCard.faceUp) return false;
+
     // Must be same color (compare by name) and +1 value
     return (
       draggedCard.color.name === topCard.color.name &&
@@ -122,7 +132,9 @@ const Game: React.FC = () => {
   };
 
   // Validate Work pile drop
-  const canDropOnWorkPile = (pileId: string, draggedCard: Card, _fromPileId: string): boolean => {
+  const canDropOnWorkPile = (pileId: string, draggedCard: ClientCard, _fromPileId: string): boolean => {
+    if (!draggedCard.faceUp) return false;
+
     const pile = currentPlayer?.deck.workPiles.find(p => p.id === pileId);
     if (!pile) return false;
 
@@ -130,6 +142,8 @@ const Game: React.FC = () => {
     if (pile.cards.length === 0) return true;
 
     const topCard = pile.cards[pile.cards.length - 1];
+    if (!topCard.faceUp) return false;
+
     // Must be descending (-1) and opposite type (boy/girl)
     return (
       draggedCard.color.type !== topCard.color.type &&
@@ -140,13 +154,16 @@ const Game: React.FC = () => {
   // Handle @dnd-kit drag start event
   const handleDragStart = (event: DragStartEvent) => {
     const dragData = event.active.data.current as DragData;
-    if (dragData?.card) {
+    // `card.faceUp` narrows the drag to a VisibleCard, which is what the
+    // overlay renders. It is not a new restriction - every pile already
+    // refuses to make a face-down card draggable.
+    if (dragData?.card?.faceUp) {
       // Check if dragging from a work pile - if so, get the whole stack
       const workPile = currentPlayer?.deck.workPiles.find(p => p.id === dragData.fromPileId);
       if (workPile) {
         const cardIndex = workPile.cards.findIndex(c => c.id === dragData.card.id);
         if (cardIndex >= 0) {
-          setActiveCards(workPile.cards.slice(cardIndex));
+          setActiveCards(workPile.cards.slice(cardIndex).filter(isVisibleCard));
           return;
         }
       }
@@ -175,7 +192,7 @@ const Game: React.FC = () => {
     if (!over) return;
 
     const dragData = active.data.current as DragData;
-    const dropData = over.data.current as { pileId?: string; pileIndex?: number; isEmpty?: boolean; card?: Card } | undefined;
+    const dropData = over.data.current as { pileId?: string; pileIndex?: number; isEmpty?: boolean; card?: ClientCard } | undefined;
     const dropId = over.id as string;
 
     // Dropping back on the same pile - no-op
