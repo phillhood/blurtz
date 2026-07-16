@@ -87,12 +87,38 @@ export class GameService {
     }
   }
 
+  /**
+   * Find a game by its invite code.
+   *
+   * The player fields are listed explicitly to leave `deck` OUT, and that is
+   * load-bearing rather than tidiness. `deck` is a scalar, so an
+   * `include: { players: ... }` selects it like any other column - and this
+   * game goes straight back to the caller as the `joinByCode` response body.
+   * A player rejoining a game already in progress by its code was handed every
+   * opponent's face-down cards, the same leak the gateway redacts against and
+   * reached without a socket. The only caller needs `id`.
+   */
   async findGameByAlias(alias: string) {
     return this.prisma.game.findUnique({
       where: { alias },
-      include: {
+      select: {
+        id: true,
+        name: true,
+        alias: true,
+        maxPlayers: true,
+        isPrivate: true,
+        status: true,
+        hostId: true,
+        winnerId: true,
+        createdAt: true,
+        updatedAt: true,
         players: {
-          include: {
+          select: {
+            id: true,
+            userId: true,
+            isReady: true,
+            score: true,
+            bankPileCount: true,
             user: {
               select: { id: true, username: true },
             },

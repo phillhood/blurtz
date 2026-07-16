@@ -118,6 +118,7 @@ describe("GameService", () => {
 
   // ---------------------------------------------------------------------
   // Item 1: findGameByAlias must not leak password hashes via `user: true`.
+  // Task 8: nor decks - this game is the `joinByCode` response body.
   // ---------------------------------------------------------------------
   describe("findGameByAlias", () => {
     it("requests a narrowed user selection, not the full user record", async () => {
@@ -125,22 +126,34 @@ describe("GameService", () => {
 
       await service.findGameByAlias("ABC123");
 
-      expect(prismaService.game.findUnique).toHaveBeenCalledWith({
-        where: { alias: "ABC123" },
-        include: {
-          players: {
-            include: {
-              user: { select: { id: true, username: true } },
-            },
-          },
-        },
+      const callArg = (prismaService.game.findUnique as jest.Mock).mock
+        .calls[0][0];
+
+      expect(callArg.where).toEqual({ alias: "ABC123" });
+      expect(callArg.select.players.select.user).toEqual({
+        select: { id: true, username: true },
       });
+      // Explicitly guard against a regression back to `user: true`.
+      expect(callArg.select.players.select.user).not.toBe(true);
+    });
+
+    it("does NOT select the players' decks", async () => {
+      // `deck` is a scalar, so the `include: { players: ... }` this used to
+      // use selected it - and the caller returns this game straight to the
+      // client. A player rejoining a game in progress by its invite code got
+      // every opponent's face-down cards, no socket required.
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(null);
+
+      await service.findGameByAlias("ABC123");
 
       const callArg = (prismaService.game.findUnique as jest.Mock).mock
         .calls[0][0];
-      // Explicitly guard against a regression back to `include: { user: true }`.
-      expect(callArg.include.players.include.user).not.toBe(true);
-      expect(callArg.include.players.include).not.toEqual({ user: true });
+
+      // A `select` is what makes this airtight: with `include`, every scalar
+      // Prisma grows on Player arrives by default. Here nothing arrives
+      // unless it is named, and `deck` is not.
+      expect(callArg.include).toBeUndefined();
+      expect(callArg.select.players.select).not.toHaveProperty("deck");
     });
   });
 
