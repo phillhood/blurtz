@@ -91,11 +91,31 @@ test.describe("Authentication", () => {
     await page.goto("/login");
     await page.getByPlaceholder("Username").fill(user.username);
     await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
+
+    // `/api/auth/login` is throttled to 1/sec per IP (`@Throttle` in
+    // `auth.controller.ts`) and the test above just posted one. Without this
+    // wait the API answers 429 instead of 401 - which now renders as an error
+    // too, so the assertion below would go green without a rejected login ever
+    // having been rejected. There is no event to wait for: the window is the
+    // throttler's clock.
+    await page.waitForTimeout(1_100);
+
+    const refused = page.waitForResponse(
+      (response) =>
+        response.url().endsWith("/api/auth/login") &&
+        response.request().method() === "POST"
+    );
     await page.getByRole("button", { name: "Sign In" }).click();
+
+    // The answer this test is about. Pinned so a 429, a 500 or a network
+    // failure cannot masquerade as "the app showed an error".
+    const response = await refused;
+    expect(response.status(), await response.text()).toBe(401);
 
     await expect(page.getByText("Invalid credentials")).toBeVisible();
     // The form survived the round trip, so a retry is a retype of the password
-    // and not of everything.
+    // and not of everything. It did not before: the inputs belonged to a
+    // component that had been unmounted and replaced.
     await expect(page.getByPlaceholder("Username")).toHaveValue(user.username);
   });
 

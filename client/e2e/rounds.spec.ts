@@ -5,7 +5,6 @@ import {
   readPlayerId,
   readyUp,
   readyUpAndStart,
-  rosterCard,
   seatTwoPlayers,
   setBankPileCount,
   setReady,
@@ -129,40 +128,55 @@ test.describe("Rounds", () => {
   });
 
   /**
-   * BUG (real, not fixed here - out of scope for this task).
+   * The round-over gate exists to make players confirm they are ready for the
+   * next round. This asserts it is actually shut when the interstitial opens.
    *
-   * A round ending does not clear anybody's readiness, so the interstitial's
-   * "ready up for the next one" gate is already satisfied the moment it
-   * appears: the host can deal round 2 before either player has looked at the
+   * It used to be a `test.fail()`. The asymmetry was the tell:
+   * `startNextRound` dealt with
+   * `dealDecks(tx, players, { bankPileCount: 0, roundScore: 0, isReady: false })`,
+   * but `startGame` dealt with `dealDecks(tx, game.players)` - no reset - so
+   * the `isReady: true` everyone set in the LOBBY survived all of round 1 and
+   * was still there at `round_over` (`callBlitz` does not clear it either).
+   * The host could deal round 2 before either player had looked at the
    * scoreboard.
    *
-   * The asymmetry is the tell. `startNextRound` deals with
-   * `dealDecks(tx, players, { bankPileCount: 0, roundScore: 0, isReady: false })`,
-   * but `startGame` deals with `dealDecks(tx, game.players)` - no reset - so
-   * the `isReady: true` everyone set in the LOBBY survives all of round 1 and
-   * is still there at `round_over`. `callBlitz` does not clear it either.
+   * The gate was therefore skipped exactly once, on the round 1 -> 2
+   * transition, and worked for every round after that - because round 2 was
+   * dealt WITH the reset. "Works from round 2 onwards" is why it survived.
    *
-   * So the gate is skipped exactly once, on the round 1 -> 2 transition, and
-   * works for every round after that (because round 2 was dealt with the
-   * reset). That "works from round 2 onwards" is why it is easy to miss.
+   * Asserted through the interstitial's ready-up controls rather than the
+   * roster: `RoundOverSection` renders `<ReadySection showPlayers={false}>`
+   * (the scoreboard above it already names everybody), so there are no
+   * "✓ Ready"/"✗ Not Ready" cards on this screen to read. `ReadyButton`'s
+   * label is `currentPlayer.isReady` straight off the server's state, and the
+   * host's deal button is rendered behind `allPlayersReady` - which is the
+   * gate itself, so pressing on it is the assertion that matters.
    */
   test("a round ending clears everyone's readiness", async ({ browser }) => {
-    test.fail(
-      true,
-      "startGame deals without resetting isReady, so lobby readiness survives into round_over"
-    );
-
     const seated = await seatTwoPlayers(browser);
-    const { hostPage } = seated;
+    const { hostPage, guestPage } = seated;
 
     await readyUpAndStart(seated);
     await armBlurtz(seated, 6);
     await hostPage.getByRole("button", { name: "BLURTZ!" }).click();
-    await expect(statusHeading(hostPage)).toHaveText("Round over!");
 
-    await expect(rosterCard(hostPage, seated.host.username)).toContainText(
-      "✗ Not Ready"
-    );
+    for (const page of [hostPage, guestPage]) {
+      await expect(statusHeading(page)).toHaveText("Round over!");
+      // "Ready Up" and not "Cancel Ready": this player is NOT ready. The
+      // label mirrors the server's `isReady`, so it is the server being
+      // asserted here, not a local flag.
+      await expect(page.getByRole("button", { name: /Ready Up/ })).toBeVisible();
+      await expect(page.getByRole("button", { name: /Cancel Ready/ })).toHaveCount(0);
+      await expect(
+        page.getByText("Waiting for all players to be ready (0/2)")
+      ).toBeVisible();
+    }
+
+    // The gate is shut, not merely drawn: the host's deal button is rendered
+    // behind `allPlayersReady`, so there is nothing to click.
+    await expect(
+      hostPage.getByRole("button", { name: "Start Round 2" })
+    ).toHaveCount(0);
 
     await seated.close();
   });

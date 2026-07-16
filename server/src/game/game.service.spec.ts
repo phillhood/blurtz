@@ -702,6 +702,73 @@ describe("GameService", () => {
         data: { status: "playing" },
       });
     });
+
+    // The deal CONSUMES readiness, here exactly as in `startNextRound`.
+    //
+    // This asymmetry - `startNextRound` dealt with `isReady: false` and
+    // `startGame` dealt with no reset at all - skipped the round-over gate
+    // exactly once. Nothing else clears `isReady` (`callBlitz` does not), so
+    // the lobby's `isReady: true` survived all of round 1, and the round-over
+    // interstitial came up with its ready-up gate already satisfied: the host
+    // could deal round 2 before anyone had seen the scoreboard. Round 3 onward
+    // was fine, because round 2 was dealt by `startNextRound`.
+    it("clears everyone's readiness when it deals, so the round-over gate holds", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        name: "Test Game",
+        alias: "ABC123",
+        maxPlayers: 2,
+        status: "waiting",
+        hostId: "host-user",
+        winnerPlayerId: null,
+        currentRound: 1,
+        targetScore: 100,
+        gameState: { bankPiles: [] },
+        createdAt: new Date(),
+        updatedAt: new Date(),
+        players: [
+          {
+            id: "p1",
+            userId: "host-user",
+            isReady: true,
+            score: 0,
+            roundScore: 0,
+            bankPileCount: 0,
+            deck: null,
+            user: { id: "host-user", username: "host" },
+          },
+          {
+            id: "p2",
+            userId: "other-user",
+            isReady: true,
+            score: 0,
+            roundScore: 0,
+            bankPileCount: 0,
+            deck: null,
+            user: { id: "other-user", username: "guest" },
+          },
+        ],
+      });
+      (prismaService.player.update as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+
+      await service.startGame("game-1", "host-user");
+
+      const updates = (prismaService.player.update as jest.Mock).mock.calls.map(
+        (c) => c[0]
+      );
+      expect(updates).toHaveLength(2);
+
+      for (const update of updates) {
+        expect(update.data.isReady).toBe(false);
+        // Dealt in the SAME write, not a second round trip - the readiness and
+        // the deck it belongs to cannot land apart.
+        expect(update.data.deck).toBeDefined();
+        // `score` is the running total. A deal must never touch it, whichever
+        // deal it is.
+        expect(update.data).not.toHaveProperty("score");
+      }
+    });
   });
 
   // ---------------------------------------------------------------------

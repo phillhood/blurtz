@@ -590,7 +590,20 @@ export class GameService {
 
       this.assertReadyToDeal(game.players, "start the game");
 
-      await this.dealDecks(tx, game.players);
+      // `isReady` is consumed by the deal, exactly as in `startNextRound`.
+      //
+      // It used to be left alone here, and that asymmetry skipped the
+      // round-over gate exactly once: the `isReady: true` everyone set in the
+      // LOBBY survived all of round 1 (nothing else clears it - `callBlitz`
+      // does not), so the round-over interstitial appeared with its ready-up
+      // gate already satisfied and the host could deal round 2 before either
+      // player had looked at the scoreboard. Every round after that behaved,
+      // because round 2 was dealt by `startNextRound` and IT resets - which is
+      // what made this so easy to miss.
+      //
+      // Only `isReady`: `bankPileCount` and `roundScore` are zero on a fresh
+      // Player row, and `score` must never be reset by a deal.
+      await this.dealDecks(tx, game.players, { isReady: false });
 
       await tx.game.update({
         where: { id: gameId },
