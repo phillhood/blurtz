@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    // CommonJS with declarations, from this one tsc invocation. The server is
+    // a CJS Nest build and cannot `require()` an ESM-only package, so CJS is
+    // the format that serves both consumers; Vite pre-bundles it for the
+    // client (see `optimizeDeps.include` in client/vite.config.ts).
+    "target": "ES2020",
+    "module": "commonjs",
+    "moduleResolution": "node",
+    "lib": ["ES2020"],
+    "declaration": true,
+    "declarationMap": true,
+    "sourceMap": true,
+    "outDir": "./dist",
+    "rootDir": "./src",
+    "esModuleInterop": true,
+    "allowSyntheticDefaultImports": true,
+    "forceConsistentCasingInFileNames": true,
+    "skipLibCheck": true,
+    // Stricter than the server on purpose: this package is the one both sides
+    // depend on, and the client compiles `strict`. Code that only type-checks
+    // under the server's loose settings has no business being shared.
+    "strict": true,
+    "types": ["node", "jest"]
+  },
+  // The specs are type-checked and run by ts-jest, which reads the
+  // compilerOptions above but ignores include/exclude. They are excluded here
+  // so they stay out of `dist` - a published package ships rules, not tests.
+  "include": ["src/**/*"],
+  "exclude": ["node_modules", "dist", "**/*.spec.ts"]
+}

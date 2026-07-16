@@ -15,6 +15,21 @@ export default defineConfig({
       usePolling: true,
     },
   },
+  // `@blurtz/shared` is a LINKED workspace package that ships CommonJS (the
+  // server is a CJS Nest build and cannot require() ESM, so CJS is the format
+  // that serves both sides). Vite treats a linked dep as source and skips
+  // pre-bundling it, which leaves a CJS package with no ESM interop - so it
+  // has to be opted back in, in both dev and build. There is no path alias
+  // here on purpose: it resolves through the workspace symlink like any other
+  // dependency.
+  optimizeDeps: {
+    include: ["@blurtz/shared"],
+  },
+  build: {
+    commonjsOptions: {
+      include: [/@blurtz\/shared/, /node_modules/],
+    },
+  },
   resolve: {
     alias: {
       "@": getAliasPath("src"),

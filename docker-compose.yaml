@@ -14,12 +14,19 @@ services:
       - .env
     environment:
       - NODE_ENV=development
+    # Every mount is now under the workspace root: the image's WORKDIR is /app
+    # (the repo root), so /app/client is the client package and /app/shared is
+    # the shared one. Nothing is mounted at /app/node_modules - the hoisted
+    # tree the image installed has to survive.
     volumes:
-      - ./client/src:/app/src
-      - ./client/package.json:/app/package.json
-      - ./client/tsconfig.json:/app/tsconfig.json
-      - ./client/vite.config.ts:/app/vite.config.ts
-      - ./client/index.html:/app/index.html
+      - ./client/src:/app/client/src
+      - ./client/package.json:/app/client/package.json
+      - ./client/tsconfig.json:/app/client/tsconfig.json
+      - ./client/vite.config.ts:/app/client/vite.config.ts
+      - ./client/index.html:/app/client/index.html
+      # The container rebuilds shared from this on start (see the Dockerfile's
+      # CMD); Vite reads the built dist/, never these sources.
+      - ./shared/src:/app/shared/src
 
   server:
     build:
@@ -38,12 +45,17 @@ services:
       - REDIS_URL=redis://redis:6379
     networks:
       - blurtz-network
+    # Every mount is now under the workspace root - see the client's note.
     volumes:
-      - ./server/src:/app/src
-      - ./server/prisma:/app/prisma
-      - ./server/package.json:/app/package.json
-      - ./server/tsconfig.json:/app/tsconfig.json
-      - ./server/nest-cli.json:/app/nest-cli.json
+      - ./server/src:/app/server/src
+      - ./server/prisma:/app/server/prisma
+      - ./server/package.json:/app/server/package.json
+      - ./server/tsconfig.json:/app/server/tsconfig.json
+      - ./server/nest-cli.json:/app/server/nest-cli.json
+      - ./server/prisma.config.ts:/app/server/prisma.config.ts
+      # The container rebuilds shared from this on start (see the Dockerfile's
+      # CMD); the server imports the built dist/, never these sources.
+      - ./shared/src:/app/shared/src
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:3001/api/health/live"]
       interval: 30s

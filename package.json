@@ -1,0 +1,20 @@
+{
+  "name": "blurtz",
+  "description": "Blurtz - a real-time multiplayer Nertz game",
+  "version": "1.0.0",
+  "author": "Phill Hood",
+  "license": "MIT",
+  "private": true,
+  "workspaces": [
+    "shared",
+    "client",
+    "server"
+  ],
+  "scripts": {
+    "build:shared": "npm run build --workspace shared",
+    "build": "npm run build:shared && npm run build --workspace server && npm run build --workspace client",
+    "pretest": "npm run build:shared",
+    "test": "npm run test --workspace shared && npm run test --workspace server && npm run test:run --workspace client",
+    "lint": "npm run lint --workspaces --if-present"
+  }
+}

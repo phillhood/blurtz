@@ -1,0 +1,26 @@
+# Both images build from the repo root, so this is the ONLY dockerignore that
+# takes effect. `client/.dockerignore` and `server/.dockerignore` used to sit
+# here doing nothing: BuildKit looks for `<dockerfile>.dockerignore` and then
+# `<context>/.dockerignore`, and with `context: .` neither of those was them.
+#
+# `**/node_modules` is the load-bearing line. The Dockerfiles `COPY server ./server`
+# AFTER `npm ci`, so a host node_modules directory would land on top of the
+# workspace tree the image just installed - host-built binaries and, worse, a
+# nested `server/node_modules` shadowing the hoisted root one.
+**/node_modules
+**/dist
+**/coverage
+**/.vite
+
+.git
+.gitignore
+.env
+**/.env
+**/.npm
+**/.cache
+**/npm-debug.log
+
+client/playwright-report
+client/test-results
+.dev
+.superpowers

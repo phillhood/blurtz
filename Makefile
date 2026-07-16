@@ -1,7 +1,8 @@
 .PHONY: help up down build rebuild logs logs-server logs-client logs-db logs-redis \
         connect-server connect-client connect-db connect-redis \
         migrate migrate-create migrate-reset migrate-status prisma-generate prisma-studio \
-        clean shell-server shell-client
+        clean shell-server shell-client install build-shared test test-server test-shared \
+        test-watch lint
 
 # Default target
 help:
@@ -36,6 +37,14 @@ help:
 	@echo "  make migrate-status       - Show migration status"
 	@echo "  make prisma-generate      - Regenerate Prisma client"
 	@echo "  make prisma-studio        - Open Prisma Studio"
+	@echo ""
+	@echo "Workspace:"
+	@echo "  make install         - Install every workspace from the root lockfile"
+	@echo "  make build-shared    - Build @blurtz/shared (client + server import its dist/)"
+	@echo "  make test            - Run all three suites (shared, server, client)"
+	@echo "  make test-shared     - Run the rules engine suite only"
+	@echo "  make test-server     - Run the server suite only"
+	@echo "  make lint            - Lint every workspace"
 
 # =============================================================================
 # Docker Compose Commands
@@ -100,26 +109,30 @@ shell-client: connect-client
 # =============================================================================
 # Database Migrations (run inside server container)
 # =============================================================================
+#
+# `-w /app/server` on every one of these: the container's WORKDIR is the
+# workspace root now, and prisma.config.ts - which is where DATABASE_URL and
+# the schema path come from - lives in the server package, not at the root.
 
 migrate:
-	docker compose exec server npx prisma migrate deploy
+	docker compose exec -w /app/server server npx prisma migrate deploy
 
 migrate-create:
 ifndef NAME
 	$(error NAME is required. Usage: make migrate-create NAME=migration_name)
 endif
-	docker compose exec server npx prisma migrate dev --name $(NAME)
+	docker compose exec -w /app/server server npx prisma migrate dev --name $(NAME)
 
 migrate-reset:
 	@echo "WARNING: This will destroy all data in the database!"
 	@read -p "Are you sure? [y/N] " confirm && [ "$$confirm" = "y" ] || exit 1
-	docker compose exec server npx prisma migrate reset --force
+	docker compose exec -w /app/server server npx prisma migrate reset --force
 
 migrate-status:
-	docker compose exec server npx prisma migrate status
+	docker compose exec -w /app/server server npx prisma migrate status
 
 prisma-generate:
-	docker compose exec server npx prisma generate
+	docker compose exec -w /app/server server npx prisma generate
 
 prisma-studio:
 	cd server && npx prisma studio
@@ -128,19 +141,32 @@ prisma-studio:
 # Development Helpers
 # =============================================================================
 
-# Install dependencies in both client and server
+# Install dependencies for every workspace (shared, client, server) from the
+# single root lockfile. There is one install now, not two.
 install:
-	cd client && npm install
-	cd server && npm install
+	npm install
 
-# Run tests
+# Build the shared package. Both the client and the server import it as
+# @blurtz/shared and resolve to its dist/, so it has to exist before either
+# will type-check or run.
+build-shared:
+	npm run build:shared
+
+# Run tests. `npm test` builds shared first (root pretest) and then runs all
+# three suites: shared (the rules engine), server, client.
 test:
+	npm test
+
+test-server:
+	npm run build:shared
 	cd server && npm test
+
+test-shared:
+	cd shared && npm test
 
 test-watch:
 	cd server && npm run test:watch
 
-# Lint
+# Lint every workspace that has a lint script
 lint:
-	cd client && npm run lint
-	cd server && npm run lint
+	npm run lint
