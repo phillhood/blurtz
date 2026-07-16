@@ -1,3 +1,49 @@
+export class ApiError extends Error {
+  constructor(
+    readonly status: number,
+    readonly body: unknown,
+    readonly code?: string
+  ) {
+    super(`API Error: ${status}`);
+    this.name = "ApiError";
+  }
+}
+
+const parseErrorBody = async (response: Response): Promise<unknown> => {
+  try {
+    return await response.clone().json();
+  } catch {
+    return undefined;
+  }
+};
+
+const throwApiError = async (response: Response): Promise<never> => {
+  const body = await parseErrorBody(response);
+  const rawMessage =
+    body && typeof body === "object" && "message" in body
+      ? (body as { message?: unknown }).message
+      : undefined;
+  const code =
+    body && typeof body === "object" && "error" in body
+      ? (body as { error?: unknown }).error
+      : undefined;
+
+  // Nest's ValidationPipe returns `message` as a string array; join for display.
+  const message = Array.isArray(rawMessage)
+    ? rawMessage.filter((m) => typeof m === "string").join(", ")
+    : rawMessage;
+
+  const error = new ApiError(
+    response.status,
+    body,
+    typeof code === "string" ? code : undefined
+  );
+  if (typeof message === "string" && message.length > 0) {
+    error.message = message;
+  }
+  throw error;
+};
+
 const getApiBaseUrl = () => {
   if (import.meta.env.VITE_API_URL) {
     return import.meta.env.VITE_API_URL;
@@ -23,7 +69,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+      await throwApiError(response);
     }
 
     return response.json();
@@ -37,7 +83,7 @@ export class ApiClient {
     });
 
     if (!response.ok) {
-      throw new Error(`API Error: ${response.status}`);
+      await throwApiError(response);
     }
 
     return response.json();

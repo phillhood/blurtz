@@ -12,7 +12,21 @@ interface GameStoreState {
   currentGameId: string | null;
   connected: boolean;
   socketInitialized: boolean;
+  /**
+   * Something went wrong with the connection, the room, or a request. <Game>
+   * decides whether this is fatal by looking at its text, so ONLY put things
+   * here that are allowed to be fatal.
+   */
   error: string | null;
+  /**
+   * Why the server refused the last move. Deliberately NOT `error`.
+   *
+   * Rejection reasons are free text ("Destination pile not found"), and <Game>
+   * decides fatality by substring-matching `error` for "not found" - so sharing
+   * the field would eject a player from a game they can still play. A refused
+   * move is never fatal, so it gets a channel that heuristic cannot see.
+   */
+  moveRejection: string | null;
   // Internal flags
   userJoined: boolean;
   userLeft: boolean;
@@ -30,21 +44,20 @@ interface GameStoreActions {
     userId: string
   ) => Promise<Game | null>;
   leaveGame: (userId: string, forfeit?: boolean) => void;
-  // Game actions
-  makeMove: (
-    playerId: string,
-    cardId: string,
-    fromPileId: string,
-    toPileId: string
-  ) => void;
-  flipCard: (playerId: string, pileId: string) => void;
+  // Game actions.
+  // The server derives the acting player from the socket's authenticated
+  // connection. These must not send a playerId: identity never comes off the
+  // wire.
+  makeMove: (cardId: string, fromPileId: string, toPileId: string) => void;
+  flipCard: (pileId: string) => void;
   flipDrawPile: (playerId: string) => void;
-  callBlitz: (playerId: string) => void;
-  playerReady: (playerId: string, isReady: boolean) => void;
+  callBlitz: () => void;
+  playerReady: (isReady: boolean) => void;
   startGame: () => void;
   // Util
   clearError: () => void;
   setError: (error: string | null) => void;
+  clearMoveRejection: () => void;
   getCurrentPlayer: (userId: string | undefined) => Player | null;
 }
 
@@ -59,6 +72,7 @@ export const useGameStore = create<GameStore>()(
       connected: false,
       socketInitialized: false,
       error: null,
+      moveRejection: null,
       userJoined: false,
       userLeft: false,
 
@@ -88,7 +102,6 @@ export const useGameStore = create<GameStore>()(
                 userJoined: false,
                 userLeft: false,
               });
-              sessionStorage.removeItem("currentGameId");
             }
           },
 
@@ -101,17 +114,17 @@ export const useGameStore = create<GameStore>()(
               userJoined: true,
               userLeft: false,
               error: null,
+              moveRejection: null,
             });
-            sessionStorage.setItem("currentGameId", newGameState.id);
           },
 
           onGameLeft: (_gameId: string) => {
-            sessionStorage.removeItem("currentGameId");
             set({
               gameState: null,
               currentGameId: null,
               userJoined: false,
               userLeft: true,
+              moveRejection: null,
             });
           },
 
@@ -135,11 +148,11 @@ export const useGameStore = create<GameStore>()(
             }
           },
 
-          onGameEnded: (data: {
-            gameState: GameState;
-            reason: string;
-            winner?: Player;
-          }) => {
+          // Swap the state in, exactly like every other event here. It arrives
+          // with `status: "finished"` and `winner` set, and the final
+          // scoreboard renders itself off that - the client does not decide
+          // who won.
+          onGameEnded: (data: { gameState: GameState }) => {
             set({ gameState: data.gameState, error: null });
           },
 
@@ -147,8 +160,32 @@ export const useGameStore = create<GameStore>()(
             set({ gameState: newGameState, error: null });
           },
 
+          // A refused move still swaps gameState. That new object identity is
+          // what tells the board the move resolved - without it the card the
+          // player dragged stays hidden on the pile it never left.
+          //
+          // The reason goes to `moveRejection`, never `error`: losing a race
+          // (or holding a stale pile id) is routine play, and must not be
+          // eligible for <Game>'s fatal-error screen. It is also why nothing
+          // else clears this field - it expires on its own 3s toast timer, so
+          // an opponent's move landing a frame later cannot wipe the
+          // explanation before the player has read it.
+          onMoveRejected: (data: { gameState: GameState; reason: string }) => {
+            set({ gameState: data.gameState, moveRejection: data.reason });
+          },
+
           onCardFlipped: (newGameState: GameState) => {
             set({ gameState: newGameState, error: null });
+          },
+
+          // A round ended without anyone reaching the target. Nothing to do
+          // but swap the state in - it arrives with `status: "round_over"`,
+          // the scores accumulated and everyone's isReady cleared, and the
+          // round-over screen renders itself off that. The client does not
+          // compute a score or a round number; it mirrors what the server
+          // decided, like every other event here.
+          onRoundOver: (data: { gameState: GameState }) => {
+            set({ gameState: data.gameState, error: null });
           },
         };
 
@@ -215,8 +252,9 @@ export const useGameStore = create<GameStore>()(
             userJoined: false,
             userLeft: false,
             error: null,
+            moveRejection: null,
           });
-          socketService.joinGame(gameId, userId);
+          socketService.joinGame(gameId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to join game",
@@ -237,24 +275,21 @@ export const useGameStore = create<GameStore>()(
 
         try {
           const gameId = currentGameId;
-          sessionStorage.removeItem("currentGameId");
 
           set({
             userLeft: true,
             userJoined: false,
             currentGameId: null,
             gameState: null,
+            moveRejection: null,
           });
 
           queryClient.invalidateQueries({ queryKey: gameKeys.all });
 
           if (forfeit) {
-            const player = gameState?.players?.find((p) => p.user.id === userId);
-            if (player) {
-              socketService.forfeitGame(gameId, player.id);
-            }
+            socketService.forfeitGame(gameId);
           } else {
-            socketService.leaveGame(gameId, userId);
+            socketService.leaveGame(gameId);
           }
         } catch (error) {
           set({
@@ -263,17 +298,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      makeMove: (
-        playerId: string,
-        cardId: string,
-        fromPileId: string,
-        toPileId: string
-      ) => {
+      makeMove: (cardId: string, fromPileId: string, toPileId: string) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.moveCard(gameState.id, playerId, cardId, fromPileId, toPileId);
+          socketService.moveCard(gameState.id, cardId, fromPileId, toPileId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to make move",
@@ -281,12 +311,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      flipCard: (playerId: string, pileId: string) => {
+      flipCard: (pileId: string) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.flipCard(gameState.id, playerId, pileId);
+          socketService.flipCard(gameState.id, pileId);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to flip card",
@@ -294,6 +324,8 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
+      // playerId is still needed here to look the player's own draw pile id up
+      // out of the local game state - it is not sent to the server.
       flipDrawPile: (playerId: string) => {
         const { gameState } = get();
         if (!gameState) return;
@@ -301,15 +333,15 @@ export const useGameStore = create<GameStore>()(
         const player = gameState.players?.find((p) => p.id === playerId);
         if (!player?.deck?.drawPile?.id) return;
 
-        get().flipCard(playerId, player.deck.drawPile.id);
+        get().flipCard(player.deck.drawPile.id);
       },
 
-      callBlitz: (playerId: string) => {
+      callBlitz: () => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.callBlitz(gameState.id, playerId);
+          socketService.callBlitz(gameState.id);
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to call blitz",
@@ -317,12 +349,12 @@ export const useGameStore = create<GameStore>()(
         }
       },
 
-      playerReady: (playerId: string, isReady: boolean) => {
+      playerReady: (isReady: boolean) => {
         const { gameState } = get();
         if (!gameState) return;
 
         try {
-          socketService.playerReady(gameState.id, playerId, isReady);
+          socketService.playerReady(gameState.id, isReady);
         } catch (error) {
           set({
             error:
@@ -347,6 +379,7 @@ export const useGameStore = create<GameStore>()(
       // Util
       clearError: () => set({ error: null }),
       setError: (error: string | null) => set({ error }),
+      clearMoveRejection: () => set({ moveRejection: null }),
 
       getCurrentPlayer: (userId: string | undefined) => {
         const { gameState } = get();
@@ -358,8 +391,9 @@ export const useGameStore = create<GameStore>()(
   )
 );
 
-// Auto-initialize/disconnect socket based on auth state changes
-// This runs outside React - no useEffect, no dependency arrays
+// Connects and disconnects the socket on login/logout, outside React - no
+// useEffect, no dependency arrays. Only runs because `main.tsx` imports this
+// module for its side effect.
 import { useAuthStore } from "./authStore";
 import { User } from "@types";
 

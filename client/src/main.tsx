@@ -7,7 +7,9 @@ import { queryClient } from "./lib/queryClient";
 import "@styles/index.css";
 import "@styles/fonts.css";
 
-// Import gameStore to activate the auth subscription
+// Side-effect import: this is what activates gameStore's auth subscription,
+// which connects and disconnects the socket on login/logout. Nothing here
+// references the module, so dropping it silently kills the socket lifecycle.
 import "@stores/gameStore";
 
 ReactDOM.createRoot(document.getElementById("root")!).render(

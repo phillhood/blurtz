@@ -1,10 +1,10 @@
 import React from "react";
-import { Card as CardType } from "@types";
+import { ClientCard } from "@types";
 import { Card } from ".";
 
 interface FannedCardsProps {
   /** Array of face-up cards to fan out (last card is top/playable) */
-  cards: CardType[];
+  cards: ClientCard[];
   /** Pile ID for drag/drop */
   pileId: string;
   /** Whether the top card can be dragged */
@@ -16,9 +16,9 @@ interface FannedCardsProps {
   /** Vertical offset between cards in pixels (default 0) */
   fanOffsetY?: number;
   /** Drop handler for top card */
-  onDrop?: (card: CardType) => void;
+  onDrop?: (card: ClientCard) => void;
   /** Validates if a card can be dropped on top card */
-  canDrop?: (card: CardType) => boolean;
+  canDrop?: (card: ClientCard) => boolean;
   /** Card IDs pending a move (hidden until game state updates) */
   pendingMoveCardIds?: Set<string>;
 }
@@ -43,7 +43,6 @@ const FannedCards: React.FC<FannedCardsProps> = ({
     return null;
   }
 
-  // Get the last N cards to display (most recent flips)
   const displayCards = cards.slice(-maxDisplay);
   const cardCount = displayCards.length;
 

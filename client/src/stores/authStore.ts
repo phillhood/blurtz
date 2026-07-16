@@ -2,9 +2,22 @@ import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
 import { User } from "@types";
 import { authService } from "@services/auth.service";
+import { ApiError } from "@services/api.service";
 
 interface AuthState {
   user: User | null;
+  /**
+   * The persisted session is still being resolved. Nothing else.
+   *
+   * Starts `true` and goes `false` exactly once, when `fetchUserProfile`
+   * settles: until then a token in localStorage may or may not turn out to be a
+   * signed-in user, and `App` cannot pick a router branch without knowing.
+   *
+   * `login` and `register` deliberately do NOT set it: `App` unmounts the whole
+   * router while it is true, which would throw away the form about to show the
+   * error along with the credentials the user typed. Both forms track their own
+   * in-flight state locally.
+   */
   loading: boolean;
   error: string | null;
 }
@@ -31,25 +44,25 @@ export const useAuthStore = create<AuthStore>()(
 
         // Actions
         login: async (username: string, password: string) => {
-          set({ loading: true, error: null });
+          set({ error: null });
           try {
             const response = await authService.login({ username, password });
             localStorage.setItem("token", response.token);
-            set({ user: response.user, loading: false, error: null });
+            set({ user: response.user, error: null });
           } catch (error: any) {
-            set({ loading: false, error: error.message || "Login failed" });
+            set({ error: error.message || "Login failed" });
             throw new Error(error.message || "Login failed");
           }
         },
 
         register: async (username: string, password: string) => {
-          set({ loading: true, error: null });
+          set({ error: null });
           try {
             const response = await authService.register({ username, password });
             localStorage.setItem("token", response.token);
-            set({ user: response.user, loading: false, error: null });
+            set({ user: response.user, error: null });
           } catch (error: any) {
-            set({ loading: false, error: error.message || "Registration failed" });
+            set({ error: error.message || "Registration failed" });
             throw new Error(error.message || "Registration failed");
           }
         },
@@ -70,8 +83,8 @@ export const useAuthStore = create<AuthStore>()(
           try {
             const userData = await authService.getProfile();
             set({ user: userData, loading: false, error: null });
-          } catch (error: any) {
-            if (error.message?.includes("401") || error.message?.includes("403")) {
+          } catch (error) {
+            if (error instanceof ApiError && (error.status === 401 || error.status === 403)) {
               localStorage.removeItem("token");
               set({ user: null, loading: false, error: null });
             } else {

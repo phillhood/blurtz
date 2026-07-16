@@ -2,7 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor } from "@dnd-kit/core";
 import { useGameContext, useAuthContext } from "@hooks";
-import { Card } from "@types";
+import { ClientCard, PileType, VisibleCard } from "@types";
+import { isVisibleCard } from "@utils";
+// The rules, from the one place they live. Imported by package name through
+// the workspace symlink - there is no path alias for @blurtz/shared, on
+// purpose.
+import { canPlace, cardsMovedBy } from "@blurtz/shared";
 import { GameContainer, GameBoard, CenterArea, OpponentsRow, GameCard, CardNumber } from "@styles";
 import {
   GameLoadingScreen,
@@ -16,12 +21,12 @@ import {
   GameToast,
 } from "./components";
 import { DragData } from "./components/Card";
+import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
   const { gameId } = useParams<{ gameId: string }>();
-  const gameIdRef = useRef<string | null>(gameId);
-  const hasJoinedRef = useRef<boolean>(false);
+  const joinedGameIdRef = useRef<string | null>(null);
   const navigate = useNavigate();
 
   const {
@@ -32,12 +37,17 @@ const Game: React.FC = () => {
     connected,
     error,
     clearError,
+    moveRejection,
+    clearMoveRejection,
     currentPlayer,
   } = useGameContext();
 
   const [showForfeitDialog, setShowForfeitDialog] = useState(false);
-  const [activeCards, setActiveCards] = useState<Card[]>([]);
-  const [pendingMoveCardIds, setPendingMoveCardIds] = useState<Set<string>>(new Set());
+  // The cards travelling under the cursor. VisibleCard[] because the drag
+  // overlay draws their faces - and because a face-down card cannot be picked
+  // up in the first place.
+  const [activeCards, setActiveCards] = useState<VisibleCard[]>([]);
+  const { pendingMoveCardIds, markPending } = usePendingMoveCards(gameState);
 
   // Configure sensors for @dnd-kit
   const sensors = useSensors(
@@ -56,31 +66,30 @@ const Game: React.FC = () => {
   );
 
   useEffect(() => {
-    if (connected && gameIdRef.current && !hasJoinedRef.current) {
-      hasJoinedRef.current = true;
-      joinGame(gameIdRef.current);
+    // Join whenever we're connected and haven't already joined this gameId -
+    // this re-runs (and re-joins) when navigating from one game to another
+    // without a remount, since gameId is a real dependency here.
+    if (connected && gameId && joinedGameIdRef.current !== gameId) {
+      joinedGameIdRef.current = gameId;
+      joinGame(gameId);
     }
     // Reset on disconnect so we rejoin on reconnect
     if (!connected) {
-      hasJoinedRef.current = false;
+      joinedGameIdRef.current = null;
     }
-  }, [gameIdRef, connected]);
+    // `joinGame` is declared here because it is read here. It changes identity
+    // only when `user.id` does (it is a useCallback over a zustand action, both
+    // stable), and a re-run cannot re-join anyway - `joinedGameIdRef` is what
+    // decides that, not this array.
+  }, [gameId, connected, joinGame]);
 
-  // Check if error is fatal (should block the game) or transient (show toast)
+  // Check if error is fatal (should block the game) or transient (show toast).
+  //
+  // This only ever looks at `error`. A refused move arrives on `moveRejection`
+  // precisely so it can never reach this heuristic: the server's reasons
+  // include "Source pile not found" and "Destination pile not found", and a
+  // player who mis-drags a card is still in a game they can go on playing.
   const isFatalError = error?.includes("not found") || error?.includes("does not exist");
-
-  useEffect(() => {
-    if (isFatalError) {
-      navigate("/dashboard");
-    }
-  }, [isFatalError, navigate]);
-
-  // Clear pending move cards when game state updates
-  useEffect(() => {
-    if (pendingMoveCardIds.size > 0) {
-      setPendingMoveCardIds(new Set());
-    }
-  }, [gameState]);
 
   const handleLeave = () => {
     if (gameState?.status === "playing") {
@@ -101,17 +110,26 @@ const Game: React.FC = () => {
     navigator.clipboard.writeText(gameState?.alias || "");
   };
 
-  const canDropOnBankPile = (pileIndex: number, draggedCard: Card) => {
+  // The drop affordances below find the pile, then hand the rule to
+  // `canPlace` - the same function the server decides the real move with. They
+  // do not decide anything themselves: the server is authoritative and
+  // re-validates every move, so all this changes is whether a target lights up
+  // under the cursor.
+  //
+  // Both start by refusing a face-down card, and that is not padding: a
+  // face-down card has no value to compare, on the wire or in the type, so
+  // there is no rule to apply to one. Nothing draggable is face-down anyway.
+  const canDropOnBankPile = (pileIndex: number, draggedCard: ClientCard) => {
+    if (!draggedCard.faceUp) return false;
+
     const pile = gameState?.bankPiles[pileIndex];
-    if (!pile || pile.cards.length === 0) {
-      return draggedCard.number === 1;
-    }
-    const topCard = pile.cards[pile.cards.length - 1];
-    // Must be same color (compare by name) and +1 value
-    return (
-      draggedCard.color.name === topCard.color.name &&
-      draggedCard.number === topCard.number + 1
-    );
+    const topCard = pile?.cards[pile.cards.length - 1];
+    // A bank pile's top card is always face-up in a real game; if it somehow
+    // is not, there is nothing to compare against and the drop is refused
+    // rather than treated as an empty pile.
+    if (topCard && !topCard.faceUp) return false;
+
+    return canPlace("bank", topCard, draggedCard);
   };
 
   // Check if a pile ID belongs to a Bank pile
@@ -125,31 +143,34 @@ const Game: React.FC = () => {
   };
 
   // Validate Work pile drop
-  const canDropOnWorkPile = (pileId: string, draggedCard: Card, _fromPileId: string): boolean => {
+  const canDropOnWorkPile = (pileId: string, draggedCard: ClientCard): boolean => {
+    if (!draggedCard.faceUp) return false;
+
     const pile = currentPlayer?.deck.workPiles.find(p => p.id === pileId);
     if (!pile) return false;
 
-    // Empty work pile accepts any card
-    if (pile.cards.length === 0) return true;
-
     const topCard = pile.cards[pile.cards.length - 1];
-    // Must be descending (-1) and opposite type (boy/girl)
-    return (
-      draggedCard.color.type !== topCard.color.type &&
-      draggedCard.number === topCard.number - 1
-    );
+    if (topCard && !topCard.faceUp) return false;
+
+    // An empty work pile accepts any card. `canPlace` is the only copy of that
+    // rule - do not re-state it here.
+    return canPlace("work", topCard, draggedCard);
   };
 
-  // Handle @dnd-kit drag start event
   const handleDragStart = (event: DragStartEvent) => {
     const dragData = event.active.data.current as DragData;
-    if (dragData?.card) {
-      // Check if dragging from a work pile - if so, get the whole stack
+    // `card.faceUp` narrows the drag to a VisibleCard, which is what the
+    // overlay renders. It is not a new restriction - every pile already
+    // refuses to make a face-down card draggable.
+    if (dragData?.card?.faceUp) {
+      // Dragging out of a work pile picks up the stack above the card. The
+      // destination is not known yet, so this asks what a work→work move would
+      // carry - the widest a move from here can reach.
       const workPile = currentPlayer?.deck.workPiles.find(p => p.id === dragData.fromPileId);
       if (workPile) {
-        const cardIndex = workPile.cards.findIndex(c => c.id === dragData.card.id);
-        if (cardIndex >= 0) {
-          setActiveCards(workPile.cards.slice(cardIndex));
+        const stack = cardsMovedBy("work", "work", workPile.cards, dragData.card.id);
+        if (stack.length > 0) {
+          setActiveCards(stack.filter(isVisibleCard));
           return;
         }
       }
@@ -158,16 +179,18 @@ const Game: React.FC = () => {
     }
   };
 
-  // Get all card IDs being moved (for stack moves from work piles)
-  const getMovingCardIds = (fromPileId: string, cardId: string): string[] => {
+  /**
+   * The cards this move will actually carry, for the pending-move bookkeeping.
+   *
+   * Destination-aware: only a work→work move takes the stack above the card.
+   * Delegates to the engine's `cardsMovedBy` so both sides run one function.
+   */
+  const getMovingCardIds = (fromPileId: string, cardId: string, toType: PileType): string[] => {
     const workPile = currentPlayer?.deck.workPiles.find(p => p.id === fromPileId);
-    if (workPile) {
-      const cardIndex = workPile.cards.findIndex(c => c.id === cardId);
-      if (cardIndex >= 0) {
-        return workPile.cards.slice(cardIndex).map(c => c.id);
-      }
-    }
-    return [cardId];
+    if (!workPile) return [cardId];
+
+    const moving = cardsMovedBy("work", toType, workPile.cards, cardId);
+    return moving.length > 0 ? moving.map(c => c.id) : [cardId];
   };
 
   // Handle @dnd-kit drag end event
@@ -178,7 +201,7 @@ const Game: React.FC = () => {
     if (!over) return;
 
     const dragData = active.data.current as DragData;
-    const dropData = over.data.current as { pileId?: string; pileIndex?: number; isEmpty?: boolean; card?: Card } | undefined;
+    const dropData = over.data.current as { pileId?: string; pileIndex?: number; isEmpty?: boolean; card?: ClientCard } | undefined;
     const dropId = over.id as string;
 
     // Dropping back on the same pile - no-op
@@ -189,15 +212,15 @@ const Game: React.FC = () => {
       // Check if it's a Bank pile
       const bankPileIndex = gameState?.bankPiles.findIndex(p => p.id === dropData.pileId) ?? -1;
       if (bankPileIndex >= 0 && canDropOnBankPile(bankPileIndex, dragData.card)) {
-        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-        setPendingMoveCardIds(new Set(movingIds));
+        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "bank");
+        markPending(movingIds);
         makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
         return;
       }
       // Check if it's a Work pile (empty work piles accept any card)
       if (isCurrentPlayerWorkPile(dropData.pileId)) {
-        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-        setPendingMoveCardIds(new Set(movingIds));
+        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "work");
+        markPending(movingIds);
         makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
         return;
       }
@@ -212,16 +235,16 @@ const Game: React.FC = () => {
       if (isBankPile(targetPileId)) {
         const pileIndex = gameState?.bankPiles.findIndex(p => p.id === targetPileId) ?? -1;
         if (pileIndex >= 0 && canDropOnBankPile(pileIndex, dragData.card)) {
-          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-          setPendingMoveCardIds(new Set(movingIds));
+          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "bank");
+          markPending(movingIds);
           makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
         }
       }
       // Check if it's a Work pile (current player only)
       else if (isCurrentPlayerWorkPile(targetPileId)) {
-        if (canDropOnWorkPile(targetPileId, dragData.card, dragData.fromPileId)) {
-          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id);
-          setPendingMoveCardIds(new Set(movingIds));
+        if (canDropOnWorkPile(targetPileId, dragData.card)) {
+          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "work");
+          markPending(movingIds);
           makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
         }
       }
@@ -272,10 +295,19 @@ const Game: React.FC = () => {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      {/* Transient error toast */}
-      {error && !isFatalError && (
+      {/* Transient toast: a refused move, else a non-fatal error. Each branch
+          passes a stable store action as onDismiss - GameToast keys its
+          dismiss timer on that identity, so an inline closure would restart
+          the countdown on every render and the toast would never leave. */}
+      {moveRejection ? (
+        <GameToast
+          message={moveRejection}
+          duration={3000}
+          onDismiss={clearMoveRejection}
+        />
+      ) : error && !isFatalError ? (
         <GameToast message={error} duration={3000} onDismiss={clearError} />
-      )}
+      ) : null}
 
       <GameContainer>
         <GameHeader onLeave={handleLeave} onCopyCode={handleCopyCode} />
@@ -370,7 +402,7 @@ const Game: React.FC = () => {
                             }
                       }
                     >
-                      {card.number}
+                      {card.value}
                     </CardNumber>
                   </GameCard>
                 </div>

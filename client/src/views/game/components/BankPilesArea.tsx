@@ -1,25 +1,23 @@
 import React from "react";
 import { useDroppable } from "@dnd-kit/core";
 import { CenterArea, BankPiles, WorkPile, PileLabel } from "@styles";
-import { Card as CardType, Pile } from "@types";
+import { ClientCard, Pile } from "@types";
 import { CardPile } from ".";
 import { DragData } from "./Card";
 
 interface BankPilesAreaProps {
   bankPiles: Pile[];
-  canDropOnPile: (pileIndex: number, card: CardType) => boolean;
+  canDropOnPile: (pileIndex: number, card: ClientCard) => boolean;
 }
 
 const BankPilesArea: React.FC<BankPilesAreaProps> = ({
   bankPiles,
   canDropOnPile,
 }) => {
-  // Only show piles with cards
   const activePiles = bankPiles
     .map((pile, index) => ({ pile, index }))
     .filter(({ pile }) => pile.cards.length > 0);
 
-  // Find the first empty pile for the placeholder
   const firstEmptyIndex = bankPiles.findIndex((pile) => pile.cards.length === 0);
   const firstEmptyPile = firstEmptyIndex >= 0 ? bankPiles[firstEmptyIndex] : null;
 
@@ -61,14 +59,13 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
 const EmptyPileDropZone: React.FC<{
   pileId: string;
   pileIndex: number;
-  canDrop: (card: CardType) => boolean;
+  canDrop: (card: ClientCard) => boolean;
 }> = ({ pileId, pileIndex, canDrop }) => {
   const { setNodeRef, isOver, active } = useDroppable({
     id: `bank-pile-empty-${pileId}`,
     data: { pileId, pileIndex, isEmpty: true },
   });
 
-  // Check if the active card can be dropped here
   const canDropHere = isOver && active
     ? canDrop((active.data.current as DragData)?.card)
     : false;

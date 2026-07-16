@@ -1,8 +1,19 @@
 import { describe, it, expect, beforeEach, vi } from "vitest";
 import { useAuthStore } from "../authStore";
 import { authService } from "@services/auth.service";
+import { ApiError } from "@services/api.service";
 
-// Mock the auth service
+// ApiError's default message is `API Error: ${status}`, which would contain
+// the digits "401"/"403" and coincidentally satisfy a substring check like
+// `error.message.includes("401")`. Real server error bodies carry a message
+// like "Unauthorized" (no digits), so build errors that way here too -
+// otherwise a revert of the `instanceof ApiError` check wouldn't fail this test.
+const makeApiError = (status: number, message: string) => {
+  const err = new ApiError(status, { statusCode: status, message });
+  err.message = message;
+  return err;
+};
+
 vi.mock("@services/auth.service", () => ({
   authService: {
     login: vi.fn(),
@@ -11,7 +22,6 @@ vi.mock("@services/auth.service", () => ({
   },
 }));
 
-// Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -22,14 +32,12 @@ Object.defineProperty(window, "localStorage", { value: localStorageMock });
 
 describe("authStore", () => {
   beforeEach(() => {
-    // Reset store state before each test
     useAuthStore.setState({
       user: null,
       loading: false,
       error: null,
     });
 
-    // Clear all mocks
     vi.clearAllMocks();
     localStorageMock.getItem.mockReturnValue(null);
   });
@@ -62,7 +70,11 @@ describe("authStore", () => {
       );
     });
 
-    it("should set loading state during login", async () => {
+    // `loading` is the BOOT flag - "we do not know yet whether the persisted
+    // token is a session" - and `App` unmounts the entire router while it is
+    // true. Login flipping it would throw away the form mid-request, along with
+    // the error it was about to show.
+    it("should NOT touch the store-wide loading flag during login", async () => {
       const mockResponse = {
         user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
         token: "mock-token",
@@ -70,14 +82,26 @@ describe("authStore", () => {
       vi.mocked(authService.login).mockImplementation(
         () =>
           new Promise((resolve) => {
-            // Check loading state during the request
-            const state = useAuthStore.getState();
-            expect(state.loading).toBe(true);
+            expect(useAuthStore.getState().loading).toBe(false);
             resolve(mockResponse);
           })
       );
 
       await useAuthStore.getState().login("testuser", "password123");
+
+      expect(useAuthStore.getState().loading).toBe(false);
+    });
+
+    it("should NOT touch the store-wide loading flag when login fails", async () => {
+      vi.mocked(authService.login).mockRejectedValue(
+        new Error("Invalid credentials")
+      );
+
+      await expect(
+        useAuthStore.getState().login("testuser", "wrongpassword")
+      ).rejects.toThrow("Invalid credentials");
+
+      expect(useAuthStore.getState().loading).toBe(false);
     });
 
     it("should handle login error", async () => {
@@ -132,7 +156,6 @@ describe("authStore", () => {
 
   describe("logout", () => {
     it("should clear user and remove token", () => {
-      // Set up initial logged in state
       useAuthStore.setState({
         user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
         loading: false,
@@ -176,7 +199,7 @@ describe("authStore", () => {
     it("should clear user on 401 error", async () => {
       localStorageMock.getItem.mockReturnValue("expired-token");
       vi.mocked(authService.getProfile).mockRejectedValue(
-        new Error("401 Unauthorized")
+        makeApiError(401, "Unauthorized")
       );
 
       await useAuthStore.getState().fetchUserProfile();
@@ -184,6 +207,32 @@ describe("authStore", () => {
       const state = useAuthStore.getState();
       expect(state.user).toBeNull();
       expect(localStorageMock.removeItem).toHaveBeenCalledWith("token");
+    });
+
+    it("should clear user on 403 error", async () => {
+      localStorageMock.getItem.mockReturnValue("some-token");
+      vi.mocked(authService.getProfile).mockRejectedValue(
+        makeApiError(403, "Forbidden")
+      );
+
+      await useAuthStore.getState().fetchUserProfile();
+
+      const state = useAuthStore.getState();
+      expect(state.user).toBeNull();
+      expect(localStorageMock.removeItem).toHaveBeenCalledWith("token");
+    });
+
+    it("should NOT clear the token on a non-auth error (e.g. 500)", async () => {
+      localStorageMock.getItem.mockReturnValue("still-valid-token");
+      vi.mocked(authService.getProfile).mockRejectedValue(
+        new Error("Server error. Please try again later.")
+      );
+
+      await useAuthStore.getState().fetchUserProfile();
+
+      expect(localStorageMock.removeItem).not.toHaveBeenCalled();
+      const state = useAuthStore.getState();
+      expect(state.loading).toBe(false);
     });
   });
 

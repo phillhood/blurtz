@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { GameStatus } from "@styles";
 import { useGameContext } from "@hooks";
 import { getGameStatusTitle } from "@utils";
-import { GameWaitingInfo, ReadySection } from ".";
+import { GameWaitingInfo, ReadySection, RoundOverSection, RoundScoreboard } from ".";
 
 const GameStatusDisplay: React.FC = () => {
   const { gameState } = useGameContext();
@@ -10,12 +10,24 @@ const GameStatusDisplay: React.FC = () => {
 
   const playerCount = gameState?.currentPlayers || 0;
   const players = gameState?.players || [];
-  const { status, maxPlayers, winner } = gameState || {};
+  const { status, maxPlayers, winner, currentRound, targetScore } =
+    gameState || {};
 
   const showWaitingInfo = status === "waiting" && playerCount < 2;
   const showReadySection = status === "waiting" && playerCount >= 2;
   const isGameFull = players.length >= (maxPlayers || 2);
   const showShareCode = status === "waiting" && !isGameFull;
+  // The round-over interstitial and the final scoreboard: the same numbers,
+  // but one of them is waiting on a deal and the other is the end of the game.
+  const showRoundOver = status === "round_over";
+  const showFinalScores = status === "finished";
+  // Rounds are only meaningful once there is a game to count them in.
+  const showRoundCounter =
+    status === "playing" || status === "round_over" || status === "finished";
+  // `winner` is a Player id. The heading wants a name, and the roster is the
+  // only place one exists - `undefined` if the game finished with no winner,
+  // which the title handles.
+  const winnerName = players.find((p) => p.id === winner)?.username;
 
   const handleCopyCode = () => {
     navigator.clipboard.writeText(gameState?.alias || "");
@@ -30,9 +42,23 @@ const GameStatusDisplay: React.FC = () => {
           status || "waiting",
           playerCount,
           maxPlayers || 2,
-          winner
+          winnerName
         )}
       </h2>
+
+      {showRoundCounter && (
+        <div
+          style={{
+            color: "#94a3b8",
+            fontSize: "14px",
+            letterSpacing: "0.04em",
+          }}
+        >
+          Round {currentRound ?? 1}
+          <span style={{ margin: "0 8px", color: "#475569" }}>|</span>
+          Playing to {targetScore ?? 0}
+        </div>
+      )}
 
       {showShareCode && (
         <div style={{ marginTop: "12px", marginBottom: "8px" }}>
@@ -104,6 +130,12 @@ const GameStatusDisplay: React.FC = () => {
       {showWaitingInfo && <GameWaitingInfo />}
 
       {showReadySection && <ReadySection />}
+
+      {showRoundOver && <RoundOverSection />}
+
+      {/* The game is over, so there is nothing to ready up for - just the
+          final standings. */}
+      {showFinalScores && <RoundScoreboard />}
     </GameStatus>
   );
 };

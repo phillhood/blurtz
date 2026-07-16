@@ -5,7 +5,6 @@ import { PrismaService } from "@prisma";
 import { ConflictException, UnauthorizedException } from "@nestjs/common";
 import * as bcrypt from "bcryptjs";
 
-// Mock bcrypt
 jest.mock("bcryptjs", () => ({
   hash: jest.fn(),
   compare: jest.fn(),
@@ -56,7 +55,6 @@ describe("AuthService", () => {
     prismaService = module.get(PrismaService);
     jwtService = module.get(JwtService);
 
-    // Reset mocks
     jest.clearAllMocks();
   });
 

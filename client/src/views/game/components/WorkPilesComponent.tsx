@@ -1,13 +1,14 @@
 import React from "react";
 import { useDroppable, useDndContext } from "@dnd-kit/core";
 import { WorkPiles as WorkPilesStyled, WorkPile as WorkPileStyled, PileLabel } from "@styles";
-import { Card as CardType, Pile } from "@types";
+import { ClientCard, Pile } from "@types";
+import { isVisibleCard } from "@utils";
 import { FannedCardPile } from ".";
 import { DragData } from "./Card";
 
 interface WorkPilesComponentProps {
   workPiles: Pile[];
-  canDropOnPile: (index: number, card: CardType) => boolean;
+  canDropOnPile: (index: number, card: ClientCard) => boolean;
   isDraggable: boolean;
   isCurrentPlayer: boolean;
   pendingMoveCardIds?: Set<string>;
@@ -39,13 +40,17 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
       <PileLabel>Work</PileLabel>
       <WorkPilesStyled style={{ paddingTop: "8px" }}>
         {workPiles.map((pile, index) => {
-          // Check if the bottom card of this pile is being dragged (making pile appear empty)
+          // A work pile is face-up all the way down - dealt that way, and the
+          // server refuses to move a face-down card onto one. The filter is
+          // how that invariant is stated to the type system rather than a
+          // suspicion that it might not hold.
+          const cards = pile.cards.filter(isVisibleCard);
+
           const isDraggingFromThisPile = dragData?.fromPileId === pile.id;
-          const bottomCardId = pile.cards[0]?.id;
+          const bottomCardId = cards[0]?.id;
           const isDraggingBottomCard =
             isDraggingFromThisPile && dragData?.card?.id === bottomCardId;
-          const showPlaceholder =
-            pile.cards.length === 0 || isDraggingBottomCard;
+          const showPlaceholder = cards.length === 0 || isDraggingBottomCard;
 
           return (
             <WorkPileStyled key={pile.id} style={{ position: "relative" }}>
@@ -59,10 +64,10 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
                 />
               )}
               {/* Render cards on top */}
-              {pile.cards.length > 0 && (
+              {cards.length > 0 && (
                 <div style={{ position: "absolute", top: 0, left: 0 }}>
                   <FannedCardPile
-                    cards={pile.cards}
+                    cards={cards}
                     pileId={pile.id}
                     isDraggable={isDraggable}
                     onDrop={isCurrentPlayer ? () => {} : undefined}
@@ -86,7 +91,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
 const EmptyWorkPileDropZone: React.FC<{
   pileId: string;
   pileIndex: number;
-  canDrop: (card: CardType) => boolean;
+  canDrop: (card: ClientCard) => boolean;
   visible: boolean;
 }> = ({ pileId, pileIndex, canDrop, visible }) => {
   const { setNodeRef, isOver, active } = useDroppable({
@@ -94,7 +99,6 @@ const EmptyWorkPileDropZone: React.FC<{
     data: { pileId, pileIndex, isEmpty: true },
   });
 
-  // Check if the active card can be dropped here
   const canDropHere =
     isOver && active ? canDrop((active.data.current as DragData)?.card) : false;
 

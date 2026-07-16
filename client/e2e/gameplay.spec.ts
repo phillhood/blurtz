@@ -1,177 +1,158 @@
 import { test, expect } from "@playwright/test";
-import { testUser } from "./fixtures/test-data";
+import { authenticate, createUser } from "./fixtures/users";
+import {
+  createGameViaUi,
+  readyButton,
+  readyUp,
+  readyUpAndStart,
+  rosterCard,
+  seatTwoPlayers,
+  startButton,
+  statusHeading,
+} from "./fixtures/game";
 
+/**
+ * Two players in one game. The server is authoritative and the client has no
+ * optimistic updates, so every assertion here is really asking whether a socket
+ * round trip happened and whether the OTHER browser heard about it - a question
+ * a single-client test cannot ask.
+ */
 test.describe("Gameplay", () => {
-  // Helper to login and create a game
-  async function loginAndCreateGame(page: import("@playwright/test").Page) {
-    await page.goto("/register");
-    const uniqueUsername = `game_user_${Date.now()}`;
-    await page.getByPlaceholder(/username/i).fill(uniqueUsername);
-    await page.getByPlaceholder(/password/i).first().fill(testUser.password);
-    const confirmPassword = page.getByPlaceholder(/confirm/i);
-    if (await confirmPassword.isVisible()) {
-      await confirmPassword.fill(testUser.password);
+  test("both players ready, the host deals, and both boards come up", async ({
+    browser,
+  }) => {
+    const seated = await seatTwoPlayers(browser);
+    const { hostPage, guestPage, host, guest } = seated;
+
+    await expect(hostPage.getByText("Blurtz", { exact: true })).toBeHidden();
+
+    await readyUpAndStart(seated);
+
+    await expect(hostPage.getByText("Round 1")).toBeVisible();
+    await expect(hostPage.getByText("Playing to 100")).toBeVisible();
+
+    for (const page of [hostPage, guestPage]) {
+      await expect(page.getByText("Bank", { exact: true })).toBeVisible();
+      await expect(page.getByText("Draw", { exact: true })).toHaveCount(2);
+      await expect(page.getByText("Work", { exact: true })).toHaveCount(2);
+      await expect(page.getByText("Blurtz", { exact: true })).toHaveCount(2);
     }
-    await page.getByRole("button", { name: /register|sign up/i }).click();
-    await expect(page).toHaveURL(/dashboard/, { timeout: 10000 });
 
-    // Create a game
-    await page.getByRole("button", { name: /create|new game/i }).first().click();
-    const gameNameInput = page.getByPlaceholder(/game name/i);
-    if (await gameNameInput.isVisible()) {
-      await gameNameInput.fill(`Test Game ${Date.now()}`);
-    } else {
-      await page.getByLabel(/game name/i).fill(`Test Game ${Date.now()}`);
-    }
-    await page.getByRole("button", { name: /create/i }).click();
-    await expect(page).toHaveURL(/game\//, { timeout: 10000 });
-  }
+    // Scoped to the opponents row: the app header renders the signed-in user's
+    // own name too, so an unscoped locator means something different depending
+    // on who is looking.
+    await expect(
+      hostPage.locator(".opponents-row").getByText(guest.username)
+    ).toBeVisible();
+    await expect(
+      guestPage.locator(".opponents-row").getByText(host.username)
+    ).toBeVisible();
+    await expect(hostPage.getByText("Score: 0")).toHaveCount(2);
 
-  test.beforeEach(async ({ page }) => {
-    await page.context().clearCookies();
-    await page.evaluate(() => localStorage.clear());
+    // `NB` is the back of a face-down card. Face-up cards render their value,
+    // so a non-zero count is the deal having really happened.
+    await expect(hostPage.getByText("NB").first()).toBeVisible();
+    const values = await hostPage
+      .locator("div")
+      .filter({ hasText: /^([1-9]|10)$/ })
+      .count();
+    expect(values).toBeGreaterThan(0);
+
+    // The leave button changed meaning now that the game is live.
+    await expect(hostPage.getByRole("button", { name: "Forfeit" })).toBeVisible();
+
+    await seated.close();
   });
 
-  test.describe("Game Page", () => {
-    test("should display game header with leave button", async ({ page }) => {
-      await loginAndCreateGame(page);
+  test("readiness round-trips through the server to the other player", async ({
+    browser,
+  }) => {
+    const seated = await seatTwoPlayers(browser);
+    const { hostPage, guestPage, host } = seated;
 
-      // Should see leave/exit button
-      const leaveButton = page.getByRole("button", { name: /leave|exit|back/i });
-      await expect(leaveButton.first()).toBeVisible();
-    });
+    await expect(guestPage.getByText("✗ Not Ready")).toHaveCount(2);
 
-    test("should display player info", async ({ page }) => {
-      await loginAndCreateGame(page);
+    await readyUp(hostPage);
 
-      // Should see player name somewhere
-      await expect(page.getByText(/player|score/i).first()).toBeVisible({
-        timeout: 10000,
-      });
-    });
+    // The guest's browser was told, over the socket, without a reload - and it
+    // is the HOST's card that changed, not just some card.
+    await expect(rosterCard(guestPage, host.username)).toContainText("✓ Ready");
+    await expect(guestPage.getByText("✗ Not Ready")).toHaveCount(1);
 
-    test("should show waiting state for single player", async ({ page }) => {
-      await loginAndCreateGame(page);
+    // And it un-readies, both ways.
+    await hostPage.getByRole("button", { name: /Cancel Ready/ }).click();
+    await expect(readyButton(hostPage)).toBeVisible();
+    await expect(guestPage.getByText("✗ Not Ready")).toHaveCount(2);
 
-      // With only one player, should show waiting message or ready toggle
-      await expect(
-        page.getByText(/waiting|ready|opponent/i).first()
-      ).toBeVisible({ timeout: 10000 });
-    });
-
-    test("should display game code for private games", async ({ page }) => {
-      await page.goto("/register");
-      const uniqueUsername = `code_user_${Date.now()}`;
-      await page.getByPlaceholder(/username/i).fill(uniqueUsername);
-      await page.getByPlaceholder(/password/i).first().fill(testUser.password);
-      const confirmPassword = page.getByPlaceholder(/confirm/i);
-      if (await confirmPassword.isVisible()) {
-        await confirmPassword.fill(testUser.password);
-      }
-      await page.getByRole("button", { name: /register|sign up/i }).click();
-      await expect(page).toHaveURL(/dashboard/, { timeout: 10000 });
-
-      // Create a private game
-      await page.getByRole("button", { name: /create|new game/i }).first().click();
-      const gameNameInput = page.getByPlaceholder(/game name/i);
-      if (await gameNameInput.isVisible()) {
-        await gameNameInput.fill(`Private Game ${Date.now()}`);
-      } else {
-        await page.getByLabel(/game name/i).fill(`Private Game ${Date.now()}`);
-      }
-      const privateCheckbox = page.getByRole("checkbox", { name: /private/i });
-      if (await privateCheckbox.isVisible()) {
-        await privateCheckbox.check();
-      }
-      await page.getByRole("button", { name: /create/i }).click();
-      await expect(page).toHaveURL(/game\//, { timeout: 10000 });
-
-      // Should see copy code button or game code
-      const copyButton = page.getByRole("button", { name: /copy|code/i });
-      if (await copyButton.isVisible()) {
-        await expect(copyButton).toBeEnabled();
-      }
-    });
+    await seated.close();
   });
 
-  test.describe("Leave Game", () => {
-    test("should return to dashboard when leaving waiting game", async ({
-      page,
-    }) => {
-      await loginAndCreateGame(page);
+  test("only the host can deal", async ({ browser }) => {
+    const seated = await seatTwoPlayers(browser);
+    const { hostPage, guestPage } = seated;
 
-      // Click leave button
-      const leaveButton = page.getByRole("button", { name: /leave|exit|back/i });
-      await leaveButton.first().click();
+    await readyUp(hostPage);
+    await readyUp(guestPage);
 
-      // Should return to dashboard
-      await expect(page).toHaveURL(/dashboard/, { timeout: 10000 });
-    });
+    await expect(startButton(hostPage)).toBeEnabled();
+    await expect(
+      guestPage.getByText("Waiting for host to start game...")
+    ).toBeVisible();
+    await expect(startButton(guestPage)).toHaveCount(0);
 
-    test("should show forfeit confirmation when in active game", async ({
-      page,
-    }) => {
-      await loginAndCreateGame(page);
-
-      // This test would require two players to start a game
-      // For now, just verify the leave button exists
-      const leaveButton = page.getByRole("button", { name: /leave|exit|back/i });
-      await expect(leaveButton.first()).toBeVisible();
-    });
+    await seated.close();
   });
 
-  test.describe("Ready Toggle", () => {
-    test("should display ready toggle in waiting state", async ({ page }) => {
-      await loginAndCreateGame(page);
+  test("a lone player cannot start, and is told why", async ({ page }) => {
+    const host = await createUser("lonely");
+    await authenticate(page, host);
+    await createGameViaUi(page);
 
-      // Should see ready toggle or ready button
-      const readyElement = page.getByText(/ready/i);
-      await expect(readyElement.first()).toBeVisible({ timeout: 10000 });
-    });
-
-    test("should toggle ready state", async ({ page }) => {
-      await loginAndCreateGame(page);
-
-      // Find ready toggle/button
-      const readyButton = page.getByRole("button", { name: /ready/i });
-      if (await readyButton.isVisible()) {
-        await readyButton.click();
-        // State should change - look for some indication
-        await expect(page.getByText(/ready|waiting/i).first()).toBeVisible();
-      }
-    });
+    await expect(
+      page.getByRole("heading", { name: "Waiting for players... (1/2)" })
+    ).toBeVisible();
+    await expect(page.getByText("Share this game code with a friend:")).toBeVisible();
+    await expect(startButton(page)).toHaveCount(0);
   });
 
-  test.describe("Game Board", () => {
-    test("should display game elements when game starts", async ({ page }) => {
-      // This test would require a two-player setup
-      // For now, just verify basic page structure
-      await loginAndCreateGame(page);
+  test("leaving a game that has not started returns to the dashboard", async ({
+    page,
+  }) => {
+    const host = await createUser("leaver");
+    await authenticate(page, host);
+    const game = await createGameViaUi(page);
 
-      // Should see some game-related content
-      await expect(
-        page.getByText(/blitz|pile|card|game/i).first()
-      ).toBeVisible({ timeout: 10000 });
-    });
+    await page.getByRole("button", { name: "Leave Game" }).click();
+
+    await expect(page).toHaveURL(/\/dashboard$/);
+    // Gone, not just navigated away from.
+    await expect(page.getByRole("heading", { name: game.name })).toBeHidden();
   });
 
-  test.describe("Responsive Design", () => {
-    test("should be usable on mobile viewport", async ({ page }) => {
-      await page.setViewportSize({ width: 375, height: 667 }); // iPhone SE
-      await loginAndCreateGame(page);
+  test("forfeiting a live game asks first, and ends it for the opponent", async ({
+    browser,
+  }) => {
+    const seated = await seatTwoPlayers(browser);
+    const { hostPage, guestPage, guest } = seated;
 
-      // Basic elements should still be visible
-      const leaveButton = page.getByRole("button", { name: /leave|exit|back/i });
-      await expect(leaveButton.first()).toBeVisible();
-    });
+    await readyUpAndStart(seated);
 
-    test("should be usable on tablet viewport", async ({ page }) => {
-      await page.setViewportSize({ width: 768, height: 1024 }); // iPad
-      await loginAndCreateGame(page);
+    await hostPage.getByRole("button", { name: "Forfeit" }).click();
+    await expect(hostPage.getByText("Forfeit Game")).toBeVisible();
+    await expect(
+      hostPage.getByText(/Are you sure you want to forfeit/)
+    ).toBeVisible();
 
-      // Basic elements should still be visible
-      const leaveButton = page.getByRole("button", { name: /leave|exit|back/i });
-      await expect(leaveButton.first()).toBeVisible();
-    });
+    await hostPage.getByRole("button", { name: "Forfeit", exact: true }).last().click();
+
+    await expect(hostPage).toHaveURL(/\/dashboard$/);
+    // The opponent wins by walking - and hears it over the socket, without
+    // having touched anything.
+    await expect(statusHeading(guestPage)).toContainText("Game finished!");
+    await expect(
+      guestPage.getByRole("row").filter({ hasText: guest.username })
+    ).toBeVisible();
+
+    await seated.close();
   });
 });

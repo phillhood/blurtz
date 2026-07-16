@@ -6,14 +6,30 @@ interface StartGameButtonProps {
   playerCount: number;
   readyCount: number;
   isHost: boolean;
+  /** What the host's button says once everyone is ready. */
+  label?: string;
+  /** What everyone else is told while they wait for the host to press it. */
+  waitingLabel?: string;
 }
 
+/**
+ * The host's "go" button, for both deals: round 1 of a `waiting` game and the
+ * next round of a `round_over` one.
+ *
+ * The labels are props because they are the only thing that differs between
+ * the two. The gate is identical - enough players, everybody ready, and you
+ * are the host - and it is the same gate the server enforces in
+ * `assertReadyToDeal`. This decides what lights up; the server decides what
+ * happens.
+ */
 const StartGameButton: React.FC<StartGameButtonProps> = ({
   onStartGame,
   disabled = false,
   playerCount,
   readyCount,
   isHost,
+  label = "Start Game!",
+  waitingLabel = "Waiting for host to start game...",
 }) => {
   const canStart = playerCount >= 2 && readyCount === playerCount && isHost;
 
@@ -22,7 +38,7 @@ const StartGameButton: React.FC<StartGameButtonProps> = ({
     return (
       <div style={{ textAlign: "center", marginTop: "20px" }}>
         <p style={{ fontSize: "16px", color: "#6b7280", fontStyle: "italic" }}>
-          Waiting for host to start game...
+          {waitingLabel}
         </p>
       </div>
     );
@@ -48,7 +64,7 @@ const StartGameButton: React.FC<StartGameButtonProps> = ({
         }}
       >
         {canStart
-          ? "Start Game!"
+          ? label
           : `Waiting for players (${readyCount}/${playerCount} ready)`}
       </button>
 

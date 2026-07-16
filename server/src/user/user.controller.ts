@@ -8,7 +8,6 @@ import {
 import { UserService } from "./user.service";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { ApiResponse } from "@types";
-import { getErrorMessage } from "@utils/error-handler";
 
 @ApiTags("user")
 @ApiBearerAuth()
@@ -22,18 +21,11 @@ export class UserController {
   @SwaggerResponse({ status: 200, description: "Profile retrieved successfully" })
   @SwaggerResponse({ status: 401, description: "Unauthorized" })
   async getProfile(@Request() req): Promise<ApiResponse> {
-    try {
-      const profile = await this.userService.getProfile(req.user.sub);
-      return {
-        success: true,
-        data: profile,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const profile = await this.userService.getProfile(req.user.sub);
+    return {
+      success: true,
+      data: profile,
+    };
   }
 
   @Get("stats")
@@ -41,17 +33,10 @@ export class UserController {
   @SwaggerResponse({ status: 200, description: "Stats retrieved successfully" })
   @SwaggerResponse({ status: 401, description: "Unauthorized" })
   async getStats(@Request() req): Promise<ApiResponse> {
-    try {
-      const stats = await this.userService.getStats(req.user.sub);
-      return {
-        success: true,
-        data: stats,
-      };
-    } catch (error) {
-      return {
-        success: false,
-        error: getErrorMessage(error),
-      };
-    }
+    const stats = await this.userService.getStats(req.user.sub);
+    return {
+      success: true,
+      data: stats,
+    };
   }
 }

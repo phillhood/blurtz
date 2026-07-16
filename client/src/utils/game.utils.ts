@@ -1,54 +1,27 @@
-import { Card } from "@types";
-
-export const canDropOnBankPile = (
-  bankPiles: Array<{ cards: Card[] }>,
-  pileIndex: number,
-  draggedCard: Card
-): boolean => {
-  const pile = bankPiles[pileIndex];
-  if (!pile || pile.cards.length === 0) {
-    return draggedCard.number === 1;
-  }
-  const topCard = pile.cards[pile.cards.length - 1];
-  // Must be same color and +1 value
-  return (
-    draggedCard.color.name === topCard.color.name &&
-    draggedCard.number === topCard.number + 1
-  );
-};
-
-export const canDropOnWorkPile = (
-  workPiles: Array<{ cards: Card[] }>,
-  pileIndex: number,
-  draggedCard: Card
-): boolean => {
-  const pile = workPiles[pileIndex];
-  // Empty work pile accepts any card
-  if (pile.cards.length === 0) return true;
-
-  const topCard = pile.cards[pile.cards.length - 1];
-  // Must be descending (-1) and opposite type (boy/girl)
-  return (
-    draggedCard.color.type !== topCard.color.type &&
-    draggedCard.number === topCard.number - 1
-  );
-};
+// Display helpers only. No placement rule belongs here: `canPlace` in
+// `@blurtz/shared` is the one authority, and call sites ask it directly.
 
 export const getGameStatusTitle = (
   status: string,
   playerCount: number,
   maxPlayers: number,
-  winner?: string
+  // The winner's USERNAME, resolved by the caller from `gameState.players` -
+  // `gameState.winner` is a Player id, and interpolating it raw greets the
+  // winner with a UUID. Nullable because a finished game need not have a
+  // winner: a game everybody forfeited finishes with nobody.
+  winnerName?: string | null
 ): string => {
   switch (status) {
     case "waiting":
       return playerCount === maxPlayers
         ? ``
-        : `Waiting for players... (${playerCount}/2)`;
+        : `Waiting for players... (${playerCount}/${maxPlayers})`;
     case "playing":
       return `Game in progress!`;
+    case "round_over":
+      return `Round over!`;
     case "finished":
-      return `Game finished! - Winner: ${winner}`;
+      return winnerName ? `Game finished! - Winner: ${winnerName}` : `Game finished!`;
     default:
       return "Unknown status";
   }
@@ -60,6 +33,10 @@ export const getStatusColor = (status: string): string => {
       return "#f59e0b";
     case "playing":
       return "#10b981";
+    // Amber like `waiting`, and for the same reason: both are a game paused on
+    // its players rather than a game running or a game done.
+    case "round_over":
+      return "#f59e0b";
     case "finished":
       return "#6b7280";
     default:
@@ -81,7 +58,6 @@ export const formatDate = (date: string | Date): string => {
 
   const formatted = dateObj.toLocaleDateString("en-US", options);
 
-  // Add ordinal suffix to day
   const day = dateObj.getDate();
   const ordinalSuffix = getOrdinalSuffix(day);
 

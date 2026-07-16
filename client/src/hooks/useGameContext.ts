@@ -2,16 +2,16 @@ import { useCallback } from "react";
 import { Game } from "@types";
 import { useAuthStore, useGameStore } from "@stores";
 
-// Hook for backwards compatibility - delegates to Zustand store
 export const useGameContext = () => {
   const user = useAuthStore((state) => state.user);
   const gameState = useGameStore((state) => state.gameState);
   const connected = useGameStore((state) => state.connected);
   const error = useGameStore((state) => state.error);
   const clearError = useGameStore((state) => state.clearError);
+  const moveRejection = useGameStore((state) => state.moveRejection);
+  const clearMoveRejection = useGameStore((state) => state.clearMoveRejection);
   const getCurrentPlayer = useGameStore((state) => state.getCurrentPlayer);
 
-  // Get store actions
   const storeJoinGame = useGameStore((state) => state.joinGame);
   const storeCreateAndJoinGame = useGameStore((state) => state.createAndJoinGame);
   const storeLeaveGame = useGameStore((state) => state.leaveGame);
@@ -24,7 +24,7 @@ export const useGameContext = () => {
 
   const currentPlayer = getCurrentPlayer(user?.id);
 
-  // Wrapper functions that inject userId/playerId automatically
+  // These wrappers inject the acting user's id; components never pass one.
   const joinGame = useCallback(
     (gameId: string) => {
       if (user?.id) {
@@ -60,7 +60,7 @@ export const useGameContext = () => {
   const makeMove = useCallback(
     (cardId: string, fromPileId: string, toPileId: string) => {
       if (currentPlayer?.id) {
-        storeMakeMove(currentPlayer.id, cardId, fromPileId, toPileId);
+        storeMakeMove(cardId, fromPileId, toPileId);
       }
     },
     [currentPlayer?.id, storeMakeMove]
@@ -69,7 +69,7 @@ export const useGameContext = () => {
   const flipCard = useCallback(
     (pileId: string) => {
       if (currentPlayer?.id) {
-        storeFlipCard(currentPlayer.id, pileId);
+        storeFlipCard(pileId);
       }
     },
     [currentPlayer?.id, storeFlipCard]
@@ -83,14 +83,14 @@ export const useGameContext = () => {
 
   const callBlitz = useCallback(() => {
     if (currentPlayer?.id) {
-      storeCallBlitz(currentPlayer.id);
+      storeCallBlitz();
     }
   }, [currentPlayer?.id, storeCallBlitz]);
 
   const playerReady = useCallback(
     (isReady: boolean) => {
       if (currentPlayer?.id) {
-        storePlayerReady(currentPlayer.id, isReady);
+        storePlayerReady(isReady);
       }
     },
     [currentPlayer?.id, storePlayerReady]
@@ -115,5 +115,7 @@ export const useGameContext = () => {
     currentPlayer,
     error,
     clearError,
+    moveRejection,
+    clearMoveRejection,
   };
 };

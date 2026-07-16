@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from "react";
-import { Player } from "@types";
+import { ClientCard, Player } from "@types";
 import { useGameContext } from "@hooks";
-import { canDropOnWorkPile } from "@utils";
+import { canPlace } from "@blurtz/shared";
 import {
   PlayerArea as StyledPlayerArea,
   CardArea,
@@ -32,8 +32,16 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
     if (!isCurrentPlayer) return;
   };
 
+  // One predicate, read by both the cursor and the click handler. Splitting
+  // them lets a board that looks unclickable still emit a flip the server will
+  // refuse.
+  const canFlipDrawPile =
+    isCurrentPlayer &&
+    player.deck.drawPile.cards.length > 0 &&
+    gameState?.status === "playing";
+
   const handleDrawPileClick = () => {
-    if (!isCurrentPlayer || player.deck.drawPile.cards.length === 0) return;
+    if (!canFlipDrawPile) return;
     flipDrawPile();
   };
 
@@ -43,16 +51,22 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
     }
   };
 
-  const canFlipDrawPile = () => {
-    return (
-      isCurrentPlayer &&
-      player.deck.drawPile.cards.length > 0 &&
-      gameState?.status === "playing"
-    );
+  // Whether a work pile lights up under the cursor. The rule is `canPlace`'s -
+  // the server re-decides the move regardless; this only paints.
+  const canDropOnWorkPile = (pileIndex: number, draggedCard: ClientCard): boolean => {
+    if (!draggedCard.faceUp) return false;
+
+    const pile = player.deck.workPiles[pileIndex];
+    if (!pile) return false;
+
+    const topCard = pile.cards[pile.cards.length - 1];
+    if (topCard && !topCard.faceUp) return false;
+
+    return canPlace("work", topCard, draggedCard);
   };
 
   const isDraggable = isCurrentPlayer && gameState?.status === "playing";
-  let isBlurtzAvailable =
+  const isBlurtzAvailable =
     isCurrentPlayer &&
     player.deck.blurtzPile.cards.length === 0 &&
     gameState?.status === "playing";
@@ -99,7 +113,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
           <DrawPile
             pile={player.deck.drawPile}
             onPileClick={handleDrawPileClick}
-            canFlip={canFlipDrawPile()}
+            canFlip={canFlipDrawPile}
             isDraggable={isDraggable}
             playerId={player.id}
             isCurrentPlayer={isCurrentPlayer}
@@ -107,9 +121,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
           />
           <WorkPile
             workPiles={player.deck.workPiles}
-            canDropOnPile={(index, card) =>
-              canDropOnWorkPile(player.deck.workPiles, index, card)
-            }
+            canDropOnPile={canDropOnWorkPile}
             isDraggable={isDraggable}
             isCurrentPlayer={isCurrentPlayer}
             pendingMoveCardIds={pendingMoveCardIds}

@@ -20,52 +20,108 @@ model User {
 }
 
 model Game {
-  id         String       @id @default(uuid())
-  name       String
-  alias      String       @unique
-  maxPlayers Int          @default(2) @map("max_players")
-  isPrivate  Boolean      @default(false) @map("is_private")
-  status     GameStatus   @default(waiting)
-  gameState  Json?        @map("game_state")
-  winnerId   String?      @map("winner_id")
-  hostId     String       @map("host_id")
-  players    Player[]
-  snapshots  GameSnapshot[]
-  createdAt  DateTime     @default(now()) @map("created_at")
-  updatedAt  DateTime     @updatedAt @map("updated_at")
+  id           String         @id @default(uuid())
+  name         String
+  alias        String         @unique
+  maxPlayers   Int            @default(2) @map("max_players")
+  isPrivate    Boolean        @default(false) @map("is_private")
+  status       GameStatus     @default(waiting)
+  gameState    Json?          @map("game_state")
+  /// The cumulative score a player must reach for the game to end.
+  targetScore  Int            @default(100) @map("target_score")
+  /// 1-based: a game sits at round 1 from creation until the first Blitz.
+  currentRound Int            @default(1) @map("current_round")
+  /// The winning PLAYER, not user - so it joins RoundResult.playerId.
+  ///
+  /// onDelete: SetNull, and the direction matters. The FK column lives on
+  /// `games`, so a game may point at a player; a player never points at the
+  /// game it won. Players are deleted routinely (leave, forfeit), and a
+  /// finished game losing its winner pointer is a footnote - the same game row
+  /// being deleted with them (Cascade) or refusing to let them go (Restrict,
+  /// which would also deadlock the Game->Player cascade) is not.
+  winnerPlayerId String?      @map("winner_player_id")
+  winnerPlayer   Player?      @relation("GameWinner", fields: [winnerPlayerId], references: [id], onDelete: SetNull)
+  hostId       String         @map("host_id")
+  players      Player[]
+  roundResults RoundResult[]
+  createdAt    DateTime       @default(now()) @map("created_at")
+  updatedAt    DateTime       @updatedAt @map("updated_at")
 
+  @@index([status, isPrivate])
+  @@index([hostId])
   @@map("games")
 }
 
 model Player {
-  id             String  @id @default(uuid())
-  userId         String  @map("user_id")
-  gameId         String  @map("game_id")
-  isReady        Boolean @default(false) @map("is_ready")
-  score          Int     @default(0)
-  bankPileCount Int     @default(0) @map("bank_pile_count")
-  deck           Json?
-  user           User    @relation(fields: [userId], references: [id])
-  game           Game    @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  id            String        @id @default(uuid())
+  userId        String        @map("user_id")
+  gameId        String        @map("game_id")
+  isReady       Boolean       @default(false) @map("is_ready")
+  /// CUMULATIVE across every round played. Never reset by a round advance -
+  /// it is the thing `targetScore` is compared against.
+  score         Int           @default(0)
+  /// This round's score alone, for display. Reset on every round advance.
+  roundScore    Int           @default(0) @map("round_score")
+  /// Cards banked THIS round. Reset on every round advance; `score` is not.
+  bankPileCount Int           @default(0) @map("bank_pile_count")
+  deck          Json?
+  user          User          @relation(fields: [userId], references: [id])
+  game          Game          @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  wonGames      Game[]        @relation("GameWinner")
+  roundResults  RoundResult[]
 
+  @@unique([userId, gameId])
+  @@index([gameId])
   @@map("players")
 }
 
-model GameSnapshot {
-  id        String   @id @default(uuid())
-  gameId    String   @map("game_id")
-  round     Int
-  state     Json
-  game      Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
-  createdAt DateTime @default(now()) @map("created_at")
+/// One player's scoring for one round: the INPUTS, not a state dump.
+///
+/// This is what replaces GameSnapshot. A snapshot stored the whole board as a
+/// fat JSON blob that nothing ever read; this stores the three numbers a score
+/// is actually made of, so `roundScore != bankPileCount - 2 * blurtzRemaining`
+/// is a query rather than an archaeology expedition. It is also the scoreboard
+/// the client wants, which a blob could never be.
+model RoundResult {
+  id              String   @id @default(uuid())
+  gameId          String   @map("game_id")
+  playerId        String   @map("player_id")
+  round           Int
+  /// The scoring inputs, kept verbatim - `players.bank_pile_count` is reset by
+  /// the very round advance this row records, so this is the only place the
+  /// number survives.
+  bankPileCount   Int      @map("bank_pile_count")
+  blurtzRemaining Int      @map("blurtz_remaining")
+  /// bankPileCount - 2 * blurtzRemaining, at the moment it was computed.
+  roundScore      Int      @map("round_score")
+  /// The player's running total AFTER this round - what targetScore is tested
+  /// against, recorded so a finish is auditable without replaying every round.
+  cumulativeScore Int      @map("cumulative_score")
+  /// Whether this is the player who called it and ended the round.
+  calledBlurtz    Boolean  @default(false) @map("called_blurtz")
+  createdAt       DateTime @default(now()) @map("created_at")
+  game            Game     @relation(fields: [gameId], references: [id], onDelete: Cascade)
+  /// onDelete: Cascade - the opposite of `Game.winnerPlayer`, on purpose. A
+  /// RoundResult is ABOUT a player and means nothing without one; the Player
+  /// row is itself per-game (see the userId+gameId unique), so it IS the
+  /// participation this row scores. A `Game.winnerPlayerId` is metadata on a
+  /// row that has to outlive whoever it names; this is not.
+  player          Player   @relation(fields: [playerId], references: [id], onDelete: Cascade)
 
-  @@map("game_snapshots")
+  /// One row per player per round - the write is idempotent under a retry, and
+  /// a second Blitz that somehow got past the lock would collide here rather
+  /// than quietly double-score.
+  @@unique([gameId, playerId, round])
+  /// The scoreboard query: every player's results for a round, in order.
+  @@index([gameId, round])
+  @@map("round_results")
 }
 
 enum GameStatus {
   waiting
   starting
   playing
+  round_over
   paused
   finished
 }

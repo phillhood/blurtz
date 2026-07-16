@@ -3,23 +3,20 @@ import { cleanup } from "@testing-library/react";
 import { afterEach, beforeAll, afterAll, vi } from "vitest";
 import { server } from "./mocks/server";
 
-// Establish API mocking before all tests
 beforeAll(() => {
+  // "error" is the tripwire: see `mocks/handlers.ts`.
   server.listen({ onUnhandledRequest: "error" });
 });
 
-// Reset any request handlers that are declared in a test
 afterEach(() => {
   cleanup();
   server.resetHandlers();
 });
 
-// Clean up after all tests are done
 afterAll(() => {
   server.close();
 });
 
-// Mock localStorage
 const localStorageMock = {
   getItem: vi.fn(),
   setItem: vi.fn(),
@@ -28,7 +25,6 @@ const localStorageMock = {
 };
 Object.defineProperty(window, "localStorage", { value: localStorageMock });
 
-// Mock matchMedia
 Object.defineProperty(window, "matchMedia", {
   writable: true,
   value: vi.fn().mockImplementation((query) => ({
@@ -43,14 +39,28 @@ Object.defineProperty(window, "matchMedia", {
   })),
 });
 
-// Mock ResizeObserver
-global.ResizeObserver = vi.fn().mockImplementation(() => ({
-  observe: vi.fn(),
-  unobserve: vi.fn(),
-  disconnect: vi.fn(),
-}));
+/**
+ * Mock ResizeObserver.
+ *
+ * A real class, and it has to be: @dnd-kit calls `new ResizeObserver(...)`, and
+ * `vi.fn().mockImplementation(() => ({...}))` forwards `new` to an arrow
+ * function, which is not a constructor - every draggable component then throws
+ * on render.
+ *
+ * Assigned to `window`, not `global`: dnd-kit reads it off `window` and guards
+ * on `typeof window.ResizeObserver`.
+ */
+class MockResizeObserver {
+  observe = vi.fn();
+  unobserve = vi.fn();
+  disconnect = vi.fn();
+}
+Object.defineProperty(window, "ResizeObserver", {
+  writable: true,
+  configurable: true,
+  value: MockResizeObserver,
+});
 
-// Mock clipboard API
 Object.assign(navigator, {
   clipboard: {
     writeText: vi.fn().mockResolvedValue(undefined),

@@ -1,24 +1,26 @@
+import React from "react";
 import { useGameContext } from "@hooks";
-import React, { useEffect } from "react";
 
+/**
+ * Ready up, in the lobby or between rounds.
+ *
+ * Reads `currentPlayer.isReady` - the SERVER's answer - and deliberately keeps
+ * no local copy. A round advance resets `isReady` on the server, so a local
+ * mirror goes stale and any effect that echoes it back would ready the player
+ * for the next round without them touching anything.
+ */
 const ReadyButton: React.FC = () => {
-  const [isReady, setIsReady] = React.useState(false);
-  const [disabled, setDisabled] = React.useState(false);
-  const { gameState, playerReady } = useGameContext();
-  const { status } = gameState || {};
+  const { gameState, currentPlayer, playerReady } = useGameContext();
+  const status = gameState?.status;
+  const isReady = currentPlayer?.isReady ?? false;
 
-  useEffect(() => {
-    setDisabled(status !== "waiting");
-    playerReady(isReady);
-  }, [status, isReady]);
-
-  const toggleReady = () => {
-    setIsReady((prev) => !prev);
-  };
+  // The two phases a player readies up in: before the first deal, and between
+  // rounds. Both are gated by the same predicate on the server.
+  const disabled = status !== "waiting" && status !== "round_over";
 
   return (
     <button
-      onClick={toggleReady}
+      onClick={() => playerReady(!isReady)}
       disabled={disabled}
       style={{
         padding: "12px 24px",

@@ -22,5 +22,7 @@ export { default as PlayersList } from "./PlayersList";
 
 export { default as ReadyButton } from "./ReadyButton";
 export { default as ReadySection } from "./ReadySection";
+export { default as RoundOverSection } from "./RoundOverSection";
+export { default as RoundScoreboard } from "./RoundScoreboard";
 export { default as StartGameButton } from "./StartGameButton";
 export { default as ConfirmDialog } from "./ConfirmDialog";

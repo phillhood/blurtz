@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useDraggable, useDroppable, useDndContext } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card as CardType } from "@types";
+import { ClientCard, VisibleCard } from "@types";
 import { GameCard, CardNumber } from "@styles";
 import { DragData } from "./Card";
 
@@ -9,12 +9,20 @@ const CARD_HEIGHT = 118;
 const DEFAULT_STACK_OFFSET = Math.floor(CARD_HEIGHT * 0.1); // 10% visible (90% overlap)
 const EXPANDED_OFFSET = Math.floor(CARD_HEIGHT * 0.3); // 30% visible (70% overlap)
 
+/**
+ * `cards` is VisibleCard[], not ClientCard[], and that is a claim about work
+ * piles rather than a convenience: every card on one is face-up, always. They
+ * are dealt face-up and the only way another card reaches one is a move, which
+ * the server refuses for a face-down card. This component draws a number on
+ * every card it is given - it has no back to fall back to - so the type says
+ * what it needs and the caller proves it.
+ */
 interface FannedCardPileProps {
-  cards: CardType[];
+  cards: VisibleCard[];
   pileId: string;
   isDraggable?: boolean;
-  onDrop?: (card: CardType) => void;
-  canDrop?: (card: CardType) => boolean;
+  onDrop?: (card: ClientCard) => void;
+  canDrop?: (card: ClientCard) => boolean;
   stackOffset?: number;
   pendingMoveCardIds?: Set<string>;
 }
@@ -33,20 +41,17 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
   const collapseTimeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { active } = useDndContext();
 
-  // Find which cards should be hidden (being dragged as a stack)
   const dragData = active?.data.current as DragData | undefined;
   const isDraggingFromThisPile = dragData?.fromPileId === pileId;
   const draggedCardIndex = isDraggingFromThisPile
     ? cards.findIndex((c) => c.id === dragData?.card?.id)
     : -1;
 
-  // Calculate the offset for each card based on hovered card
-  // Only cards below (higher index than) the hovered card expand
+  // Only cards at or below the hovered card expand.
   const getCardOffset = useCallback(
     (index: number): number => {
       if (hoveredIndex < 0 || cards.length <= 1) return stackOffset;
 
-      // Expand cards at and below the hovered card (index >= hoveredIndex)
       if (index >= hoveredIndex) {
         return EXPANDED_OFFSET;
       }
@@ -55,7 +60,6 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
     [hoveredIndex, cards.length, stackOffset]
   );
 
-  // Calculate cumulative top position for each card
   const cardPositions = useMemo(() => {
     const positions: number[] = [0];
     for (let i = 1; i < cards.length; i++) {
@@ -100,7 +104,6 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
         }
         setHoveredIndex(hotZoneIndex);
       }
-      // Mouse is still in the stack - cancel any collapse timer
       else if (collapseTimeoutRef.current) {
         clearTimeout(collapseTimeoutRef.current);
         collapseTimeoutRef.current = null;
@@ -111,15 +114,14 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 
   const handleMouseLeave = useCallback(
     (e: React.MouseEvent) => {
-      // Check if mouse is actually outside all card bounds (both X and Y)
-      // (needed because container height animates and may lag behind expanded cards)
+      // The container's height animates and lags behind the expanded cards, so
+      // its bounds cannot be trusted here - measure the cards instead.
       const container = containerRef.current;
       if (container && hoveredIndex >= 0) {
         const rect = container.getBoundingClientRect();
         const mouseX = e.clientX;
         const mouseY = e.clientY - rect.top;
 
-        // Check if mouse is still within any expanded card's bounds
         const lastCardTop = cardPositions[cards.length - 1];
         const lastCardBottom = lastCardTop + CARD_HEIGHT;
         const cardWidth = 88; // Card width
@@ -128,7 +130,6 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
         const withinY = mouseY >= 0 && mouseY <= lastCardBottom;
 
         if (withinX && withinY) {
-          // Mouse is still within card bounds, don't collapse
           return;
         }
       }
@@ -173,7 +174,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
             pileId={pileId}
             index={index}
             topPosition={cardPositions[index]}
-            isDraggable={isDraggable && card.faceUp}
+            isDraggable={isDraggable}
             isTopCard={index === cards.length - 1}
             isVisualTopCard={isVisualTopCard}
             onDrop={onDrop}
@@ -188,15 +189,15 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 };
 
 interface FannedCardProps {
-  card: CardType;
+  card: VisibleCard;
   pileId: string;
   index: number;
   topPosition: number;
   isDraggable: boolean;
   isTopCard: boolean;
   isVisualTopCard: boolean;
-  onDrop?: (card: CardType) => void;
-  canDrop?: (card: CardType) => boolean;
+  onDrop?: (card: ClientCard) => void;
+  canDrop?: (card: ClientCard) => boolean;
   isHiddenInDrag: boolean;
   isPendingMove: boolean;
 }
@@ -258,11 +259,11 @@ const FannedCard: React.FC<FannedCardProps> = ({
     touchAction: "none",
   };
 
-  // Shift number up when not the visual top card (number should be visible in exposed area)
-  // Visual top card = centered number, other cards = number at top
+  // The visual top card centres its number; the rest shift it up, into the
+  // sliver the card above leaves exposed.
   const shouldShiftNumber = !isVisualTopCard;
 
-  const getCardColorString = (color: CardType["color"]): string => {
+  const getCardColorString = (color: VisibleCard["color"]): string => {
     return color.code || color.name || "#000000";
   };
 
@@ -299,7 +300,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
               : "top 0.15s ease-out, transform 0.15s ease-out",
           }}
         >
-          {card.number}
+          {card.value}
         </CardNumber>
       </GameCard>
     </div>

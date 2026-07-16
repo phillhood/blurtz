@@ -43,7 +43,8 @@ const BlurtzPileComponent: React.FC<BlurtzPileComponentProps> = ({
         <BlurtzPileStyled>
           {topCard ? (
             <div style={{ position: "relative" }}>
-              {/* Face-down cards beneath (visual depth indicator) */}
+              {/* Depth indicator. These are rendered exactly as they arrive:
+                  `faceUp` is the server's word, never overridden here. */}
               {Array.from({ length: stackCount }).map((_, index) => (
                 <div
                   key={`stack-${index}`}
@@ -56,7 +57,7 @@ const BlurtzPileComponent: React.FC<BlurtzPileComponentProps> = ({
                   }}
                 >
                   <Card
-                    card={{ ...pile.cards[index], faceUp: false }}
+                    card={pile.cards[index]}
                     pileId={pile.id}
                     isDraggable={false}
                   />

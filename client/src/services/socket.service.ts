@@ -1,5 +1,8 @@
 import { io, Socket } from "socket.io-client";
-import { SOCKET_EVENTS } from "@utils";
+// The event names come from the shared package now, so the name this client
+// listens for and the name the server emits are the same constant rather than
+// two hand-synced copies.
+import { SOCKET_EVENTS } from "@blurtz/shared";
 import { GameState, Player } from "@types";
 
 export interface SocketCallbacks {
@@ -10,16 +13,47 @@ export interface SocketCallbacks {
   onGameLeft?: (gameId: string) => void;
   onGameStateUpdated?: (gameState: GameState) => void;
   onGameStarted?: (gameState: GameState) => void;
+  /**
+   * The game is over. Shaped after what the gateway ACTUALLY emits, which is
+   * not one shape but two:
+   *
+   *   - `handleCallBlitz` sends `{ gameState, reason: "blitz", winnerId,
+   *     scores, calledBy, timestamp }`
+   *   - `handleForfeitGame` sends `{ gameState, reason: "forfeit", winner,
+   *     timestamp }` - and `winner` is `undefined` when the game finished with
+   *     nobody left to win it.
+   *
+   * So everything except `gameState` and `reason` is optional here. Nothing
+   * needs to pick between them: `gameState.winner` carries the winning
+   * player's id on both paths, and that is what the UI reads.
+   */
   onGameEnded?: (data: {
     gameState: GameState;
     reason: string;
-    winner: Player;
+    winnerId?: string | null;
+    winner?: Player;
+    scores?: Record<string, number>;
+    calledBy?: string;
   }) => void;
   onPlayerJoined?: (data: { gameState?: GameState; userId: string }) => void;
   onPlayerLeft?: (data: { gameState?: GameState; userId: string }) => void;
   onCardMoved?: (gameState: GameState) => void;
+  /**
+   * The server refused this client's move. Carries state, so the board can be
+   * reconciled rather than left mid-move.
+   */
+  onMoveRejected?: (data: { gameState: GameState; reason: string }) => void;
   onCardFlipped?: (gameState: GameState) => void;
   onBlitzCalled?: (data: { playerId: string }) => void;
+  /**
+   * A Blitz was scored but nobody reached targetScore. The game is not over -
+   * it is waiting for everyone to ready up for the next round.
+   */
+  onRoundOver?: (data: {
+    gameState: GameState;
+    round: number;
+    calledBy: string;
+  }) => void;
 }
 
 class SocketService {
@@ -111,6 +145,26 @@ class SocketService {
       }
     );
 
+    // The end of the game. This subscription did not exist, so
+    // `gameStore.onGameEnded` was dead code and a game won by Blitz sat on
+    // "Game in progress!" until the player reloaded - the win condition was
+    // invisible. Forfeiting only looked fine because the gateway emits
+    // GAME_STATE_UPDATED before GAME_ENDED on that path, and that first event
+    // is subscribed; the Blitz path has no such fallback.
+    this.socket.on(
+      SOCKET_EVENTS.GAME_ENDED,
+      (data: {
+        gameState: GameState;
+        reason: string;
+        winnerId?: string | null;
+        winner?: Player;
+        scores?: Record<string, number>;
+        calledBy?: string;
+      }) => {
+        this.callbacks.onGameEnded?.(data);
+      }
+    );
+
     this.socket.on(
       SOCKET_EVENTS.PLAYER_JOINED,
       (data: { gameState?: GameState; userId: string }) => {
@@ -133,6 +187,13 @@ class SocketService {
     );
 
     this.socket.on(
+      SOCKET_EVENTS.MOVE_REJECTED,
+      (data: { gameState: GameState; reason: string }) => {
+        this.callbacks.onMoveRejected?.(data);
+      }
+    );
+
+    this.socket.on(
       SOCKET_EVENTS.CARD_FLIPPED,
       (data: { gameState: GameState }) => {
         this.callbacks.onCardFlipped?.(data.gameState);
@@ -142,6 +203,13 @@ class SocketService {
     this.socket.on(SOCKET_EVENTS.BLITZ_CALLED, (data: { playerId: string }) => {
       this.callbacks.onBlitzCalled?.(data);
     });
+
+    this.socket.on(
+      SOCKET_EVENTS.ROUND_OVER,
+      (data: { gameState: GameState; round: number; calledBy: string }) => {
+        this.callbacks.onRoundOver?.(data);
+      }
+    );
 
     this.socket.on(SOCKET_EVENTS.ERROR, (data: { message: string }) => {
       console.error("Game error:", data.message);
@@ -164,28 +232,27 @@ class SocketService {
     }
   }
 
-  joinGame(gameId: string, userId: string) {
+  joinGame(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId });
   }
 
-  leaveGame(gameId: string, userId: string) {
+  leaveGame(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.LEAVE_ROOM, { gameId });
   }
 
-  forfeitGame(gameId: string, playerId: string): void {
-    if (!this.socket) {
+  forfeitGame(gameId: string): void {
+    if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
 
     this.socket.emit(SOCKET_EVENTS.FORFEIT_GAME, {
       gameId,
-      playerId,
     });
   }
 
@@ -198,7 +265,6 @@ class SocketService {
 
   moveCard(
     gameId: string,
-    playerId: string,
     cardId: string,
     fromPileId: string,
     toPileId: string
@@ -208,40 +274,39 @@ class SocketService {
     }
     this.socket.emit(SOCKET_EVENTS.MOVE_CARD, {
       gameId,
-      playerId,
       cardId,
       fromPileId,
       toPileId,
     });
   }
 
-  flipCard(gameId: string, playerId: string, pileId: string) {
+  flipCard(gameId: string, pileId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.FLIP_CARD, { gameId, playerId, pileId });
+    this.socket.emit(SOCKET_EVENTS.FLIP_CARD, { gameId, pileId });
   }
 
-  callBlitz(gameId: string, playerId: string) {
+  callBlitz(gameId: string) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.CALL_BLITZ, { gameId, playerId });
+    this.socket.emit(SOCKET_EVENTS.CALL_BLITZ, { gameId });
   }
 
-  playerReady(gameId: string, playerId: string, isReady: boolean) {
+  playerReady(gameId: string, isReady: boolean) {
     if (!this.socket?.connected) {
       throw new Error("Socket not connected");
     }
-    this.socket.emit(SOCKET_EVENTS.PLAYER_READY, { gameId, playerId, isReady });
+    this.socket.emit(SOCKET_EVENTS.PLAYER_READY, { gameId, isReady });
   }
 
-  autoRejoinGame(gameId: string, userId: string) {
+  autoRejoinGame(gameId: string) {
     if (!this.socket?.connected) {
       console.warn("Cannot auto-rejoin - socket not connected");
       return;
     }
-    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId, userId });
+    this.socket.emit(SOCKET_EVENTS.JOIN_ROOM, { gameId });
   }
 
   // Utility methods

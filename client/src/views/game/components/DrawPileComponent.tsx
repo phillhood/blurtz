@@ -1,6 +1,7 @@
 import React from "react";
 import { PileLabel } from "@styles";
 import { Pile } from "@types";
+import { isVisibleCard } from "@utils";
 import { CardPile, FannedCards, EmptyPile } from ".";
 
 interface DrawPileComponentProps {
@@ -37,8 +38,10 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
   // Draw pile = face-down cards at front of array
   const drawPileCards = cards.filter((c) => !c.faceUp);
 
-  // Active cards = face-up cards at end (last one is playable)
-  const faceUpCards = cards.filter((c) => c.faceUp);
+  // Active cards = face-up cards at end (last one is playable). The predicate
+  // narrows, so these are VisibleCards from here on and the fan can read their
+  // faces without asking again.
+  const faceUpCards = cards.filter(isVisibleCard);
 
   const hasDrawPile = drawPileCards.length > 0;
   const hasFlippedCards = faceUpCards.length > 0;
@@ -75,7 +78,7 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
           >
             {hasDrawPile ? (
               <CardPile
-                cards={drawPileCards.map((c) => ({ ...c, faceUp: false }))}
+                cards={drawPileCards}
                 pileId={`${pile.id}-draw`}
                 isDraggable={false}
                 maxStackDisplay={2}

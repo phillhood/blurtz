@@ -1,22 +1,22 @@
 import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { Card, CardColor } from "@types";
+import { CardColor, ClientCard } from "@types";
 import { GameCard, CardNumber } from "@styles";
 
 interface CardComponentProps {
-  card: Card;
+  card: ClientCard;
   pileId: string;
   onClick?: () => void;
-  onDrop?: (draggedCard: Card) => void;
-  canDrop?: (draggedCard: Card) => boolean;
+  onDrop?: (draggedCard: ClientCard) => void;
+  canDrop?: (draggedCard: ClientCard) => boolean;
   isDraggable?: boolean;
   isPendingMove?: boolean;
 }
 
 export interface DragData {
   type: "card";
-  card: Card;
+  card: ClientCard;
   fromPileId: string;
 }
 
@@ -95,7 +95,11 @@ const CardComponent: React.FC<CardComponentProps> = ({
     }
   };
 
-  // Render face-down card (back of card)
+  // Render face-down card (back of card).
+  //
+  // This early return IS the type narrowing: below it `card` is a VisibleCard,
+  // which is the only reason `card.color` and `card.value` are readable at all.
+  // A face-down card genuinely has neither - the server does not send them.
   if (!card.faceUp) {
     return (
       <div
@@ -154,7 +158,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
         onClick={handleClick}
         borderStyle={card.color.type === "a" ? "solid" : "dashed"}
       >
-        <CardNumber>{card.number}</CardNumber>
+        <CardNumber>{card.value}</CardNumber>
       </GameCard>
     </div>
   );

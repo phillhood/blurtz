@@ -13,6 +13,11 @@ import { AppContainer } from "@styles";
 const App: React.FC = () => {
   const { user, loading } = useAuthContext();
 
+  // Returning something other than <Router> UNMOUNTS the whole tree, so this is
+  // only allowed to be true while there is genuinely nothing to route: at boot,
+  // before `fetchUserProfile` has said whether the persisted token is a session.
+  // `authStore.loading` means that and only that - if a form's in-flight state
+  // ever fed this, every submit would remount the form and blank its error.
   if (loading) {
     return <div>Loading...</div>;
   }
