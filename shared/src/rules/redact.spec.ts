@@ -15,7 +15,7 @@ import { ClientCard, ClientPile, toClientGameState } from "./redact";
 const { RED, BLUE, GREEN } = CARD_COLORS;
 
 function card(id: string, value: number, faceUp: boolean, color = RED): Card {
-  return { id, value, number: value, color, faceUp };
+  return { id, value, color, faceUp };
 }
 
 function pile(id: string, type: Pile["type"], cards: Card[] = []): Pile {
@@ -58,7 +58,6 @@ function gameState(decks: PlayerDeck[], bankPiles: Pile[] = []): GameState {
     })),
     bankPiles,
     currentRound: 0,
-    currentTurn: "player-1",
     winner: null,
   };
 }
@@ -87,14 +86,21 @@ describe("redaction", () => {
   // =====================================================================
   describe("face-down cards", () => {
     it("emits ONLY id and faceUp - no value, number, color or ownerId", () => {
-      const hidden: Card = {
+      // `number` and `ownerId` are NOT on `Card` any more, and this fixture
+      // keeps them anyway - hence the assertion. Redaction is a whitelist: it
+      // builds the hidden card field by field rather than spreading and
+      // deleting, so a field a future `Card` grows cannot leak by default.
+      // A card carrying fields the type does not know about is exactly the
+      // case that proves it, and it is not hypothetical - decks written before
+      // those fields were dropped still have them in the JSON blob.
+      const hidden = {
         id: "real-id",
         value: 7,
         number: 7,
         color: BLUE,
         faceUp: false,
         ownerId: "player-1",
-      };
+      } as Card;
       const state = gameState([
         deck("p1", { drawPile: pile("p1-draw", "draw", [hidden]) }),
       ]);
@@ -141,7 +147,6 @@ describe("redaction", () => {
       const visible: Card = {
         id: "visible-id",
         value: 6,
-        number: 6,
         color: GREEN,
         faceUp: true,
       };
@@ -259,7 +264,7 @@ describe("redaction", () => {
       expect(redacted.hostId).toBe("user-1");
       expect(redacted.players[0].username).toBe("player1");
       expect(redacted.players[0].bankPileCount).toBe(0);
-      expect(redacted.currentTurn).toBe("player-1");
+      expect(redacted.maxPlayers).toBe(2);
     });
 
     it("does not mutate the state it is handed", () => {

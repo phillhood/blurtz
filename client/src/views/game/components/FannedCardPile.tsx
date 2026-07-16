@@ -307,7 +307,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
               : "top 0.15s ease-out, transform 0.15s ease-out",
           }}
         >
-          {card.number}
+          {card.value}
         </CardNumber>
       </GameCard>
     </div>

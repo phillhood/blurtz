@@ -29,13 +29,14 @@ export const CardColorSchema: z.ZodType<CardColor> = z.object({
   type: z.enum(["a", "b"]),
 });
 
+// `number` and `ownerId` are gone from `Card`, so they are gone from here.
+// Decks written before that still carry them; zod strips unknown keys rather
+// than rejecting, so an old row still parses and the next write drops them.
 export const CardSchema: z.ZodType<Card> = z.object({
   id: z.string().uuid(),
   value: z.number().min(1).max(10),
-  number: z.number().min(1).max(10),
   color: CardColorSchema,
   faceUp: z.boolean(),
-  ownerId: z.string().uuid().optional(),
 });
 
 export const PileSchema: z.ZodType<Pile> = z.object({
@@ -52,11 +53,6 @@ export const PlayerDeckSchema: z.ZodType<PlayerDeck> = z.object({
 
 export const GameStateDataSchema: z.ZodType<GameplayState> = z.object({
   bankPiles: z.array(PileSchema),
-  // Was `z.union([z.string(), z.number()])`, which the `z.ZodType<GameplayState>`
-  // pin immediately rejected: `GameplayState.currentTurn` is a number, and
-  // `initializeGameState` has only ever written 0. The union described a shape
-  // nothing produced.
-  currentTurn: z.number(),
 });
 
 // PlayerStateSchema and FullGameStateSchema used to sit here. Both were dead -

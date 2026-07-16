@@ -20,7 +20,6 @@ const hidden: HiddenCard = { id: "hidden:draw-pile-1:0", faceUp: false };
 const visible: VisibleCard = {
   id: "real-card-id",
   value: 7,
-  number: 7,
   color: { name: "Red", code: "#DC2626", type: "a" },
   faceUp: true,
 };
@@ -33,7 +32,11 @@ describe("ClientCard", () => {
       const value = hidden.value;
       // @ts-expect-error - nor a colour.
       const color = hidden.color;
-      // @ts-expect-error - nor `number`, the alias of value.
+      // @ts-expect-error - `number` is not a field on ANY card any more: it
+      // was an alias of `value` that only the client read, and the two agreed
+      // only because createFullDeck wrote both. This line erroring is now
+      // over-determined - hidden cards carry nothing, and nothing carries
+      // `number` - which is exactly the point.
       const number = hidden.number;
 
       // At runtime they are simply absent, which is the whole point.

@@ -58,7 +58,6 @@ const playingState = (id: string): GameState =>
     players: [],
     bankPiles: [],
     currentRound: 1,
-    currentTurn: "user-1",
     createdAt: new Date(),
   }) as unknown as GameState;
 

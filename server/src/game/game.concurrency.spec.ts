@@ -40,7 +40,7 @@ function fullDeck(): Card[] {
 
   Object.values(CARD_COLORS).forEach((color) => {
     CARD_VALUES.forEach((value) => {
-      cards.push({ id: uuidv4(), value, number: value, color, faceUp: false });
+      cards.push({ id: uuidv4(), value, color, faceUp: false });
     });
   });
 

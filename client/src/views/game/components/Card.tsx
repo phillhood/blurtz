@@ -98,7 +98,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
   // Render face-down card (back of card).
   //
   // This early return is also the type narrowing: below it `card` is a
-  // VisibleCard, which is the only reason `card.color` and `card.number` are
+  // VisibleCard, which is the only reason `card.color` and `card.value` are
   // readable at all. A face-down card genuinely has neither - the server does
   // not send them.
   if (!card.faceUp) {
@@ -159,7 +159,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
         onClick={handleClick}
         borderStyle={card.color.type === "a" ? "solid" : "dashed"}
       >
-        <CardNumber>{card.number}</CardNumber>
+        <CardNumber>{card.value}</CardNumber>
       </GameCard>
     </div>
   );

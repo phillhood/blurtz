@@ -579,7 +579,6 @@ export class GameService {
       bankPiles: gameState?.bankPiles || createBankPiles(),
       status: game.status,
       currentRound: 0,
-      currentTurn: game.players[0]?.id || "",
       winner: winner?.id || null,
       createdAt: game.createdAt,
       updatedAt: game.updatedAt,

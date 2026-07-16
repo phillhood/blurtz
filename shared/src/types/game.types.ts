@@ -12,14 +12,28 @@ import { User } from "./user.types";
  * this file fails to compile.
  */
 
-// Card types
+/**
+ * A card.
+ *
+ * `value` is the only name for the number on its face. There used to be a
+ * `number` alias beside it, kept in sync by `createFullDeck` writing both: the
+ * server compared `value`, the client compared `number`, and the two agreed
+ * only because one function remembered to. There was no `Card` without both,
+ * and no rule about which to use.
+ *
+ * There was also an `ownerId?`, described as "track which player owns this
+ * card", which nothing has ever assigned or read. A card's owner is the deck
+ * it is in.
+ *
+ * Both lived in the `Player.deck` JSON blob, so dropping them needs no
+ * migration: old rows carry fields nothing reads, and the next write drops
+ * them.
+ */
 export interface Card {
   id: string;
   value: number;
-  number: number;
   color: CardColor;
   faceUp: boolean;
-  ownerId?: string; // Track which player owns this card
 }
 
 export interface CardColor {
@@ -76,19 +90,34 @@ export interface GameListing {
   updatedAt?: Date;
 }
 
-// Gameplay state - the JSON stored in game.gameState column
+/**
+ * The JSON stored in the `game.gameState` column.
+ *
+ * The shared board, and that is all it has ever been. It used to carry a
+ * `currentTurn: number` that `initializeGameState` set to 0 and nothing ever
+ * incremented, read or branched on - because Blurtz has no turns. Everybody
+ * plays at once, racing for the same bank piles; that is the entire game.
+ *
+ * It lives in a JSON blob, so removing it needs no migration.
+ */
 export interface GameplayState {
   bankPiles: Pile[];
-  currentTurn: number;
 }
 
-// Full game state - complete state sent to clients
+/**
+ * Full game state - the complete state built for clients.
+ *
+ * This had a `currentTurn: string` too - a player id, unrelated to
+ * `GameplayState.currentTurn` (a number) beyond the name they shared, which is
+ * its own reason to be rid of one of them. `readGameState` fabricated it as
+ * `players[0]?.id` on every read: not the player whose turn it was, just the
+ * first row the query returned. No caller on either side read it. Gone.
+ */
 export interface GameState extends GameListing {
   hostId: string;
   players: Player[];
   bankPiles: Pile[];
   currentRound: number;
-  currentTurn: string;
   winner?: string | null;
 }
 

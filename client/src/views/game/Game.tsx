@@ -403,7 +403,7 @@ const Game: React.FC = () => {
                             }
                       }
                     >
-                      {card.number}
+                      {card.value}
                     </CardNumber>
                   </GameCard>
                 </div>

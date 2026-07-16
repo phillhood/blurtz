@@ -21,7 +21,7 @@ const bankCardId = (n: number) =>
 
 // Small helper to keep card fixtures short and consistent.
 function card(id: string, value: number, color = CARD_COLORS.RED, faceUp = true): Card {
-  return { id, value, number: value, color, faceUp };
+  return { id, value, color, faceUp };
 }
 
 /**

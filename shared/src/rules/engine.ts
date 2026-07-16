@@ -377,10 +377,7 @@ export function createFullDeck(): Card[] {
     CARD_VALUES.forEach((value) => {
       cards.push({
         id: uuidv4(),
-        // `value` and `number` are two names for one field, kept in sync here.
-        // The engine compares `value`.
         value,
-        number: value,
         color,
         faceUp: false,
       });
@@ -403,7 +400,6 @@ export function createBankPiles(): Pile[] {
 export function initializeGameState(): GameplayState {
   return {
     bankPiles: createBankPiles(),
-    currentTurn: 0,
   };
 }
 

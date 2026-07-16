@@ -37,7 +37,7 @@ function card(
   color = RED,
   faceUp = true
 ): Card {
-  return { id, value, number: value, color, faceUp };
+  return { id, value, color, faceUp };
 }
 
 function pile(id: string, type: Pile["type"], cards: Card[] = []): Pile {
@@ -397,7 +397,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
-        currentTurn: 0,
       };
       return { deck, board };
     }
@@ -481,7 +480,7 @@ describe("rules engine", () => {
         ],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: TestBoard = { bankPiles: [], currentTurn: 0 };
+      const board: TestBoard = { bankPiles: [] };
 
       executeMove(deck, board, "Y2", "work-1", "work-2");
 
@@ -503,7 +502,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
-        currentTurn: 0,
       };
 
       executeMove(deck, board, "R1", "work-1", "bank-1");
@@ -530,7 +528,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
-        currentTurn: 0,
       };
 
       executeMove(deck, board, "R1", "work-1", "bank-1");
@@ -551,7 +548,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
-        currentTurn: 0,
       };
 
       executeMove(deck, board, "R1", "blurtz-1", "bank-1");
@@ -571,7 +567,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
-        currentTurn: 0,
       };
 
       executeMove(deck, board, "nope", "work-1", "bank-1");
@@ -596,14 +591,7 @@ describe("rules engine", () => {
      * redaction keys on `faceUp` ALONE, so a card whose visibility is encoded
      * anywhere else would leak.
      */
-    const ALLOWED_CARD_KEYS = new Set([
-      "id",
-      "value",
-      "number",
-      "color",
-      "faceUp",
-      "ownerId",
-    ]);
+    const ALLOWED_CARD_KEYS = new Set(["id", "value", "color", "faceUp"]);
 
     function allCards(deck: PlayerDeck, board: TestBoard): Card[] {
       return [
@@ -717,7 +705,6 @@ describe("rules engine", () => {
       };
       const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", []), pile("bank-2", "bank", [])],
-        currentTurn: 0,
       };
 
       const expectedIds = allCards(deck, board).map((c) => c.id);
@@ -760,7 +747,7 @@ describe("rules engine", () => {
 
     it("conserves cards across a long deal-and-cycle sequence", () => {
       const deck = dealCards(4, seededRng(7));
-      const board: TestBoard = { bankPiles: [], currentTurn: 0 };
+      const board: TestBoard = { bankPiles: [] };
       const expectedIds = allCards(deck, board).map((c) => c.id);
       expect(expectedIds).toHaveLength(40);
 
@@ -978,15 +965,33 @@ describe("rules engine", () => {
       }
     });
 
-    it("keeps value and number in sync on every dealt card", () => {
+    /**
+     * This used to assert `c.number === c.value` on every dealt card - the
+     * alias invariant, held together by `createFullDeck` remembering to write
+     * both. There is one name now (`value`), so the invariant is not that the
+     * two agree but that the second one is not there at all: `number` was what
+     * the client compared while the server compared `value`, and a card that
+     * quietly grows it back is how that divergence would start again.
+     *
+     * `ownerId` is in the same position - two lines of type that nothing has
+     * ever assigned or read.
+     */
+    it("deals cards carrying ONLY id, value, color and faceUp", () => {
       const deck = dealCards(3, seededRng(11));
       const cards = [
         ...deck.blurtzPile.cards,
         ...deck.workPiles.flatMap((p) => p.cards),
         ...deck.drawPile.cards,
       ];
+
+      expect(cards).toHaveLength(40);
       for (const c of cards) {
-        expect(c.number).toBe(c.value);
+        expect(Object.keys(c).sort()).toEqual([
+          "color",
+          "faceUp",
+          "id",
+          "value",
+        ]);
       }
     });
 
