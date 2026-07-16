@@ -8,3 +8,6 @@ CLAUDE.md
 # Playwright e2e artifacts
 client/test-results
 client/playwright-report
+
+# Coverage reports (build output)
+client/coverage
