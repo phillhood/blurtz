@@ -1,3 +1,4 @@
+import { BadRequestException } from "@nestjs/common";
 import { Test, TestingModule } from "@nestjs/testing";
 import { v4 as uuidv4 } from "uuid";
 import { PrismaService } from "@prisma";
@@ -308,6 +309,138 @@ describe("GameService concurrency (real database)", () => {
       // The rejected move must not have half-applied: the card is still
       // exactly where it started.
       expect(loserWorkPile.cards.map((c) => c.id)).toEqual([loser.aceId]);
+    });
+  });
+
+  // -------------------------------------------------------------------
+  // Task 6 item 2: forfeitGame read the game through the OUTER prisma
+  // client, outside the lock. A forfeit racing a Blitz therefore read the
+  // pre-Blitz "playing" row, computed a winner from it in JS, and only then
+  // blocked on the row lock - so it waited for the Blitz to commit and then
+  // wrote its stale winner straight over the top of it.
+  //
+  // Two players' game ended with the wrong winner and the wrong scores.
+  // -------------------------------------------------------------------
+  describe("a forfeit racing a Blitz", () => {
+    let raceGameId: string;
+    /** Empty Blurtz pile, so this is the only player allowed to call Blitz. */
+    let blitzCaller: string;
+    /** Banked the most, so a Blitz crowns THEM - and they are the one leaving. */
+    let forfeiter: string;
+
+    /**
+     * The scores are rigged so the two possible endings name DIFFERENT
+     * winners. If a Blitz lands, the high scorer (the forfeiter) wins. If the
+     * forfeit lands, the forfeiter is gone and the last player standing wins.
+     * Without that asymmetry a clobbered winner would look identical to a
+     * correct one and the test would prove nothing.
+     */
+    beforeEach(async () => {
+      const userA = await prisma.user.create({
+        data: { username: `blitz-${uuidv4()}`, password: TEST_TAG },
+      });
+      const userB = await prisma.user.create({
+        data: { username: `forfeit-${uuidv4()}`, password: TEST_TAG },
+      });
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 2,
+          status: "playing",
+          hostId: userA.id,
+          gameState: { bankPiles: [], currentTurn: 0 },
+        },
+      });
+      raceGameId = game.id;
+
+      const deckA = buildDeck().deck;
+      deckA.blurtzPile.cards = [];
+      const deckB = buildDeck().deck;
+
+      // score = bankPileCount - 2 * blurtzRemaining
+      // A:  1 - 2*0  =  1
+      // B: 30 - 2*10 = 10  <- Blitz winner
+      const rowA = await prisma.player.create({
+        data: {
+          userId: userA.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(deckA)),
+          bankPileCount: 1,
+        },
+      });
+      const rowB = await prisma.player.create({
+        data: {
+          userId: userB.id,
+          gameId: game.id,
+          deck: JSON.parse(JSON.stringify(deckB)),
+          bankPileCount: 30,
+        },
+      });
+
+      blitzCaller = rowA.id;
+      forfeiter = rowB.id;
+    });
+
+    /** Genuinely concurrent. Sequentially this race cannot happen at all. */
+    function race() {
+      return Promise.allSettled([
+        service.callBlitz(raceGameId, blitzCaller),
+        service.forfeitGame(raceGameId, forfeiter),
+      ]);
+    }
+
+    it("ends the game exactly once - whoever commits second bails", async () => {
+      const results = await race();
+
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+
+      // Unlocked, BOTH of these completed: the forfeit's stale read still
+      // said "playing", so it never noticed the game had already ended.
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+
+      // The loser must bail on the status it observed under the lock, not
+      // die on a constraint or a missing row.
+      const loss = rejected[0] as PromiseRejectedResult;
+      expect(loss.reason).toBeInstanceOf(BadRequestException);
+      expect(loss.reason.message).toMatch(/not in progress|Game is not in progress/);
+    });
+
+    it("leaves a database that agrees with whichever mutation committed", async () => {
+      const [blitz] = await race();
+
+      const game = await prisma.game.findUnique({
+        where: { id: raceGameId },
+        include: { players: true },
+      });
+      const playerIds = game.players.map((p) => p.id).sort();
+
+      expect(game.status).toBe("finished");
+
+      if (blitz.status === "fulfilled") {
+        // The Blitz committed first. It crowned the high scorer - who is the
+        // player that tried to forfeit - and the forfeit bailed, so their row
+        // is untouched and both scores are the Blitz's.
+        expect(game.winnerId).toBe(forfeiter);
+        expect(playerIds).toEqual([blitzCaller, forfeiter].sort());
+        expect(game.players.find((p) => p.id === blitzCaller).score).toBe(1);
+        expect(game.players.find((p) => p.id === forfeiter).score).toBe(10);
+      } else {
+        // The forfeit committed first: the forfeiter is gone and the last
+        // player standing takes it. The Blitz bailed, so it never scored.
+        expect(game.winnerId).toBe(blitzCaller);
+        expect(playerIds).toEqual([blitzCaller]);
+        expect(game.players.find((p) => p.id === blitzCaller).score).toBe(0);
+      }
+
+      // Spelled out because it is the actual defect: the unlocked forfeit
+      // produced a hybrid neither branch above accepts - the Blitz's scores
+      // on the board, but the forfeit's winner sitting on the game row.
+      const blitzScored = game.players.some((p) => p.score !== 0);
+      expect(blitzScored).toBe(blitz.status === "fulfilled");
     });
   });
 

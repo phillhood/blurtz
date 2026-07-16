@@ -340,69 +340,100 @@ export class GameService {
     return player?.id ?? null;
   }
 
+  /**
+   * Runs under the game lock: leaving an in-progress game ends it, and the
+   * waiting-game path is a read-then-delete that can also flip the game to
+   * `finished`. Both are game-ending mutations, so they serialize on the same
+   * row as everything else.
+   */
   async leaveGame(gameId: string, userId: string): Promise<GameState> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: {
-        players: {
-          include: {
-            user: {
-              select: { id: true, username: true },
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: {
+          players: {
+            include: {
+              user: {
+                select: { id: true, username: true },
+              },
             },
           },
         },
-      },
-    });
-
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
-    const player = game.players.find((p) => p.user.id === userId);
-    if (!player) {
-      throw new NotFoundException("Player not found in this game");
-    }
-
-    // If game is playing, this is a forfeit
-    if (game.status === "playing") {
-      this.logger.log(`Player ${userId} leaving active game ${gameId} - treating as forfeit`);
-      return await this.forfeitGame(gameId, player.id);
-    }
-
-    this.logger.log(`Player ${userId} left game ${gameId}`);
-
-    // Otherwise, normal leave logic for waiting games
-    const remainingPlayers = game.players.filter((p) => p.id !== player.id);
-
-    // If no players left in waiting game, mark as finished
-    if (remainingPlayers.length === 0) {
-      await this.prisma.game.update({
-        where: { id: gameId },
-        data: { status: "finished" },
       });
-    }
-    await this.prisma.player.delete({ where: { id: player.id } });
-    return this.getGameState(gameId);
+
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      const player = game.players.find((p) => p.user.id === userId);
+      if (!player) {
+        throw new NotFoundException("Player not found in this game");
+      }
+
+      // If game is playing, this is a forfeit. The game was read under the
+      // lock, so hand it straight over rather than re-reading it.
+      if (game.status === "playing") {
+        this.logger.log(`Player ${userId} leaving active game ${gameId} - treating as forfeit`);
+        return this.applyForfeit(tx, game, player.id);
+      }
+
+      this.logger.log(`Player ${userId} left game ${gameId}`);
+
+      // Otherwise, normal leave logic for waiting games
+      const remainingPlayers = game.players.filter((p) => p.id !== player.id);
+
+      // If no players left in waiting game, mark as finished
+      if (remainingPlayers.length === 0) {
+        await tx.game.update({
+          where: { id: gameId },
+          data: { status: "finished" },
+        });
+      }
+      await tx.player.delete({ where: { id: player.id } });
+      return this.readGameState(tx, gameId);
+    });
   }
 
+  /**
+   * Runs under the game lock.
+   *
+   * A forfeit ends the game, and so does a Blitz - they must not both be
+   * allowed to decide how. This used to read the game through the pooled
+   * client, outside the lock: a forfeit racing a Blitz read the pre-Blitz
+   * `playing` row, picked a winner from it in JS, then blocked on the row lock
+   * for the Blitz to commit and wrote its stale winner straight over the top.
+   * The game ended with the wrong winner and the Blitz's scores still on the
+   * board.
+   */
   async forfeitGame(gameId: string, playerId: string): Promise<GameState> {
-    const game = await this.prisma.game.findUnique({
-      where: { id: gameId },
-      include: {
-        players: {
-          include: {
-            user: {
-              select: { id: true, username: true },
-            },
-          },
-        },
-      },
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: { select: { id: true } } },
+      });
+
+      if (!game) {
+        throw new NotFoundException("Game not found");
+      }
+
+      return this.applyForfeit(tx, game, playerId);
     });
+  }
 
-    if (!game) {
-      throw new NotFoundException("Game not found");
-    }
-
+  /**
+   * The forfeit itself, on a game already read INSIDE `withGameLock`.
+   *
+   * `tx` is not optional and `game` must have come from that same `tx`. The
+   * status check below is only a real guard because of that: it is what makes
+   * a forfeit arriving behind a committed Blitz observe `finished` and bail
+   * instead of clobbering it. Read the game anywhere else and the check is
+   * just a stale value, which is precisely the bug this shape exists to stop.
+   */
+  private async applyForfeit(
+    tx: DbClient,
+    game: { id: string; status: string; players: Array<{ id: string }> },
+    playerId: string
+  ): Promise<GameState> {
     if (game.status !== "playing") {
       throw new BadRequestException("Cannot forfeit - game is not in progress");
     }
@@ -417,27 +448,27 @@ export class GameService {
     if (remainingPlayers.length === 1) {
       const winner = remainingPlayers[0];
 
-      await this.prisma.game.update({
-        where: { id: gameId },
+      await tx.game.update({
+        where: { id: game.id },
         data: {
           status: "finished",
           winnerId: winner.id,
         },
       });
-      this.logger.log(`Player ${playerId} forfeited game ${gameId} - winner: ${winner.id}`);
+      this.logger.log(`Player ${playerId} forfeited game ${game.id} - winner: ${winner.id}`);
     } else if (remainingPlayers.length === 0) {
-      await this.prisma.game.update({
-        where: { id: gameId },
+      await tx.game.update({
+        where: { id: game.id },
         data: {
           status: "finished",
           winnerId: null,
         },
       });
-      this.logger.log(`Player ${playerId} forfeited game ${gameId} - no remaining players`);
+      this.logger.log(`Player ${playerId} forfeited game ${game.id} - no remaining players`);
     }
-    await this.prisma.player.delete({ where: { id: player.id } });
+    await tx.player.delete({ where: { id: player.id } });
 
-    return this.getGameState(gameId);
+    return this.readGameState(tx, game.id);
   }
 
   /**
