@@ -32,6 +32,8 @@ const Game: React.FC = () => {
     connected,
     error,
     clearError,
+    moveRejection,
+    clearMoveRejection,
     currentPlayer,
   } = useGameContext();
 
@@ -69,7 +71,12 @@ const Game: React.FC = () => {
     }
   }, [gameId, connected]);
 
-  // Check if error is fatal (should block the game) or transient (show toast)
+  // Check if error is fatal (should block the game) or transient (show toast).
+  //
+  // This only ever looks at `error`. A refused move arrives on `moveRejection`
+  // precisely so it can never reach this heuristic: the server's reasons
+  // include "Source pile not found" and "Destination pile not found", and a
+  // player who mis-drags a card is still in a game they can go on playing.
   const isFatalError = error?.includes("not found") || error?.includes("does not exist");
 
   const handleLeave = () => {
@@ -262,10 +269,19 @@ const Game: React.FC = () => {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
-      {/* Transient error toast */}
-      {error && !isFatalError && (
+      {/* Transient toast: a refused move, else a non-fatal error. Each branch
+          passes a stable store action as onDismiss - GameToast keys its
+          dismiss timer on that identity, so an inline closure would restart
+          the countdown on every render and the toast would never leave. */}
+      {moveRejection ? (
+        <GameToast
+          message={moveRejection}
+          duration={3000}
+          onDismiss={clearMoveRejection}
+        />
+      ) : error && !isFatalError ? (
         <GameToast message={error} duration={3000} onDismiss={clearError} />
-      )}
+      ) : null}
 
       <GameContainer>
         <GameHeader onLeave={handleLeave} onCopyCode={handleCopyCode} />

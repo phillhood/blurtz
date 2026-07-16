@@ -35,6 +35,7 @@ describe("gameStore", () => {
       connected: false,
       socketInitialized: false,
       error: null,
+      moveRejection: null,
       userJoined: false,
       userLeft: false,
     });
@@ -68,7 +69,11 @@ describe("gameStore", () => {
       expect(after).not.toBe(before);
     });
 
-    it("surfaces the reason as a transient error", async () => {
+    // Task 6 item 1: the reason used to go into `error`, which <Game> greps
+    // for "not found" to decide whether to replace the board with a fatal
+    // error screen. Two of validateMove's own reasons match that grep, so a
+    // stale pile id ejected the player from a game they could still play.
+    it("surfaces the reason on the move-rejection channel, not the error channel", async () => {
       const callbacks = await registeredCallbacks();
 
       callbacks.onMoveRejected!({
@@ -76,9 +81,38 @@ describe("gameStore", () => {
         reason: "That card no longer fits on that bank pile",
       });
 
-      expect(useGameStore.getState().error).toBe(
+      expect(useGameStore.getState().moveRejection).toBe(
         "That card no longer fits on that bank pile"
       );
+      // `error` is the field fatality is judged on. A refused move must never
+      // reach it, whatever the server worded the reason as.
+      expect(useGameStore.getState().error).toBeNull();
+    });
+
+    it("keeps a rejection reason out of `error` even when it reads like a fatal one", async () => {
+      const callbacks = await registeredCallbacks();
+
+      callbacks.onMoveRejected!({
+        gameState: gameState("game-1"),
+        reason: "Destination pile not found",
+      });
+
+      expect(useGameStore.getState().error).toBeNull();
+      expect(useGameStore.getState().moveRejection).toBe(
+        "Destination pile not found"
+      );
+    });
+
+    it("clears the rejection when asked, so the toast can expire", async () => {
+      const callbacks = await registeredCallbacks();
+
+      callbacks.onMoveRejected!({
+        gameState: gameState("game-1"),
+        reason: "Destination pile not found",
+      });
+      useGameStore.getState().clearMoveRejection();
+
+      expect(useGameStore.getState().moveRejection).toBeNull();
     });
 
     it("does not treat a rejected move as a fatal 'game not found'", async () => {

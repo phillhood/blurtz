@@ -12,7 +12,23 @@ interface GameStoreState {
   currentGameId: string | null;
   connected: boolean;
   socketInitialized: boolean;
+  /**
+   * Something went wrong with the connection, the room, or a request. <Game>
+   * decides whether this is fatal by looking at its text, so ONLY put things
+   * here that are allowed to be fatal.
+   */
   error: string | null;
+  /**
+   * Why the server refused the last move. Deliberately NOT `error`.
+   *
+   * Rejection reasons are free text chosen by the server ("Destination pile
+   * not found", "That card no longer fits on that bank pile"), and <Game>
+   * decides fatality by substring-matching `error` for "not found". Sharing
+   * the field means a bad pile id ejects a player out of a live game they are
+   * still perfectly able to play. A refused move is never fatal, so it gets a
+   * channel the fatality heuristic cannot see.
+   */
+  moveRejection: string | null;
   // Internal flags
   userJoined: boolean;
   userLeft: boolean;
@@ -42,6 +58,7 @@ interface GameStoreActions {
   // Util
   clearError: () => void;
   setError: (error: string | null) => void;
+  clearMoveRejection: () => void;
   getCurrentPlayer: (userId: string | undefined) => Player | null;
 }
 
@@ -56,6 +73,7 @@ export const useGameStore = create<GameStore>()(
       connected: false,
       socketInitialized: false,
       error: null,
+      moveRejection: null,
       userJoined: false,
       userLeft: false,
 
@@ -97,6 +115,7 @@ export const useGameStore = create<GameStore>()(
               userJoined: true,
               userLeft: false,
               error: null,
+              moveRejection: null,
             });
           },
 
@@ -106,6 +125,7 @@ export const useGameStore = create<GameStore>()(
               currentGameId: null,
               userJoined: false,
               userLeft: true,
+              moveRejection: null,
             });
           },
 
@@ -143,10 +163,16 @@ export const useGameStore = create<GameStore>()(
 
           // A refused move still swaps gameState. That new object identity is
           // what tells the board the move resolved - without it the card the
-          // player dragged stays hidden on the pile it never left. The reason
-          // rides along as a transient error, which surfaces as a toast.
+          // player dragged stays hidden on the pile it never left.
+          //
+          // The reason goes to `moveRejection`, never `error`: losing a race
+          // (or holding a stale pile id) is routine play, and must not be
+          // eligible for <Game>'s fatal-error screen. It is also why nothing
+          // else clears this field - it expires on its own 3s toast timer, so
+          // an opponent's move landing a frame later cannot wipe the
+          // explanation before the player has read it.
           onMoveRejected: (data: { gameState: GameState; reason: string }) => {
-            set({ gameState: data.gameState, error: data.reason });
+            set({ gameState: data.gameState, moveRejection: data.reason });
           },
 
           onCardFlipped: (newGameState: GameState) => {
@@ -217,6 +243,7 @@ export const useGameStore = create<GameStore>()(
             userJoined: false,
             userLeft: false,
             error: null,
+            moveRejection: null,
           });
           socketService.joinGame(gameId);
         } catch (error) {
@@ -245,6 +272,7 @@ export const useGameStore = create<GameStore>()(
             userJoined: false,
             currentGameId: null,
             gameState: null,
+            moveRejection: null,
           });
 
           queryClient.invalidateQueries({ queryKey: gameKeys.all });
@@ -342,6 +370,7 @@ export const useGameStore = create<GameStore>()(
       // Util
       clearError: () => set({ error: null }),
       setError: (error: string | null) => set({ error }),
+      clearMoveRejection: () => set({ moveRejection: null }),
 
       getCurrentPlayer: (userId: string | undefined) => {
         const { gameState } = get();

@@ -9,6 +9,8 @@ export const useGameContext = () => {
   const connected = useGameStore((state) => state.connected);
   const error = useGameStore((state) => state.error);
   const clearError = useGameStore((state) => state.clearError);
+  const moveRejection = useGameStore((state) => state.moveRejection);
+  const clearMoveRejection = useGameStore((state) => state.clearMoveRejection);
   const getCurrentPlayer = useGameStore((state) => state.getCurrentPlayer);
 
   // Get store actions
@@ -115,5 +117,7 @@ export const useGameContext = () => {
     currentPlayer,
     error,
     clearError,
+    moveRejection,
+    clearMoveRejection,
   };
 };
