@@ -1,0 +1,154 @@
+import { describe, it, expect, vi } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import {
+  DndContext,
+  PointerSensor,
+  useSensor,
+  useSensors,
+} from "@dnd-kit/core";
+import CardComponent from "../components/Card";
+import { CardColor, ClientCard, VisibleCard } from "@types";
+
+const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
+const yellow: CardColor = { name: "yellow", code: "#ca8a04", type: "b" };
+
+const visible = (value: number, color: CardColor = red): VisibleCard =>
+  ({ id: `card-${value}`, faceUp: true, value, color }) as VisibleCard;
+
+/**
+ * A face-down card as the server ACTUALLY publishes it: an id, a faceUp flag,
+ * and nothing else. No value, no colour - `redactCard` does not send them.
+ */
+const hidden = (id = "hidden-1"): ClientCard =>
+  ({ id, faceUp: false }) as ClientCard;
+
+/**
+ * The board, configured the way <Game> configures it.
+ *
+ * The 5px activation constraint is not decoration: with dnd-kit's default
+ * sensors a bare pointerdown starts a drag immediately and the sensor
+ * swallows the click that follows. <Game> sets `distance: 5` precisely so a
+ * click stays a click and only a real drag is a drag - so a harness without it
+ * would report that clicking a card does nothing, which is a fact about the
+ * harness and not about the app.
+ */
+const Board = ({ children }: { children: React.ReactNode }) => {
+  const sensors = useSensors(
+    useSensor(PointerSensor, { activationConstraint: { distance: 5 } })
+  );
+  return <DndContext sensors={sensors}>{children}</DndContext>;
+};
+
+const renderCard = (
+  props: Partial<React.ComponentProps<typeof CardComponent>> & {
+    card: ClientCard;
+  }
+) =>
+  render(
+    <Board>
+      {/* Scopes assertions to the card: DndContext also renders its own
+          screen-reader instructions into the container. */}
+      <div data-testid="card-root">
+        <CardComponent pileId="pile-1" {...props} />
+      </div>
+    </Board>
+  );
+
+describe("Card", () => {
+  it("renders a face-up card's value", () => {
+    renderCard({ card: visible(7) });
+
+    expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  // ---------------------------------------------------------------------
+  // The redaction. `!card.faceUp`'s early return is also the type narrowing:
+  // everything below it reads `card.color` and `card.value`, which a
+  // HiddenCard does not have. The test that matters is that a hidden card
+  // renders the BACK and leaks nothing - not even an undefined where a value
+  // would be.
+  // ---------------------------------------------------------------------
+  it("renders the back of a face-down card and no value at all", () => {
+    renderCard({ card: hidden() });
+
+    expect(screen.getByText("NB")).toBeInTheDocument();
+    // Nothing but the back, anywhere in the card. A regression that dropped
+    // the early return would render `undefined` here rather than throw.
+    expect(screen.getByTestId("card-root").textContent).toBe("NB");
+    expect(screen.getByTestId("card-root").textContent).not.toMatch(/\d/);
+  });
+
+  it("does not render the back for a card that is face-up", () => {
+    renderCard({ card: visible(3) });
+
+    expect(screen.queryByText("NB")).not.toBeInTheDocument();
+  });
+
+  it("tells the two colour types apart by border style, not by colour name", () => {
+    // `color.type` is what work-pile alternation is judged on ("a" = red/blue,
+    // "b" = yellow/green), and colour alone does not survive a colourblind
+    // player. The border style is the second channel.
+    const { container: solid } = renderCard({ card: visible(5, red) });
+    expect(solid.querySelector("[style*='border-style: solid']")).not.toBeNull();
+
+    const { container: dashed } = renderCard({ card: visible(5, yellow) });
+    expect(dashed.querySelector("[style*='border-style: dashed']")).not.toBeNull();
+  });
+
+  it("calls back when a face-up card is clicked", async () => {
+    const onClick = vi.fn();
+    renderCard({ card: visible(7), onClick });
+
+    await userEvent.setup().click(screen.getByText("7"));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("calls back when a face-down card is clicked", async () => {
+    // The blurtz pile's top card and the draw pile are both clicked while
+    // face-down - the early return must not cost the card its click handler.
+    const onClick = vi.fn();
+    renderCard({ card: hidden(), onClick });
+
+    await userEvent.setup().click(screen.getByText("NB"));
+
+    expect(onClick).toHaveBeenCalledTimes(1);
+  });
+
+  it("survives a click with no handler wired", async () => {
+    renderCard({ card: visible(7) });
+
+    await userEvent.setup().click(screen.getByText("7"));
+
+    expect(screen.getByText("7")).toBeInTheDocument();
+  });
+
+  it("hides a card whose move is still in flight", () => {
+    // The card is mid-move: it is drawn at the destination optimistically by
+    // the pending-move machinery, so the original must not also be on screen.
+    const { container } = renderCard({ card: visible(7), isPendingMove: true });
+
+    expect(container.querySelector("[style*='opacity: 0']")).not.toBeNull();
+  });
+
+  it("shows a card that is not moving", () => {
+    const { container } = renderCard({ card: visible(7), isPendingMove: false });
+
+    expect(container.querySelector("[style*='opacity: 0;']")).toBeNull();
+  });
+
+  it("offers a grab cursor only on a card that can be dragged", () => {
+    const { container: draggable } = renderCard({ card: visible(7) });
+    expect(draggable.querySelector("[style*='cursor: grab']")).not.toBeNull();
+
+    const { container: fixed } = renderCard({
+      card: visible(7),
+      isDraggable: false,
+    });
+    // An opponent's cards render through here too. A grab cursor on one is a
+    // promise the game does not keep.
+    expect(fixed.querySelector("[style*='cursor: grab']")).toBeNull();
+    expect(fixed.querySelector("[style*='cursor: default']")).not.toBeNull();
+  });
+});
