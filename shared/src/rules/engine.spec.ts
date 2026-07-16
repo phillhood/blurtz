@@ -1,5 +1,5 @@
-import { Card, Pile, PlayerDeck } from "@types";
-import { CARD_COLORS } from "@utils";
+import { Card, Pile, PlayerDeck } from "../types";
+import { CARD_COLORS } from "../constants";
 import {
   BoardState,
   canMoveFromPile,
@@ -43,6 +43,18 @@ function card(
 function pile(id: string, type: Pile["type"], cards: Card[] = []): Pile {
   return { id, type, cards };
 }
+
+/**
+ * A board whose `bankPiles` is known to be there.
+ *
+ * `BoardState` leaves `bankPiles` optional because the engine reads it out of
+ * a JSON column, where an old or half-written row genuinely can arrive without
+ * one - and the engine tolerates that on purpose. A test that just built the
+ * board three lines up knows better. Saying so once here beats an `!` on every
+ * assertion below, and it does not weaken anything: the engine is still
+ * exercised through its real, tolerant signature.
+ */
+type TestBoard = BoardState & { bankPiles: Pile[] };
 
 describe("rules engine", () => {
   // =====================================================================
@@ -383,7 +395,7 @@ describe("rules engine", () => {
         ],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
         currentTurn: 0,
       };
@@ -469,7 +481,7 @@ describe("rules engine", () => {
         ],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = { bankPiles: [], currentTurn: 0 };
+      const board: TestBoard = { bankPiles: [], currentTurn: 0 };
 
       executeMove(deck, board, "Y2", "work-1", "work-2");
 
@@ -489,7 +501,7 @@ describe("rules engine", () => {
         ],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
         currentTurn: 0,
       };
@@ -516,7 +528,7 @@ describe("rules engine", () => {
         ],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
         currentTurn: 0,
       };
@@ -537,7 +549,7 @@ describe("rules engine", () => {
         workPiles: [pile("work-1", "work", [])],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
         currentTurn: 0,
       };
@@ -557,7 +569,7 @@ describe("rules engine", () => {
         workPiles: [pile("work-1", "work", [card("R1", 1, RED)])],
         drawPile: pile("draw-1", "draw", []),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", [])],
         currentTurn: 0,
       };
@@ -593,7 +605,7 @@ describe("rules engine", () => {
       "ownerId",
     ]);
 
-    function allCards(deck: PlayerDeck, board: BoardState): Card[] {
+    function allCards(deck: PlayerDeck, board: TestBoard): Card[] {
       return [
         ...deck.blurtzPile.cards,
         ...deck.workPiles.flatMap((p) => p.cards),
@@ -611,7 +623,7 @@ describe("rules engine", () => {
      */
     function invariantReport(
       deck: PlayerDeck,
-      board: BoardState,
+      board: TestBoard,
       step: string
     ) {
       const cards = allCards(deck, board);
@@ -668,7 +680,7 @@ describe("rules engine", () => {
 
     function expectInvariants(
       deck: PlayerDeck,
-      board: BoardState,
+      board: TestBoard,
       expectedIds: string[],
       step: string
     ) {
@@ -703,7 +715,7 @@ describe("rules engine", () => {
           card("B1", 1, BLUE, false),
         ]),
       };
-      const board: BoardState = {
+      const board: TestBoard = {
         bankPiles: [pile("bank-1", "bank", []), pile("bank-2", "bank", [])],
         currentTurn: 0,
       };
@@ -748,7 +760,7 @@ describe("rules engine", () => {
 
     it("conserves cards across a long deal-and-cycle sequence", () => {
       const deck = dealCards(4, seededRng(7));
-      const board: BoardState = { bankPiles: [], currentTurn: 0 };
+      const board: TestBoard = { bankPiles: [], currentTurn: 0 };
       const expectedIds = allCards(deck, board).map((c) => c.id);
       expect(expectedIds).toHaveLength(40);
 

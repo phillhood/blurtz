@@ -11,9 +11,11 @@ import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/commo
 import { JwtService } from "@nestjs/jwt";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
-// Relative on purpose - see rules/index.ts.
-import { toClientGameState } from "./rules";
-import { SOCKET_EVENTS, validateWsPayload } from "@utils";
+// Redaction and the socket event names both come from the shared package -
+// which is what makes "the client listens for the name the server emits" a
+// compile-time fact rather than a comment on two copies.
+import { toClientGameState, SOCKET_EVENTS } from "@blurtz/shared";
+import { validateWsPayload } from "@utils";
 import { getErrorMessage } from "@utils/error-handler";
 import {
   JoinRoomDto,

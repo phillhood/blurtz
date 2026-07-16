@@ -4,8 +4,14 @@ import { v4 as uuidv4 } from "uuid";
 import { PrismaService } from "@prisma";
 import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
-import { Card, MoveResult, PlayerDeck, Pile } from "@types";
-import { CARD_COLORS, CARD_VALUES } from "@utils";
+import {
+  Card,
+  CARD_COLORS,
+  CARD_VALUES,
+  MoveResult,
+  Pile,
+  PlayerDeck,
+} from "@blurtz/shared";
 
 /**
  * Integration spec - needs a REAL Postgres. Every other spec in this repo

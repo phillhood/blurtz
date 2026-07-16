@@ -1,4 +1,16 @@
-import { User } from ".";
+import { User } from "./user.types";
+
+/**
+ * The game's domain types, hand-written.
+ *
+ * Deliberately NOT `z.infer` versions of the schemas in
+ * `server/src/schemas/`. Zod is for parsing untrusted input at a boundary, not
+ * for authoring domain types: inferred types hover as unreadable generic soup,
+ * and deriving these from a schema would drag zod into the client's dependency
+ * graph to describe a card. The dependency runs the other way - the schemas
+ * are pinned to these types with `z.ZodType<T>`, so a schema that drifts from
+ * this file fails to compile.
+ */
 
 // Card types
 export interface Card {

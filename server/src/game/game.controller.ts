@@ -17,8 +17,8 @@ import {
   ApiBearerAuth,
 } from "@nestjs/swagger";
 import { GameService } from "./game.service";
-// Relative on purpose - see rules/index.ts.
-import { toClientGameState } from "./rules";
+// Redaction lives in the shared package - see shared/src/index.ts.
+import { toClientGameState } from "@blurtz/shared";
 import { JwtAuthGuard } from "@auth/guards/jwt-auth.guard";
 import { ApiResponse } from "@types";
 import { CreateGameDto, JoinGameByIdDto, JoinGameByCodeDto, GameIdParamDto } from "./dto";

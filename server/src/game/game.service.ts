@@ -7,12 +7,11 @@ import {
   Logger,
 } from "@nestjs/common";
 import { PrismaService } from "@prisma";
-import { GameListing, GameState, MoveResult, Pile, PlayerDeck } from "@types";
 import { PlayerDeckSchema } from "@schemas";
-import { GAME_CONSTANTS } from "@utils";
 import { generateAlias, generateAliasWithNumber } from "@utils";
 import { DbClient, GameRepository } from "./game.repository";
-// The rules engine. Relative on purpose - see rules/index.ts.
+// The rules engine, its constants and the domain types: one package, resolved
+// through the workspace symlink. No path alias - see shared/src/index.ts.
 import {
   createBankPiles,
   dealCards,
@@ -23,7 +22,13 @@ import {
   initializeGameState,
   scoreRound,
   validateMove,
-} from "./rules";
+  GAME_CONSTANTS,
+  GameListing,
+  GameState,
+  MoveResult,
+  Pile,
+  PlayerDeck,
+} from "@blurtz/shared";
 
 @Injectable()
 export class GameService {

@@ -1,4 +1,4 @@
-import { Card, GameState, Pile, Player, PlayerDeck } from "@types";
+import { Card, GameState, Pile, Player, PlayerDeck } from "../types";
 
 /**
  * Redaction: turning internal game state into the view a client may hold.

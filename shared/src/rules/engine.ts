@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
-import { Card, GameplayState, Pile, PileType, PlayerDeck } from "@types";
-import { CARD_COLORS, CARD_VALUES, GAME_CONSTANTS } from "@utils";
+import { Card, GameplayState, Pile, PileType, PlayerDeck } from "../types";
+import { CARD_COLORS, CARD_VALUES, GAME_CONSTANTS } from "../constants";
 
 /**
  * The Blurtz rules engine.

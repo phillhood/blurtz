@@ -7,8 +7,7 @@ import {
 import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
 import { PrismaService } from "@prisma";
-import { CARD_COLORS } from "@utils";
-import { Card } from "@types";
+import { CARD_COLORS, Card } from "@blurtz/shared";
 
 // Decks are validated against PlayerDeckSchema on the way out of the
 // database, and it holds card ids to real v4 UUIDs - so fixtures must look

@@ -1,4 +1,4 @@
-import { User } from ".";
+import { User } from "@blurtz/shared";
 
 export interface ApiResponse<T = any> {
   success: boolean;

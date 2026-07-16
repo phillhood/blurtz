@@ -1,5 +1,5 @@
-import { Card, GameState, Pile, PlayerDeck } from "@types";
-import { CARD_COLORS } from "@utils";
+import { Card, GameState, Pile, PlayerDeck } from "../types";
+import { CARD_COLORS } from "../constants";
 import { dealCards } from "./engine";
 import { ClientCard, ClientPile, toClientGameState } from "./redact";
 

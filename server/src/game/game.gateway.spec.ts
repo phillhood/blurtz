@@ -4,7 +4,7 @@ import { ForbiddenException } from "@nestjs/common";
 import { Socket } from "socket.io";
 import { GameGateway } from "./game.gateway";
 import { GameService } from "./game.service";
-import { SOCKET_EVENTS } from "@utils";
+import { SOCKET_EVENTS } from "@blurtz/shared";
 
 // The DTOs validate every id as a v4 UUID, so fixtures must look like one.
 const GAME_ID = "11111111-1111-4111-8111-111111111111";
