@@ -126,6 +126,7 @@ describe("gameService", () => {
         name: "Phill's Game",
         maxPlayers: 3,
         isPrivate: true,
+        targetScore: 25,
       });
 
       // The settings have to survive the trip: a private 3-player game that
@@ -135,8 +136,29 @@ describe("gameService", () => {
         name: "Phill's Game",
         maxPlayers: 3,
         isPrivate: true,
+        targetScore: 25,
       });
       expect(created.id).toBe("game-new");
+    });
+
+    it("omits the target score entirely when none was chosen", async () => {
+      let body: Record<string, unknown> = {};
+      server.use(
+        http.post(`${BASE_URL}/api/game`, async ({ request }) => {
+          body = (await request.json()) as Record<string, unknown>;
+          return ok(game("game-new", "Phill's Game"));
+        })
+      );
+
+      await gameService.createGame({
+        name: "Phill's Game",
+        maxPlayers: 2,
+        isPrivate: false,
+      });
+
+      // An explicit null would be refused by CreateGameDto; the field has to be
+      // absent for the server's default to apply.
+      expect(body).not.toHaveProperty("targetScore");
     });
 
     it("tells the player what the server actually objected to", async () => {

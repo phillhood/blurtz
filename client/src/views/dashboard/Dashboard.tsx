@@ -25,9 +25,15 @@ const Dashboard: React.FC = () => {
   const handleCreateGame = async (
     gameName: string,
     maxPlayers: number,
-    isPrivate: boolean
+    isPrivate: boolean,
+    targetScore: number
   ) => {
-    const game = await createAndJoinGame(gameName, maxPlayers, isPrivate);
+    const game = await createAndJoinGame(
+      gameName,
+      maxPlayers,
+      isPrivate,
+      targetScore
+    );
     if (game?.id) {
       setTimeout(() => {
         navigate(`/game/${game.id}`);

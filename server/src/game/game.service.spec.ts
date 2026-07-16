@@ -69,6 +69,7 @@ describe("GameService", () => {
       game: {
         findUnique: jest.fn(),
         update: jest.fn(),
+        create: jest.fn(),
       },
       player: {
         findUnique: jest.fn(),
@@ -124,6 +125,39 @@ describe("GameService", () => {
 
   it("should be defined", () => {
     expect(service).toBeDefined();
+  });
+
+  describe("createGame", () => {
+    beforeEach(() => {
+      // No existing game holds the generated alias, so generateUniqueAlias
+      // settles on its first attempt.
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(null);
+      (prismaService.game.create as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        alias: "ABC123",
+      });
+      // The join is its own path with its own tests; this one is about what
+      // gets written at create time.
+      jest.spyOn(service, "joinGame").mockResolvedValue(undefined as never);
+    });
+
+    function createdData() {
+      return (prismaService.game.create as jest.Mock).mock.calls[0][0].data;
+    }
+
+    it("writes the target score it was given", async () => {
+      await service.createGame("Friday Night", "host-user", 2, false, 25);
+
+      expect(createdData().targetScore).toBe(25);
+    });
+
+    it("defaults to 100 when no target score is given", async () => {
+      // Must equal Game.targetScore's schema default: a caller that omits it
+      // is unchanged by the field existing.
+      await service.createGame("Friday Night", "host-user", 2, false);
+
+      expect(createdData().targetScore).toBe(100);
+    });
   });
 
   describe("findGameByAlias", () => {

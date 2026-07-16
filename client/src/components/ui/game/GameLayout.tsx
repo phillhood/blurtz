@@ -47,6 +47,11 @@ export const OpponentsRow: React.FC<OpponentsRowProps> = ({
     <div
       className={clsx(
         "flex justify-center items-center py-2.5 min-h-[180px] w-full row-start-1",
+        // Three opponents are wider than the board. Without `min-w-0` this flex
+        // row keeps its automatic minimum, grows past the grid track and
+        // GameBoard's max-width, and scrolls the whole page sideways. Contained,
+        // the row scrolls by itself instead.
+        "min-w-0 overflow-x-auto",
         gapClass,
         className
       )}
@@ -62,6 +67,11 @@ export const CenterArea: React.FC<LayoutProps> = ({ className, children, ...prop
     <div
       className={clsx(
         "flex flex-col items-center gap-5 justify-center pb-2.5 row-start-2",
+        // Sixteen foundations - four colours per player at a full table - are
+        // wider than the board, and BankPiles is nested too deep to constrain
+        // itself. Same reason as OpponentsRow: without this the bank stretches
+        // the grid track and scrolls the page rather than scrolling itself.
+        "min-w-0 overflow-x-auto",
         className
       )}
       {...props}

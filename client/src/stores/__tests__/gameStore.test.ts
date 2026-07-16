@@ -476,12 +476,13 @@ describe("gameStore", () => {
 
       const created = await useGameStore
         .getState()
-        .createAndJoinGame("Phill's Game", 3, true, "user-1");
+        .createAndJoinGame("Phill's Game", 3, true, 150, "user-1");
 
       expect(gameService.createGame).toHaveBeenCalledWith({
         name: "Phill's Game",
         maxPlayers: 3,
         isPrivate: true,
+        targetScore: 150,
       });
       // Creating without joining leaves the player staring at the lobby while
       // their own game waits for them.
@@ -496,7 +497,7 @@ describe("gameStore", () => {
 
       const created = await useGameStore
         .getState()
-        .createAndJoinGame("Phill's Game", 2, false, "user-1");
+        .createAndJoinGame("Phill's Game", 2, false, 100, "user-1");
 
       expect(created).toBeNull();
       expect(useGameStore.getState().error).toBe(
@@ -510,7 +511,7 @@ describe("gameStore", () => {
 
       const created = await useGameStore
         .getState()
-        .createAndJoinGame("Phill's Game", 2, false, "user-1");
+        .createAndJoinGame("Phill's Game", 2, false, 100, "user-1");
 
       expect(created).toBeNull();
       // A game created over REST with no socket to join it with is a row in
@@ -524,7 +525,7 @@ describe("gameStore", () => {
 
       const created = await useGameStore
         .getState()
-        .createAndJoinGame("Phill's Game", 2, false, "user-1");
+        .createAndJoinGame("Phill's Game", 2, false, 100, "user-1");
 
       expect(created).toBeNull();
       expect(socketService.joinGame).not.toHaveBeenCalled();

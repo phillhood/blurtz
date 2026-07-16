@@ -26,6 +26,8 @@ export interface CreateGameRequest {
   name: string;
   maxPlayers: number;
   isPrivate: boolean;
+  /** Omitted means the server's default; CreateGameDto owns the legal range. */
+  targetScore?: number;
 }
 
 export interface JoinGameRequest {

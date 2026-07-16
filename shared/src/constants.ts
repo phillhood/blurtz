@@ -22,6 +22,13 @@ export const GAME_CONSTANTS = {
   WORK_PILE_COUNT: WORK_PILE_MAPPING,
   DRAW_PILE_SIZE: 30,
   BANK_PILE_COUNT: 16,
+  // A round scores bankPileCount - 2 * blurtzRemaining, so a good round nets
+  // roughly 10-25: below MIN the first decent round ends the game before anyone
+  // plays a second, and above MAX it never ends.
+  MIN_TARGET_SCORE: 10,
+  MAX_TARGET_SCORE: 500,
+  // Must stay equal to Game.targetScore's schema default.
+  DEFAULT_TARGET_SCORE: 100,
 } as const;
 
 /**

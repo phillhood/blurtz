@@ -1,5 +1,6 @@
-import { expect, type Browser, type Page } from "@playwright/test";
+import { expect, type Browser, type BrowserContext, type Page } from "@playwright/test";
 import { uniqueName, withDb } from "./db";
+import { CARD_COLORS } from "@blurtz/shared";
 import { authenticate, createUser, type TestUser } from "./users";
 
 export interface CreatedGame {
@@ -39,7 +40,13 @@ export function gameSocketConnected(page: Page): Promise<void> {
  */
 export async function createGameViaUi(
   page: Page,
-  options: { isPrivate?: boolean; name?: string } = {}
+  options: {
+    isPrivate?: boolean;
+    name?: string;
+    /** Seats to open. The modal's stepper starts at 2 and clamps to 2-4. */
+    maxPlayers?: number;
+    targetScore?: number;
+  } = {}
 ): Promise<CreatedGame> {
   const name = options.name ?? uniqueName("game");
 
@@ -51,6 +58,14 @@ export async function createGameViaUi(
 
   await expect(page.getByRole("heading", { name: "Create New Game" })).toBeVisible();
   await page.getByPlaceholder("Enter game name...").fill(name);
+
+  if (options.maxPlayers !== undefined) {
+    await setMaxPlayersViaUi(page, options.maxPlayers);
+  }
+
+  if (options.targetScore !== undefined) {
+    await setTargetScoreViaUi(page, options.targetScore);
+  }
 
   if (options.isPrivate) {
     // Located by role alone because it is the only checkbox in the modal: it
@@ -80,6 +95,32 @@ export async function createGameViaUi(
   const alias = await gameCode(page).innerText();
 
   return { id, name, alias };
+}
+
+/**
+ * Walk the Game Size stepper up from its default of 2. The readout is the only
+ * thing that reports where it landed, so it is what gets waited on.
+ */
+async function setMaxPlayersViaUi(page: Page, maxPlayers: number): Promise<void> {
+  for (let seats = 2; seats < maxPlayers; seats++) {
+    await page.getByRole("button", { name: "+", exact: true }).click();
+  }
+  await expect(page.getByText(`${maxPlayers} players`)).toBeVisible();
+}
+
+/** The scores the Target Score select offers without typing one in. */
+const TARGET_SCORE_PRESETS = [25, 100, 150];
+
+async function setTargetScoreViaUi(page: Page, targetScore: number): Promise<void> {
+  const select = page.getByLabel("Target Score", { exact: true });
+
+  if (TARGET_SCORE_PRESETS.includes(targetScore)) {
+    await select.selectOption(String(targetScore));
+    return;
+  }
+
+  await select.selectOption("custom");
+  await page.getByLabel("Custom Target Score").fill(String(targetScore));
 }
 
 /** The invite code, as shown in the game header. */
@@ -159,27 +200,137 @@ export function listingCard(page: Page, gameName: string) {
 }
 
 // ---------------------------------------------------------------------------
-// Two players, two browsers
+// N players, N browsers
 // ---------------------------------------------------------------------------
 
-export interface SeatedGame {
+export interface SeatedPlayer {
+  user: TestUser;
+  page: Page;
+}
+
+export interface SeatedTable {
   game: CreatedGame;
-  host: TestUser;
-  guest: TestUser;
-  hostPage: Page;
-  guestPage: Page;
+  /** The host first, then the guests in join order. */
+  players: SeatedPlayer[];
+  /** The same pages, for the loops that only want to look at every browser. */
+  pages: Page[];
   close(): Promise<void>;
 }
 
 /**
- * Two real players in one game, in two real browser contexts.
+ * The API allows 3 requests/second and 20/10s per IP, and every context in this
+ * suite comes from 127.0.0.1. One seat is four requests - a dashboard load is
+ * three on its own, then the create or join - so seating four players back to
+ * back trips the throttler on the fixture's own setup. Spacing the seats keeps
+ * the run under it.
+ *
+ * The interval is module-level, not per-call, so pacing carries across the test
+ * boundary too: the worker is shared and the throttler's window does not reset
+ * between tests.
+ */
+const SEAT_INTERVAL_MS = 1500;
+let lastSeatedAt = 0;
+
+async function paceSeat(): Promise<void> {
+  const wait = lastSeatedAt + SEAT_INTERVAL_MS - Date.now();
+  if (wait > 0) {
+    await new Promise((resolve) => setTimeout(resolve, wait));
+  }
+  lastSeatedAt = Date.now();
+}
+
+/**
+ * Take a seat by invite code, watching the join call itself.
+ *
+ * `Dashboard.handleJoinGame` swallows a failed join into a `console.error` and
+ * navigates only `if (game?.id)`, so a 429 and a refusal both surface as
+ * "expected /game/<id>, got /dashboard". Reading the response says which.
+ */
+async function joinSeat(page: Page, game: CreatedGame): Promise<void> {
+  const joined = page.waitForResponse(
+    (response) =>
+      response.url().endsWith("/api/game/joinByCode") &&
+      response.request().method() === "POST"
+  );
+
+  await joinByCodeViaUi(page, game.alias);
+
+  const response = await joined;
+  expect(
+    response.status(),
+    `POST /api/game/joinByCode: ${await response.text()}`
+  ).toBe(201);
+
+  await expect(page).toHaveURL(new RegExp(`/game/${game.id}$`));
+}
+
+/**
+ * `playerCount` real players in one game, each in its own browser context.
  *
  * Contexts and not tabs: the JWT lives in localStorage, so one tab's token
- * would be both players.
+ * would be every player.
  *
- * `onPageCreated` fires before either page navigates - the only moment a
- * websocket recorder can attach in time to see the handshake.
+ * `onPageCreated` fires before a page navigates - the only moment a websocket
+ * recorder can attach in time to see the handshake. Its `index` is the seat: 0
+ * is the host.
  */
+export async function seatPlayers(
+  browser: Browser,
+  options: {
+    playerCount: number;
+    /** Seats to open, when that must differ from the players seated. */
+    maxPlayers?: number;
+    isPrivate?: boolean;
+    targetScore?: number;
+    onPageCreated?: (page: Page, index: number) => void;
+  }
+): Promise<SeatedTable> {
+  const contexts: BrowserContext[] = [];
+  const players: SeatedPlayer[] = [];
+
+  for (let index = 0; index < options.playerCount; index++) {
+    const user = await createUser(index === 0 ? "host" : "guest");
+    const context = await browser.newContext();
+    const page = await context.newPage();
+
+    contexts.push(context);
+    options.onPageCreated?.(page, index);
+    await authenticate(page, user);
+    players.push({ user, page });
+  }
+
+  await paceSeat();
+  const game = await createGameViaUi(players[0].page, {
+    isPrivate: options.isPrivate,
+    maxPlayers: options.maxPlayers ?? options.playerCount,
+    targetScore: options.targetScore,
+  });
+
+  for (const { page } of players.slice(1)) {
+    await paceSeat();
+    await joinSeat(page, game);
+  }
+
+  return {
+    game,
+    players,
+    pages: players.map((player) => player.page),
+    async close() {
+      for (const context of contexts) {
+        await context.close();
+      }
+    },
+  };
+}
+
+export interface SeatedGame extends SeatedTable {
+  host: TestUser;
+  guest: TestUser;
+  hostPage: Page;
+  guestPage: Page;
+}
+
+/** Two players, named. A `seatPlayers` table with the pair spelled out. */
 export async function seatTwoPlayers(
   browser: Browser,
   options: {
@@ -187,51 +338,43 @@ export async function seatTwoPlayers(
     onPageCreated?: (page: Page, role: "host" | "guest") => void;
   } = {}
 ): Promise<SeatedGame> {
-  const host = await createUser("host");
-  const guest = await createUser("guest");
+  const { onPageCreated } = options;
 
-  const hostContext = await browser.newContext();
-  const guestContext = await browser.newContext();
-  const hostPage = await hostContext.newPage();
-  const guestPage = await guestContext.newPage();
+  const table = await seatPlayers(browser, {
+    playerCount: 2,
+    isPrivate: options.isPrivate,
+    onPageCreated:
+      onPageCreated &&
+      ((page, index) => onPageCreated(page, index === 0 ? "host" : "guest")),
+  });
 
-  options.onPageCreated?.(hostPage, "host");
-  options.onPageCreated?.(guestPage, "guest");
-
-  await authenticate(hostPage, host);
-  await authenticate(guestPage, guest);
-
-  const game = await createGameViaUi(hostPage, { isPrivate: options.isPrivate });
-  await joinByCodeViaUi(guestPage, game.alias);
-  await expect(guestPage).toHaveURL(new RegExp(`/game/${game.id}$`));
+  const [host, guest] = table.players;
 
   return {
-    game,
-    host,
-    guest,
-    hostPage,
-    guestPage,
-    async close() {
-      await hostContext.close();
-      await guestContext.close();
-    },
+    ...table,
+    close: () => table.close(),
+    host: host.user,
+    guest: guest.user,
+    hostPage: host.page,
+    guestPage: guest.page,
   };
 }
 
-/** Both players ready, host deals, both boards come up. */
-export async function readyUpAndStart(seated: SeatedGame): Promise<void> {
-  const { hostPage, guestPage } = seated;
+/** Everyone ready, the host deals, and every board comes up. */
+export async function readyUpAndStart(seated: SeatedTable): Promise<void> {
+  for (const page of seated.pages) {
+    await readyUp(page);
+  }
 
-  await readyUp(hostPage);
-  await readyUp(guestPage);
-
-  // The host's button only exists once the SERVER has told this page that
+  // The host's button only exists once the SERVER has told that page that
   // everyone is ready - it is rendered behind `allPlayersReady`.
+  const hostPage = seated.pages[0];
   await expect(startButton(hostPage)).toBeEnabled();
   await startButton(hostPage).click();
 
-  await expect(statusHeading(hostPage)).toHaveText("Game in progress!");
-  await expect(statusHeading(guestPage)).toHaveText("Game in progress!");
+  for (const page of seated.pages) {
+    await expect(statusHeading(page)).toHaveText("Game in progress!");
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -297,6 +440,41 @@ export async function setReady(
       `UPDATE players SET is_ready = $1 WHERE game_id = $2 AND user_id = $3`,
       [isReady, gameId, userId]
     );
+  });
+}
+
+/**
+ * Start every one of the 16 shared foundations, the widest the bank ever gets.
+ * Only a full table can reach it - there are four 1s per player - and playing
+ * there for real would mean sixteen races against a shuffled deal.
+ */
+export async function startEveryBankPile(gameId: string): Promise<void> {
+  const colors = Object.values(CARD_COLORS);
+
+  await withDb(async (db) => {
+    const { rows } = await db.query(`SELECT game_state FROM games WHERE id = $1`, [
+      gameId,
+    ]);
+    const state = rows[0].game_state as {
+      bankPiles: Array<{ id: string; cards: unknown[] }>;
+    };
+
+    state.bankPiles = state.bankPiles.map((pile, index) => ({
+      ...pile,
+      cards: [
+        {
+          id: `bank-seed-${index}`,
+          value: 1,
+          color: colors[index % colors.length],
+          faceUp: true,
+        },
+      ],
+    }));
+
+    await db.query(`UPDATE games SET game_state = $1 WHERE id = $2`, [
+      state,
+      gameId,
+    ]);
   });
 }
 

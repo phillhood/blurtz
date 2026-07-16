@@ -93,6 +93,18 @@ const animals = [
   "phoenix",
 ];
 
+const longestIn = (words: string[]): number =>
+  words.reduce((longest, word) => Math.max(longest, word.length), 0);
+
+/**
+ * The longest code the generators below can mint: three words, two separators,
+ * and the fallback's "-100". Derived from the word lists rather than written
+ * down, so a longer word cannot leave the join route refusing a code this
+ * server itself issued.
+ */
+export const MAX_ALIAS_LENGTH =
+  longestIn(adjectives) + longestIn(colors) + longestIn(animals) + "--".length + "-100".length;
+
 export const generateAlias = (): string => {
   const adjective = adjectives[Math.floor(Math.random() * adjectives.length)];
   const color = colors[Math.floor(Math.random() * colors.length)];

@@ -41,8 +41,9 @@ describe("CreateGameModal", () => {
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday Night");
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
-    // 2 players, public - the defaults a player who touches nothing else gets.
-    expect(onCreateGame).toHaveBeenCalledWith("Friday Night", 2, false);
+    // 2 players, public, first to 100 - what a player who touches nothing else
+    // gets. The 100 must match Game.targetScore's schema default.
+    expect(onCreateGame).toHaveBeenCalledWith("Friday Night", 2, false, 100);
   });
 
   it("trims the name before sending it", async () => {
@@ -54,7 +55,7 @@ describe("CreateGameModal", () => {
     );
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
-    expect(onCreateGame).toHaveBeenCalledWith("Friday Night", 2, false);
+    expect(onCreateGame).toHaveBeenCalledWith("Friday Night", 2, false, 100);
   });
 
   it("will not create a game from whitespace", async () => {
@@ -129,7 +130,7 @@ describe("CreateGameModal", () => {
     await user.type(screen.getByPlaceholderText("Enter game name..."), "x".repeat(50));
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
-    expect(onCreateGame).toHaveBeenCalledWith("x".repeat(50), 2, false);
+    expect(onCreateGame).toHaveBeenCalledWith("x".repeat(50), 2, false, 100);
   });
 
   it("counts players up and down between 2 and 4", async () => {
@@ -148,7 +149,7 @@ describe("CreateGameModal", () => {
     await user.click(screen.getByRole("button", { name: "+" }));
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
-    expect(onCreateGame).toHaveBeenCalledWith("Big Game", 4, false);
+    expect(onCreateGame).toHaveBeenCalledWith("Big Game", 4, false, 100);
   });
 
   it("cannot be pushed past 4 players or below 2", async () => {
@@ -166,6 +167,121 @@ describe("CreateGameModal", () => {
     expect(screen.getByRole("button", { name: "−" })).toBeEnabled();
   });
 
+  describe("target score", () => {
+    it("sends the preset the player picked", async () => {
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Quick One");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "25");
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(onCreateGame).toHaveBeenCalledWith("Quick One", 2, false, 25);
+    });
+
+    it("hides the custom field until Custom is chosen", async () => {
+      const { user } = setup();
+
+      expect(screen.queryByLabelText("Custom Target Score")).toBeNull();
+
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+
+      expect(screen.getByLabelText("Custom Target Score")).toBeInTheDocument();
+    });
+
+    it("sends a valid custom score", async () => {
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Odd One");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.type(screen.getByLabelText("Custom Target Score"), "75");
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(onCreateGame).toHaveBeenCalledWith("Odd One", 2, false, 75);
+    });
+
+    it.each([
+      ["0", "Target score must be between 10 and 500"],
+      ["9", "Target score must be between 10 and 500"],
+      ["-5", "Target score must be between 10 and 500"],
+      ["501", "Target score must be between 10 and 500"],
+      ["1000000000", "Target score must be between 10 and 500"],
+      ["25.5", "Target score must be a whole number"],
+    ])("refuses a custom score of %s and says why", async (typed, message) => {
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Bad Target");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.type(screen.getByLabelText("Custom Target Score"), typed);
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(screen.getByText(message)).toBeInTheDocument();
+      // The DTO would refuse this too; the point is that it never gets asked.
+      expect(onCreateGame).not.toHaveBeenCalled();
+    });
+
+    it("refuses an empty custom score rather than sending a default", async () => {
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Empty Target");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(screen.getByText("Target score is required")).toBeInTheDocument();
+      expect(onCreateGame).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ["10", 10],
+      ["500", 500],
+    ])("accepts the boundary score %s", async (typed, expected) => {
+      // The exact values MIN/MAX are written against - an off-by-one here
+      // refuses a score the server would have taken.
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Edge");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.type(screen.getByLabelText("Custom Target Score"), typed);
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(onCreateGame).toHaveBeenCalledWith("Edge", 2, false, expected);
+    });
+
+    it("clears a target score error once the score is fixed and resubmitted", async () => {
+      const { onCreateGame, user } = setup();
+
+      await user.type(screen.getByPlaceholderText("Enter game name..."), "Fixable");
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      const custom = screen.getByLabelText("Custom Target Score");
+      await user.type(custom, "5");
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      expect(
+        screen.getByText("Target score must be between 10 and 500")
+      ).toBeInTheDocument();
+
+      await user.clear(custom);
+      await user.type(custom, "50");
+      await user.click(screen.getByRole("button", { name: "Create Game" }));
+
+      expect(
+        screen.queryByText("Target score must be between 10 and 500")
+      ).not.toBeInTheDocument();
+      expect(onCreateGame).toHaveBeenCalledWith("Fixable", 2, false, 50);
+    });
+
+    it("forgets a custom score when cancelled", async () => {
+      const { user } = setup();
+
+      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.type(screen.getByLabelText("Custom Target Score"), "42");
+      await user.click(screen.getByRole("button", { name: "Cancel" }));
+
+      // Back to the Standard preset, with the custom field gone rather than
+      // sitting there pre-filled from a game that was never created.
+      expect(screen.getByLabelText("Target Score")).toHaveValue("100");
+      expect(screen.queryByLabelText("Custom Target Score")).toBeNull();
+    });
+  });
+
   it("creates a private game when asked", async () => {
     const { onCreateGame, user } = setup();
 
@@ -174,7 +290,7 @@ describe("CreateGameModal", () => {
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
     // A private game that arrives public is an invitation to strangers.
-    expect(onCreateGame).toHaveBeenCalledWith("Secret", 2, true);
+    expect(onCreateGame).toHaveBeenCalledWith("Secret", 2, true, 100);
   });
 
   it("closes after a successful create", async () => {
@@ -229,7 +345,7 @@ describe("CreateGameModal", () => {
     expect(
       screen.queryByText("Game name must be at least 2 characters")
     ).not.toBeInTheDocument();
-    expect(onCreateGame).toHaveBeenCalledWith("xyz", 2, false);
+    expect(onCreateGame).toHaveBeenCalledWith("xyz", 2, false, 100);
   });
 
   it("labels the game name field with its own label and nothing else", () => {

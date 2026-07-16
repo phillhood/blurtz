@@ -61,12 +61,13 @@ export class GameController {
     @Body() createGameDto: CreateGameDto,
     @Request() req
   ): Promise<ApiResponse> {
-    const { name, maxPlayers, isPrivate } = createGameDto;
+    const { name, maxPlayers, isPrivate, targetScore } = createGameDto;
     const game = await this.gameService.createGame(
       name,
       req.user.sub,
       maxPlayers,
-      isPrivate
+      isPrivate,
+      targetScore
     );
     return {
       success: true,

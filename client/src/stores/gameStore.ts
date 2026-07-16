@@ -41,6 +41,7 @@ interface GameStoreActions {
     name: string,
     maxPlayers: number,
     isPrivate: boolean,
+    targetScore: number,
     userId: string
   ) => Promise<Game | null>;
   leaveGame: (userId: string, forfeit?: boolean) => void;
@@ -211,6 +212,7 @@ export const useGameStore = create<GameStore>()(
         name: string,
         maxPlayers: number,
         isPrivate: boolean,
+        targetScore: number,
         userId: string
       ): Promise<Game | null> => {
         if (!userId || !socketService.connected) {
@@ -224,6 +226,7 @@ export const useGameStore = create<GameStore>()(
             name,
             maxPlayers,
             isPrivate,
+            targetScore,
           });
 
           if (!newGame.id) {
