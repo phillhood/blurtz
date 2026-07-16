@@ -370,6 +370,18 @@ export class GameService {
           where: { id: gameId },
           data: { status: "finished" },
         });
+      } else if (game.hostId === userId) {
+        // The host is leaving but the game lives on. `hostId` outlives the
+        // Player row, so without this the game is unstartable by anyone -
+        // nobody left is the host - and the departed host could still start
+        // it over REST. Hand the role to whoever remains.
+        await tx.game.update({
+          where: { id: gameId },
+          data: { hostId: remainingPlayers[0].userId },
+        });
+        this.logger.log(
+          `Host ${userId} left game ${gameId} - reassigned host to ${remainingPlayers[0].userId}`
+        );
       }
       await tx.player.delete({ where: { id: player.id } });
       return this.readGameState(tx, gameId);
@@ -490,6 +502,14 @@ export class GameService {
 
       if (game.hostId !== userId) {
         throw new ForbiddenException("Only the host can start the game");
+      }
+
+      // Being the host is not enough - you must still be IN the game. The
+      // socket path checks membership before it gets here, but the REST route
+      // calls this directly, and `hostId` outlives the host's Player row if
+      // leaveGame ever failed to reassign it.
+      if (!game.players.some((p) => p.userId === userId)) {
+        throw new ForbiddenException("You are not a player in this game");
       }
 
       if (game.players.length < GAME_CONSTANTS.MIN_PLAYERS) {

@@ -72,6 +72,7 @@ describe("GameService", () => {
         findFirst: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
+        delete: jest.fn(),
       },
       user: {
         findUnique: jest.fn(),
@@ -582,6 +583,30 @@ describe("GameService", () => {
       expect(prismaService.game.update).not.toHaveBeenCalled();
     });
 
+    // A departed host keeps `hostId` on the game row. The socket path checks
+    // membership first, but the REST route calls startGame directly - so
+    // without a membership check here, someone who left can still start it.
+    it("throws ForbiddenException when the host has left the game", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        // hostId still names the departed user...
+        hostId: "departed-host",
+        // ...but they have no Player row any more.
+        players: [
+          { id: "p1", userId: "player-a", isReady: true },
+          { id: "p2", userId: "player-b", isReady: true },
+        ],
+      });
+
+      await expect(
+        service.startGame("game-1", "departed-host")
+      ).rejects.toThrow(ForbiddenException);
+
+      expect(prismaService.player.update).not.toHaveBeenCalled();
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+    });
+
     it("throws BadRequestException when the host starts with a player not ready", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -781,6 +806,54 @@ describe("GameService", () => {
         service.joinGame(GAME_ID, USER_ID)
       ).resolves.toBeDefined();
       expect(prismaService.player.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("leaveGame host reassignment", () => {
+    // `hostId` outlives the host's Player row. If the host leaves a waiting
+    // game and nobody inherits the role, the game is unstartable by anyone
+    // left in it - and the departed host could still start it over REST.
+    it("hands the host role to a remaining player when the host leaves", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        hostId: "user-host",
+        players: [
+          { id: "p1", userId: "user-host", user: { id: "user-host" } },
+          { id: "p2", userId: "user-second", user: { id: "user-second" } },
+        ],
+      });
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+
+      await service.leaveGame("game-1", "user-host").catch(() => {
+        // readGameState re-reads at the end; we only care about the update above.
+      });
+
+      expect(prismaService.game.update).toHaveBeenCalledWith({
+        where: { id: "game-1" },
+        data: { hostId: "user-second" },
+      });
+    });
+
+    it("does not reassign the host when a non-host leaves", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
+        id: "game-1",
+        status: "waiting",
+        hostId: "user-host",
+        players: [
+          { id: "p1", userId: "user-host", user: { id: "user-host" } },
+          { id: "p2", userId: "user-second", user: { id: "user-second" } },
+        ],
+      });
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+
+      await service.leaveGame("game-1", "user-second").catch(() => {});
+
+      const hostWrites = (prismaService.game.update as jest.Mock).mock.calls
+        .filter((c) => c[0]?.data?.hostId !== undefined);
+      expect(hostWrites).toHaveLength(0);
     });
   });
 });
