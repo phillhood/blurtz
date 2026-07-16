@@ -233,4 +233,51 @@ describe("PlayerArea", () => {
 
     expect(container.querySelector("[style*='cursor: grab']")).toBeNull();
   });
+
+  // ------------------------------------------------------------------
+  // Presence. A dropped player is not a player who is thinking, and in a game
+  // where nobody waits on anybody the board is the only place that can say so.
+  // ------------------------------------------------------------------
+  describe("presence", () => {
+    it("says so when the player is not connected", () => {
+      renderArea({ isConnected: false });
+
+      expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    });
+
+    it("says nothing when the player is connected", () => {
+      renderArea({ isConnected: true });
+
+      expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    });
+
+    it("treats a caller that passes no presence as connected", () => {
+      // The default has to be "fine": a caller that knows nothing about
+      // presence must not paint the whole table as dropped.
+      renderArea({});
+
+      expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    });
+
+    it("dims a dropped player's cards without taking them away", () => {
+      const { container } = renderArea({
+        player: player({ work: [[card(3)]] }),
+        isConnected: false,
+      });
+
+      // The board is still live - the server plays no move for them and they
+      // may be back before the round ends.
+      expect(screen.getByText("3")).toBeInTheDocument();
+      expect(container.querySelector("[style*='opacity: 0.5']")).not.toBeNull();
+    });
+
+    it("leaves a connected player's cards undimmed", () => {
+      const { container } = renderArea({
+        player: player({ work: [[card(3)]] }),
+        isConnected: true,
+      });
+
+      expect(container.querySelector("[style*='opacity: 0.5']")).toBeNull();
+    });
+  });
 });

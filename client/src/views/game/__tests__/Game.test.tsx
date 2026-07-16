@@ -16,6 +16,8 @@ const mockClearMoveRejection = vi.fn();
 const gameContextState = {
   gameState: null as unknown,
   connected: true,
+  reconnecting: false,
+  connectedUserIds: null as string[] | null,
   error: null as GameError | null,
   moveRejection: null as string | null,
   currentPlayer: undefined as unknown,
@@ -29,6 +31,8 @@ vi.mock("@hooks", () => ({
     leaveGame: mockLeaveGame,
     makeMove: mockMakeMove,
     connected: gameContextState.connected,
+    reconnecting: gameContextState.reconnecting,
+    connectedUserIds: gameContextState.connectedUserIds,
     error: gameContextState.error,
     clearError: mockClearError,
     moveRejection: gameContextState.moveRejection,
@@ -70,6 +74,24 @@ const playingState = () =>
     ],
   }) as unknown as ReturnType<typeof Object>;
 
+/** The same board with an opponent sitting across it, for the presence tests. */
+const withOpponent = () => {
+  const state = playingState() as { players: unknown[] };
+  state.players.push({
+    id: "player-2",
+    username: "grace",
+    score: 0,
+    isReady: true,
+    user: { id: "user-2", username: "grace" },
+    deck: {
+      blurtzPile: { id: "blurtz-2", type: "blurtz", cards: [] },
+      workPiles: [],
+      drawPile: { id: "draw-2", type: "draw", cards: [] },
+    },
+  });
+  return state;
+};
+
 // A sibling component that exposes react-router navigation so tests can
 // move between two games *without* remounting <Game />, the same way the
 // app's real navigation works (same route, different :gameId param).
@@ -93,6 +115,8 @@ describe("Game", () => {
     vi.clearAllMocks();
     gameContextState.gameState = null;
     gameContextState.connected = true;
+    gameContextState.reconnecting = false;
+    gameContextState.connectedUserIds = null;
     gameContextState.error = null;
     gameContextState.moveRejection = null;
     gameContextState.currentPlayer = undefined;
@@ -206,6 +230,131 @@ describe("Game", () => {
       renderGame("/game/game-1");
 
       expect(screen.queryByText("Bank")).not.toBeInTheDocument();
+    });
+  });
+
+  // A drop mid-game is not the same event as a socket that has never been up.
+  // The board is still meaningful while the connection is not, and the game runs
+  // on without the player either way - so taking it away costs them their place
+  // and tells them nothing.
+  describe("reconnecting", () => {
+    const dropped = () => {
+      gameContextState.gameState = playingState();
+      gameContextState.currentPlayer = (
+        playingState() as { players: unknown[] }
+      ).players[0];
+      gameContextState.connected = false;
+      gameContextState.reconnecting = true;
+    };
+
+    it("keeps the board up while the socket is being retried", () => {
+      dropped();
+
+      renderGame("/game/game-1");
+
+      expect(screen.getByText("Bank")).toBeInTheDocument();
+      expect(
+        screen.queryByText("Connecting to game server...")
+      ).not.toBeInTheDocument();
+    });
+
+    it("says it is reconnecting when the socket drops", () => {
+      dropped();
+
+      renderGame("/game/game-1");
+
+      expect(
+        screen.getByText("Reconnecting to game server...")
+      ).toBeInTheDocument();
+    });
+
+    it("stops saying so once the socket is back", () => {
+      gameContextState.gameState = playingState();
+      gameContextState.connected = true;
+      gameContextState.reconnecting = false;
+
+      renderGame("/game/game-1");
+
+      expect(
+        screen.queryByText("Reconnecting to game server...")
+      ).not.toBeInTheDocument();
+    });
+
+    it("still waits full-screen for a socket that has never connected", () => {
+      gameContextState.gameState = playingState();
+      gameContextState.connected = false;
+      gameContextState.reconnecting = false;
+
+      renderGame("/game/game-1");
+
+      // Nothing is being retried and there is no board worth keeping - this is
+      // the first connect, which the loading screen is right for.
+      expect(
+        screen.getByText("Connecting to game server...")
+      ).toBeInTheDocument();
+      expect(
+        screen.queryByText("Reconnecting to game server...")
+      ).not.toBeInTheDocument();
+    });
+
+    it("re-joins the room once the socket comes back", () => {
+      dropped();
+      const { rerender } = renderGame("/game/game-1");
+
+      expect(mockJoinGame).not.toHaveBeenCalled();
+
+      gameContextState.connected = true;
+      gameContextState.reconnecting = false;
+      rerender(
+        <MemoryRouter initialEntries={["/game/game-1"]}>
+          <Routes>
+            <Route path="/game/:gameId" element={<Game />} />
+          </Routes>
+        </MemoryRouter>
+      );
+
+      // Rejoining is what fetches fresh state: the board the player kept
+      // looking at went stale the moment the socket went down.
+      expect(mockJoinGame).toHaveBeenCalledWith("game-1");
+    });
+  });
+
+  // A dropped opponent used to be indistinguishable from one who was thinking:
+  // the server said PLAYER_LEFT with no state and the client ignored it.
+  describe("presence", () => {
+    const atTheTable = () => {
+      gameContextState.gameState = withOpponent();
+      gameContextState.currentPlayer = (withOpponent() as { players: unknown[] })
+        .players[0];
+    };
+
+    it("marks an opponent the server has stopped seeing as disconnected", () => {
+      atTheTable();
+      gameContextState.connectedUserIds = ["user-1"];
+
+      renderGame("/game/game-1");
+
+      expect(screen.getByText("Disconnected")).toBeInTheDocument();
+    });
+
+    it("leaves a connected opponent unmarked", () => {
+      atTheTable();
+      gameContextState.connectedUserIds = ["user-1", "user-2"];
+
+      renderGame("/game/game-1");
+
+      expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
+    });
+
+    it("marks nobody until the server has said who is there", () => {
+      atTheTable();
+      gameContextState.connectedUserIds = null;
+
+      renderGame("/game/game-1");
+
+      // Unknown is not absent. Painting the whole table as dropped because a
+      // frame has not landed yet is a worse lie than a moment's silence.
+      expect(screen.queryByText("Disconnected")).not.toBeInTheDocument();
     });
   });
 

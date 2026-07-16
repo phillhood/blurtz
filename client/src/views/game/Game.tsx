@@ -19,6 +19,7 @@ import {
   BankPilesArea,
   ConfirmDialog,
   GameToast,
+  ReconnectingBanner,
 } from "./components";
 import { DragData } from "./components/Card";
 import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
@@ -35,6 +36,8 @@ const Game: React.FC = () => {
     leaveGame,
     makeMove,
     connected,
+    reconnecting,
+    connectedUserIds,
     error,
     clearError,
     moveRejection,
@@ -251,7 +254,14 @@ const Game: React.FC = () => {
 
   const goToDashboard = () => navigate("/dashboard");
 
-  if (!connected) {
+  // Presence is only ever a reason to mark someone DOWN. Until the server has
+  // said who is connected, everyone reads as present.
+  const isPlayerConnected = (playerUserId: string) =>
+    connectedUserIds === null || connectedUserIds.includes(playerUserId);
+
+  // The full-screen wait belongs to the FIRST connect, when there is no board to
+  // keep. A drop mid-game gets the banner further down instead.
+  if (!connected && !reconnecting) {
     return (
       <GameLoadingScreen
         title="Connecting to game server..."
@@ -293,6 +303,8 @@ const Game: React.FC = () => {
 
   return (
     <DndContext sensors={sensors} onDragStart={handleDragStart} onDragEnd={handleDragEnd}>
+      {reconnecting && <ReconnectingBanner />}
+
       {/* Transient toast: a refused move, else a non-fatal error. Each branch
           passes a stable store action as onDismiss - GameToast keys its
           dismiss timer on that identity, so an inline closure would restart
@@ -325,6 +337,7 @@ const Game: React.FC = () => {
                     player={opponent}
                     isCurrentPlayer={false}
                     opponentCount={opponentCount}
+                    isConnected={isPlayerConnected(opponent.user.id)}
                   />
                 ))
               ) : (
@@ -347,6 +360,9 @@ const Game: React.FC = () => {
                 isCurrentPlayer={true}
                 opponentCount={0}
                 pendingMoveCardIds={pendingMoveCardIds}
+                // Own socket state, first-hand: a dropped client's presence set
+                // is whatever the server last managed to tell it.
+                isConnected={connected}
               />
             )}
           </GameBoard>

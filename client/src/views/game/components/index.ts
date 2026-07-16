@@ -15,6 +15,7 @@ export { default as GameStatusDisplay } from "./GameStatusDisplay";
 export { default as GameToast } from "./GameToast";
 export { default as GameWaitingForOpponent } from "./GameWaitingForOpponent";
 export { default as GameWaitingInfo } from "./GameWaitingInfo";
+export { default as ReconnectingBanner } from "./ReconnectingBanner";
 
 export { default as PlayerArea } from "./PlayerArea";
 export { default as PlayerCard } from "./PlayerCard";
