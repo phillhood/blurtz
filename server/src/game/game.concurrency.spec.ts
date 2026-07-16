@@ -609,8 +609,8 @@ describe("GameService concurrency (real database)", () => {
 
       // The round ended; nobody reached 100.
       expect(game.status).toBe("round_over");
-      // Still round 1: the round is OVER, not advanced - the advance is
-      // startNextRound's job. What matters is that the loser did not bump it.
+      // Still round 1: the round is OVER, not advanced - the advance waits on
+      // the players readying up. What matters is that the loser did not bump it.
       expect(game.currentRound).toBe(1);
       expect(game.winnerPlayerId).toBeNull();
 
@@ -751,14 +751,16 @@ describe("GameService concurrency (real database)", () => {
       });
       expect(users.every((u) => u.gamesPlayed === 0)).toBe(true);
 
-      // --- Ready up and advance ---------------------------------------
-      await expect(
-        service.startNextRound(gameOneId, hostUserId)
-      ).rejects.toThrow(/All players must be ready/);
-
+      // --- Ready up, and the last ready-up advances --------------------
+      // One player readying up is not enough: the round holds until the whole
+      // table is ready.
       await service.setPlayerReady(gameOneId, hostPlayerId, true);
+      const midway = await prisma.game.findUnique({ where: { id: gameOneId } });
+      expect(midway.status).toBe("round_over");
+      expect(midway.currentRound).toBe(1);
+
+      // The second (last) ready-up deals round 2 itself - no host action.
       await service.setPlayerReady(gameOneId, otherPlayerId, true);
-      await service.startNextRound(gameOneId, hostUserId);
 
       game = await prisma.game.findUnique({
         where: { id: gameOneId },
@@ -910,8 +912,8 @@ describe("GameService concurrency (real database)", () => {
 
     // The strand: the Player row was deleted through the waiting-lobby path,
     // leaving a round_over game with one player. joinGame refuses a
-    // non-waiting game, so they could not come back; startNextRound refuses
-    // below MIN_PLAYERS, so it could not advance. Stuck, unwinnable, forever.
+    // non-waiting game, so they could not come back; the round advance cannot
+    // fire below MIN_PLAYERS. Stuck, unwinnable, forever.
     it("finishes rather than stranding when a player leaves a two-player game", async () => {
       await service.leaveGame(roundOverGameId, userOneId);
 
@@ -941,12 +943,19 @@ describe("GameService concurrency (real database)", () => {
     // no status guard, so a ready write could land AFTER the deal that reset
     // it - pre-readying that player for the NEXT interstitial.
     it("cannot be readied up again once the next round has been dealt", async () => {
-      await prisma.player.updateMany({
-        where: { gameId: roundOverGameId },
+      // One player ready already; the OTHER player's ready-up is the last one,
+      // so it deals the next round itself.
+      await prisma.player.update({
+        where: { id: stayerPlayerId },
         data: { isReady: true },
       });
 
-      await service.startNextRound(roundOverGameId, userOneId);
+      await service.setPlayerReady(roundOverGameId, quitterPlayerId, true);
+
+      const dealt = await prisma.game.findUnique({
+        where: { id: roundOverGameId },
+      });
+      expect(dealt.status).toBe("playing");
 
       await expect(
         service.setPlayerReady(roundOverGameId, quitterPlayerId, true)
@@ -960,31 +969,52 @@ describe("GameService concurrency (real database)", () => {
       expect(players.every((p) => p.isReady === false)).toBe(true);
     });
 
-    // The same thing as a genuine race rather than a sequence: the `players`
-    // row is not covered by the `games` row lock, so a setPlayerReady running
-    // on the pooled client could commit either side of the deal's reset.
-    it("survives a readiness write racing the deal", async () => {
-      await prisma.player.updateMany({
-        where: { gameId: roundOverGameId },
+    // The double-deal guard. The deal now lives inside `setPlayerReady`, so two
+    // players firing the FINAL ready-up at the same instant is the race that
+    // matters. Unlocked, both read "one ready, one not", both write the last
+    // ready, and both advance - currentRound jumps by two and every deck is
+    // dealt twice. Under the game-row lock the first advances to `playing` and
+    // the second blocks, then reads `playing` at the status guard and bails.
+    it("deals the next round exactly once when two final ready-ups race", async () => {
+      // The stayer is already ready; both racers try to be the quitter's last
+      // ready-up.
+      await prisma.player.update({
+        where: { id: stayerPlayerId },
         data: { isReady: true },
       });
 
-      await Promise.allSettled([
-        service.startNextRound(roundOverGameId, userOneId),
+      const results = await Promise.allSettled([
+        service.setPlayerReady(roundOverGameId, quitterPlayerId, true),
         service.setPlayerReady(roundOverGameId, quitterPlayerId, true),
       ]);
 
+      // Exactly one completes; the other bails on the status it read under the
+      // lock, having advanced nothing.
+      const fulfilled = results.filter((r) => r.status === "fulfilled");
+      const rejected = results.filter((r) => r.status === "rejected");
+      expect(fulfilled).toHaveLength(1);
+      expect(rejected).toHaveLength(1);
+      expect((rejected[0] as PromiseRejectedResult).reason).toBeInstanceOf(
+        BadRequestException
+      );
+
       const game = await prisma.game.findUnique({
         where: { id: roundOverGameId },
-        include: { players: true },
+        include: { players: { orderBy: { id: "asc" } } },
       });
 
-      // Whichever order they landed in, the round is being played and nobody
-      // is carrying a readiness into the next interstitial. Unlocked, the
-      // ready write blocked on the player row, waited for the deal to commit,
-      // and then wrote `true` straight over the reset.
+      // Advanced by EXACTLY one: round 1 -> 2. Double-dealt, this would be 3.
       expect(game.status).toBe("playing");
+      expect(game.currentRound).toBe(2);
       expect(game.players.every((p) => p.isReady === false)).toBe(true);
+
+      // Every player holds one whole freshly-dealt deck - not a deck dealt
+      // twice, and not a torn half-deal.
+      for (const player of game.players) {
+        const deck = player.deck as unknown as PlayerDeck;
+        expect(countDeckCards(deck)).toBe(CARDS_PER_PLAYER);
+        expect(deck.blurtzPile.cards).toHaveLength(10);
+      }
     });
   });
 
@@ -1040,11 +1070,14 @@ describe("GameService concurrency (real database)", () => {
 
   // -------------------------------------------------------------------
   // Task 15 item 4: a forfeit the game SURVIVES never reassigned hostId. The
-  // game played on to its next round_over and then died there - startNextRound
-  // wants the host, and the host was not in the game any more.
+  // game played on to its next round_over and then died there - the old
+  // host-triggered round advance wanted the host, and the host was not in the
+  // game any more. The round now advances automatically on the last ready-up,
+  // so this checks BOTH that the host is reassigned to a live player and that
+  // the round advances regardless.
   // -------------------------------------------------------------------
   describe("the host forfeiting a three-player game", () => {
-    it("leaves a host who can still deal the next round", async () => {
+    it("reassigns the host to a live player, and the round still advances", async () => {
       const host = await makeUser("ff-host");
       const second = await makeUser("ff-second");
       const third = await makeUser("ff-third");
@@ -1109,12 +1142,15 @@ describe("GameService concurrency (real database)", () => {
       expect(blitz.status).toBe("round_over");
 
       await service.setPlayerReady(game.id, secondRow.id, true);
-      await service.setPlayerReady(game.id, thirdRow.id, true);
+      const midway = await prisma.game.findUnique({ where: { id: game.id } });
+      expect(midway.status).toBe("round_over");
 
-      // Pre-fix, NOBODY could get past this: hostId named a user who was no
-      // longer a player, so the host check and the membership check could not
-      // both be satisfied by anyone alive.
-      await service.startNextRound(game.id, after.hostId);
+      // The last ready-up deals round 2 - and crucially it needs no host, which
+      // is the whole point now that the host forfeited. Pre-fix, NOBODY could
+      // get past this: the host-triggered advance wanted a host who was no
+      // longer a player, so its host check could not be satisfied by anyone
+      // alive.
+      await service.setPlayerReady(game.id, thirdRow.id, true);
 
       after = await prisma.game.findUnique({
         where: { id: game.id },

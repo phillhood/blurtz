@@ -5,7 +5,6 @@ export {
   JoinRoomDto,
   LeaveRoomDto,
   StartGameDto,
-  StartNextRoundDto,
   MoveCardDto,
   FlipCardDto,
   CallBlitzDto,

@@ -704,15 +704,15 @@ describe("GameService", () => {
       });
     });
 
-    // The deal CONSUMES readiness, here exactly as in `startNextRound`.
+    // The deal CONSUMES readiness, here exactly as the round advance does.
     //
-    // This asymmetry - `startNextRound` dealt with `isReady: false` and
+    // This asymmetry - the round advance dealt with `isReady: false` and
     // `startGame` dealt with no reset at all - skipped the round-over gate
     // exactly once. Nothing else clears `isReady` (`callBlitz` does not), so
     // the lobby's `isReady: true` survived all of round 1, and the round-over
-    // interstitial came up with its ready-up gate already satisfied: the host
-    // could deal round 2 before anyone had seen the scoreboard. Round 3 onward
-    // was fine, because round 2 was dealt by `startNextRound`.
+    // interstitial came up with its ready-up gate already satisfied: round 2
+    // dealt before anyone had seen the scoreboard. Round 3 onward was fine,
+    // because round 2 was dealt by the round advance, which resets.
     it("clears everyone's readiness when it deals, so the round-over gate holds", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
         id: "game-1",
@@ -947,7 +947,7 @@ describe("GameService", () => {
     // A round_over game is a game in progress: rounds have been played, score
     // is on the board and RoundResults are written. Deleting a player out of
     // it through the lobby path stranded it - one player left, joinGame
-    // refuses a non-waiting game, and startNextRound refuses below
+    // refuses a non-waiting game, and the round advance cannot fire below
     // MIN_PLAYERS. No winner, no stats, forever.
     it("finishes a two-player round_over game rather than stranding it", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
@@ -1032,9 +1032,11 @@ describe("GameService", () => {
 
   // ---------------------------------------------------------------------
   // Task 15 item 4: a forfeit that leaves the game running never reassigned
-  // `hostId`. If the forfeiter was the host, `hostId` pointed at a non-member
-  // and startNextRound - which demands host AND membership - could never be
-  // satisfied by anyone left. The game died at the next round_over.
+  // `hostId`. If the forfeiter was the host, `hostId` pointed at a non-member.
+  // The old host-triggered round advance demanded host AND membership, so it
+  // could never be satisfied by anyone left and the game died at the next
+  // round_over. The round now advances automatically, but a game's host must
+  // still be a live player - which is what this checks.
   // ---------------------------------------------------------------------
   describe("host reassignment on a forfeit that the game survives", () => {
     it("hands the host role on when the host forfeits a three-player game", async () => {
@@ -1417,13 +1419,18 @@ describe("GameService", () => {
     });
   });
 
-  describe("startNextRound", () => {
+  // The round no longer advances on a host click - it advances the instant the
+  // LAST player readies up, inside `setPlayerReady`'s transaction. These cover
+  // the deal itself; the two-simultaneous-final-ready-ups race that proves it
+  // deals exactly ONCE is in game.concurrency.spec.ts, against a real database.
+  describe("the round advancing on the last ready-up", () => {
+    // A round_over game with p1 already ready and p2 not: p2's ready-up is the
+    // one that completes the table.
     function roundOverGame(overrides: Record<string, unknown> = {}) {
-      return gameRow({
+      return {
+        id: "game-1",
         status: "round_over",
         currentRound: 2,
-        hostId: "host-user",
-        gameState: { bankPiles: [] },
         players: [
           playerRow("p1", null, {
             userId: "host-user",
@@ -1434,14 +1441,14 @@ describe("GameService", () => {
           }),
           playerRow("p2", null, {
             userId: "other-user",
-            isReady: true,
+            isReady: false,
             score: 12,
             roundScore: -2,
             bankPileCount: 4,
           }),
         ],
         ...overrides,
-      });
+      };
     }
 
     function mockAdvance(game: unknown) {
@@ -1450,10 +1457,17 @@ describe("GameService", () => {
       (prismaService.game.update as jest.Mock).mockResolvedValue({});
     }
 
+    // The deal writes each player's deck; the plain readiness write does not.
+    function deckUpdates() {
+      return (prismaService.player.update as jest.Mock).mock.calls
+        .map((c) => c[0])
+        .filter((u) => u.data.deck);
+    }
+
     it("increments currentRound and re-deals a fresh 40-card deck to every player", async () => {
       mockAdvance(roundOverGame());
 
-      await service.startNextRound("game-1", "host-user");
+      await service.setPlayerReady("game-1", "p2", true);
 
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
@@ -1463,9 +1477,7 @@ describe("GameService", () => {
         }),
       });
 
-      const updates = (prismaService.player.update as jest.Mock).mock.calls.map(
-        (c) => c[0]
-      );
+      const updates = deckUpdates();
       expect(updates).toHaveLength(2);
 
       for (const update of updates) {
@@ -1486,13 +1498,9 @@ describe("GameService", () => {
     it("resets the per-round counters and readiness but NOT the cumulative score", async () => {
       mockAdvance(roundOverGame());
 
-      await service.startNextRound("game-1", "host-user");
+      await service.setPlayerReady("game-1", "p2", true);
 
-      const updates = (prismaService.player.update as jest.Mock).mock.calls.map(
-        (c) => c[0]
-      );
-
-      for (const update of updates) {
+      for (const update of deckUpdates()) {
         expect(update.data.bankPileCount).toBe(0);
         expect(update.data.roundScore).toBe(0);
         expect(update.data.isReady).toBe(false);
@@ -1506,7 +1514,7 @@ describe("GameService", () => {
     it("resets the shared bank piles", async () => {
       mockAdvance(roundOverGame());
 
-      await service.startNextRound("game-1", "host-user");
+      await service.setPlayerReady("game-1", "p2", true);
 
       const gameUpdate = (prismaService.game.update as jest.Mock).mock.calls[0][0];
       const bankPiles = gameUpdate.data.gameState.bankPiles;
@@ -1517,11 +1525,52 @@ describe("GameService", () => {
       );
     });
 
-    // The gate `isReady` finally exists for - and the same predicate that
-    // gates startGame (`assertReadyToDeal`).
-    it("rejects the advance unless ALL players are ready", async () => {
+    it("does NOT deal when the ready-up is not the last one", async () => {
+      // Neither player is ready yet; readying ONE of them is not the last.
       mockAdvance(
         roundOverGame({
+          players: [
+            playerRow("p1", null, { userId: "host-user", isReady: false }),
+            playerRow("p2", null, { userId: "other-user", isReady: false }),
+          ],
+        })
+      );
+
+      await service.setPlayerReady("game-1", "p1", true);
+
+      // The readiness write happened; the deal did not.
+      expect(prismaService.player.update).toHaveBeenCalledWith({
+        where: { id: "p1" },
+        data: { isReady: true },
+      });
+      expect(deckUpdates()).toHaveLength(0);
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+    });
+
+    it("does NOT deal when un-readying is the write, even if that leaves everyone else ready", async () => {
+      // p1 ready, p2 ready - and p2 UN-readies. The table is no longer complete,
+      // so nothing should deal.
+      mockAdvance(
+        roundOverGame({
+          players: [
+            playerRow("p1", null, { userId: "host-user", isReady: true }),
+            playerRow("p2", null, { userId: "other-user", isReady: true }),
+          ],
+        })
+      );
+
+      await service.setPlayerReady("game-1", "p2", false);
+
+      expect(deckUpdates()).toHaveLength(0);
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+    });
+
+    // The lobby's first deal stays host-gated in `startGame`. A fully-ready
+    // `waiting` table must NOT auto-start off a ready-up.
+    it("does NOT auto-start the lobby even when the last player readies up", async () => {
+      mockAdvance(
+        gameRow({
+          status: "waiting",
           players: [
             playerRow("p1", null, { userId: "host-user", isReady: true }),
             playerRow("p2", null, { userId: "other-user", isReady: false }),
@@ -1529,38 +1578,16 @@ describe("GameService", () => {
         })
       );
 
-      await expect(
-        service.startNextRound("game-1", "host-user")
-      ).rejects.toThrow("All players must be ready to start the next round");
+      await service.setPlayerReady("game-1", "p2", true);
 
-      expect(prismaService.player.update).not.toHaveBeenCalled();
+      expect(deckUpdates()).toHaveLength(0);
       expect(prismaService.game.update).not.toHaveBeenCalled();
-    });
-
-    it("rejects the advance when the game's round is not over", async () => {
-      mockAdvance(roundOverGame({ status: "playing" }));
-
-      await expect(
-        service.startNextRound("game-1", "host-user")
-      ).rejects.toThrow("The round is not over");
-
-      expect(prismaService.player.update).not.toHaveBeenCalled();
-    });
-
-    it("rejects a non-host trying to deal the next round", async () => {
-      mockAdvance(roundOverGame());
-
-      await expect(
-        service.startNextRound("game-1", "other-user")
-      ).rejects.toThrow("Only the host can start the next round");
-
-      expect(prismaService.player.update).not.toHaveBeenCalled();
     });
 
     it("does all of its work inside the game lock", async () => {
       mockAdvance(roundOverGame());
 
-      await service.startNextRound("game-1", "host-user");
+      await service.setPlayerReady("game-1", "p2", true);
 
       expect(gameRepository.withGameLock).toHaveBeenCalledWith(
         "game-1",

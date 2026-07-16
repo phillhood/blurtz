@@ -44,12 +44,13 @@ export class GameService {
   /**
    * Refuse to deal unless the table is ready.
    *
-   * ONE predicate, TWO call sites: `startGame` (deal round 1 of a `waiting`
-   * game) and `startNextRound` (advance a `round_over` one). They are separate
-   * transitions with separate outcomes, but "may these players be dealt to?"
-   * is the same question both times, and this is the only place that answers
-   * it. `isReady` had no server-side meaning at all before this - it was a
-   * lobby decoration the client drew and nothing enforced.
+   * The throwing gate on `startGame` (deal round 1 of a `waiting` game): being
+   * the host is not enough, every player must have readied up. `setPlayerReady`
+   * asks the SAME question between rounds, but as a boolean rather than a
+   * throw - a not-yet-ready table there is the normal case, not an error, so it
+   * waits and auto-advances only once this condition holds. `isReady` had no
+   * server-side meaning at all before this - it was a lobby decoration the
+   * client drew and nothing enforced.
    */
   private assertReadyToDeal(
     players: Array<{ isReady: boolean }>,
@@ -384,10 +385,12 @@ export class GameService {
    *
    * `hostId` is a USER id and outlives the Player row it names, so every door
    * out of a game has to answer this question - and they were not answering it
-   * the same way. `startGame` and `startNextRound` both demand host AND
-   * membership, so a `hostId` pointing at someone who has left is a game
-   * nobody can deal: the host is not in it, and everyone who is in it is not
-   * the host. The departed host could still start it over REST, too.
+   * the same way. `startGame` demands host AND membership, so a `hostId`
+   * pointing at someone who has left is a lobby nobody can start: the host is
+   * not in it, and everyone who is in it is not the host. The departed host
+   * could still start it over REST, too. (Round advance no longer needs the
+   * host - the last ready-up deals it - but a game's host should still be
+   * someone who is actually in it.)
    *
    * ONE copy, TWO callers: the waiting-lobby path, which has always done this,
    * and `applyForfeit`, which never did (that was the bug). Extracted rather
@@ -648,12 +651,13 @@ export class GameService {
     } else {
       // More than one player left: the game plays on and nothing is credited.
       //
-      // But it still needs a host who is IN it. Without this the game ran on
-      // perfectly happily until its next `round_over` and then died there,
-      // because `startNextRound` wants the host and the host had forfeited -
-      // no remaining player could deal, and the game could not be left either.
-      // The failure surfaced a whole round away from the forfeit that caused
-      // it, which is what made it so hard to see.
+      // But its host should still be someone who is IN it. This used to be
+      // load-bearing in a sharper way: the game ran on happily until its next
+      // `round_over` and then died there, because the old host-triggered round
+      // advance wanted the host and the host had forfeited - no remaining
+      // player could deal, and the game could not be left either. The round now
+      // advances automatically on the last ready-up, so a missing host no
+      // longer strands it, but the host role must still name a live player.
       await this.reassignHostIfDeparting(
         tx,
         game,
@@ -715,16 +719,17 @@ export class GameService {
 
       this.assertReadyToDeal(game.players, "start the game");
 
-      // `isReady` is consumed by the deal, exactly as in `startNextRound`.
+      // `isReady` is consumed by the deal, exactly as in the round advance
+      // (`advanceRound`).
       //
       // It used to be left alone here, and that asymmetry skipped the
       // round-over gate exactly once: the `isReady: true` everyone set in the
       // LOBBY survived all of round 1 (nothing else clears it - `callBlitz`
       // does not), so the round-over interstitial appeared with its ready-up
-      // gate already satisfied and the host could deal round 2 before either
-      // player had looked at the scoreboard. Every round after that behaved,
-      // because round 2 was dealt by `startNextRound` and IT resets - which is
-      // what made this so easy to miss.
+      // gate already satisfied and round 2 dealt before either player had
+      // looked at the scoreboard. Every round after that behaved, because
+      // round 2 was dealt by the round advance and IT resets - which is what
+      // made this so easy to miss.
       //
       // Only `isReady`: `bankPileCount` and `roundScore` are zero on a fresh
       // Player row, and `score` must never be reset by a deal.
@@ -748,70 +753,49 @@ export class GameService {
    *
    * The other half of the state machine `callBlitz` opened:
    *
-   *   round_over --(host acts, all players ready)--> playing
+   *   round_over --(the last player readies up)--> playing
    *
-   * Deliberately not folded into `startGame`. The two share a gate and share
-   * `dealDecks`, but `startGame` only ever deals a `waiting` game and this one
-   * only ever deals a `round_over` one - and a method that could do either
-   * would be one status check away from re-dealing a game in progress, which
-   * is every player's hand gone mid-race.
+   * There is no host action between rounds any more: `setPlayerReady` calls
+   * this the instant the final ready-up lands, in the SAME transaction. `game`
+   * must therefore have been read inside `withGameLock` off the same `tx` -
+   * like `applyForfeit`, that is what makes it safe. The deal, the counter
+   * resets, the round bump and the board reset are one atomic change under the
+   * game lock or they are a game nobody can play; and because they are
+   * serialized on the game row with the ready write that triggered them, two
+   * simultaneous final ready-ups cannot double-deal - the second blocks, then
+   * reads `playing` at the status guard and never gets here.
    *
-   * Runs under the game lock for the same reason `startGame` does: the deal,
-   * the counter resets, the round bump and the board reset are one atomic
-   * change or they are a game nobody can play.
+   * Deliberately not folded into `startGame`. The two share `dealDecks`, but
+   * `startGame` only ever deals a `waiting` game and this only ever advances a
+   * `round_over` one - a method that could do either would be one status check
+   * away from re-dealing a game in progress, which is every player's hand gone
+   * mid-race.
    */
-  async startNextRound(gameId: string, userId: string): Promise<GameState> {
-    return this.gameRepository.withGameLock(gameId, async (tx) => {
-      const game = await tx.game.findUnique({
-        where: { id: gameId },
-        include: { players: true },
-      });
-
-      if (!game) {
-        throw new NotFoundException("Game not found");
-      }
-
-      // Also what stops two hosts' clicks racing into a double round bump: the
-      // second one blocks on the lock, then reads `playing` and bails.
-      if (game.status !== "round_over") {
-        throw new BadRequestException("The round is not over");
-      }
-
-      if (game.hostId !== userId) {
-        throw new ForbiddenException("Only the host can start the next round");
-      }
-
-      if (!game.players.some((p) => p.userId === userId)) {
-        throw new ForbiddenException("You are not a player in this game");
-      }
-
-      this.assertReadyToDeal(game.players, "start the next round");
-
-      // Fresh decks, and the per-round counters zeroed in the same write.
-      // `score` is NOT in this list and must never be: it is the running total
-      // the game is played to.
-      await this.dealDecks(tx, game.players, {
-        bankPileCount: 0,
-        roundScore: 0,
-        isReady: false,
-      });
-
-      await tx.game.update({
-        where: { id: gameId },
-        data: {
-          status: "playing",
-          currentRound: { increment: 1 },
-          // The shared board goes back to empty foundations. Bank piles are
-          // per-round: last round's 1-10 runs are scored and gone.
-          gameState: initializeGameState() as unknown as object,
-        },
-      });
-
-      this.logger.log(
-        `Game ${gameId} advanced to round ${game.currentRound + 1}`
-      );
-      return this.readGameState(tx, gameId);
+  private async advanceRound(
+    tx: DbClient,
+    game: { id: string; currentRound: number; players: Array<{ id: string }> }
+  ): Promise<void> {
+    // Fresh decks, and the per-round counters zeroed in the same write.
+    // `score` is NOT in this list and must never be: it is the running total
+    // the game is played to.
+    await this.dealDecks(tx, game.players, {
+      bankPileCount: 0,
+      roundScore: 0,
+      isReady: false,
     });
+
+    await tx.game.update({
+      where: { id: game.id },
+      data: {
+        status: "playing",
+        currentRound: { increment: 1 },
+        // The shared board goes back to empty foundations. Bank piles are
+        // per-round: last round's 1-10 runs are scored and gone.
+        gameState: initializeGameState() as unknown as object,
+      },
+    });
+
+    this.logger.log(`Game ${game.id} advanced to round ${game.currentRound + 1}`);
   }
 
   /**
@@ -917,10 +901,10 @@ export class GameService {
   /**
    * Ready up, or un-ready, in the lobby or between rounds.
    *
-   * `isReady` is the gate on BOTH deals (`assertReadyToDeal`), so a write to
-   * it is a write to the only thing standing between a player and a fresh
-   * hand. It gets the same lock and the same status check as every other
-   * mutator, and it needs both halves:
+   * `isReady` is the gate on BOTH deals, so a write to it is a write to the
+   * only thing standing between a player and a fresh hand. It gets the same
+   * lock and the same status check as every other mutator, and it needs both
+   * halves:
    *
    * - The GUARD, because nothing clears readiness during play - `callBlitz`
    *   does not. A `true` set while the game was `playing` survived into the
@@ -928,11 +912,21 @@ export class GameService {
    *   looked at the scoreboard, which is the exact multi-round skip 0b7fb3b
    *   closed from the other end.
    * - The LOCK, because the guard alone still loses the race. This ran on the
-   *   pooled client, so a ready write could commit AFTER `startGame` or
-   *   `startNextRound` had reset `isReady: false` - the `players` row is not
-   *   covered by the `games` row lock, so the two only serialize if this takes
-   *   the lock too. Behind it, a write that arrives after a deal reads
-   *   `playing` and is refused instead of resurrecting a stale `true`.
+   *   pooled client, so a ready write could commit AFTER a deal had reset
+   *   `isReady: false` - the `players` row is not covered by the `games` row
+   *   lock, so the two only serialize if this takes the lock too. Behind it, a
+   *   write that arrives after a deal reads `playing` and is refused instead of
+   *   resurrecting a stale `true`.
+   *
+   * The lock earns its keep a second way now: between rounds the LAST ready-up
+   * deals the next round itself (`advanceRound`), in this same transaction.
+   * There is no host "start next round" action - the round advances the moment
+   * the table is ready. Two players readying up at once therefore serialize on
+   * the game row: whichever completes the set advances to `playing` under the
+   * lock, and any ready write behind it reads `playing` at the guard above and
+   * is refused before it can recompute anything - so the deal happens exactly
+   * once. The lobby's first deal is deliberately NOT here: it stays host-gated
+   * in `startGame`, so only a `round_over` game auto-advances.
    */
   async setPlayerReady(
     gameId: string,
@@ -966,6 +960,27 @@ export class GameService {
         where: { id: playerId },
         data: { isReady },
       });
+
+      // Between rounds, the final ready-up advances the round itself. Recompute
+      // readiness over the POST-write set - this player's new `isReady` patched
+      // in over the pre-write read - and deal only when the whole table is
+      // ready, MIN_PLAYERS included. Under the game lock this read reflects
+      // every other player's committed readiness, so "am I the last?" is
+      // answered correctly and the advance is atomic with the write above.
+      //
+      // Only `round_over`: a fully-ready lobby must still wait for the host's
+      // `startGame`, so `waiting` is left out on purpose.
+      if (game.status === "round_over") {
+        const readiedPlayers = game.players.map((p) =>
+          p.id === playerId ? { ...p, isReady } : p
+        );
+        if (
+          readiedPlayers.length >= GAME_CONSTANTS.MIN_PLAYERS &&
+          readiedPlayers.every((p) => p.isReady)
+        ) {
+          await this.advanceRound(tx, game);
+        }
+      }
     });
   }
 

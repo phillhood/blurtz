@@ -21,7 +21,6 @@ import {
   JoinRoomDto,
   LeaveRoomDto,
   StartGameDto,
-  StartNextRoundDto,
   MoveCardDto,
   FlipCardDto,
   CallBlitzDto,
@@ -255,38 +254,6 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  @SubscribeMessage(SOCKET_EVENTS.START_NEXT_ROUND)
-  async handleStartNextRound(
-    @ConnectedSocket() client: Socket,
-    @MessageBody() data: unknown
-  ) {
-    try {
-      const { gameId } = await validateWsPayload(StartNextRoundDto, data);
-      const userId = this.requireUserId(client);
-      await this.requirePlayerId(client, gameId);
-
-      // The host check, the round_over check and the all-players-ready gate
-      // all live in GameService.startNextRound. Redacted for exactly the same
-      // reason GAME_STARTED is: this is a fresh deal, and unredacted it hands
-      // every player every opponent's whole new deck.
-      const gameState = toClientGameState(
-        await this.gameService.startNextRound(gameId, userId)
-      );
-
-      this.server.to(gameId).emit(SOCKET_EVENTS.ROUND_STARTED, {
-        gameState,
-        round: gameState.currentRound,
-        timestamp: new Date(),
-      });
-    } catch (error) {
-      this.logger.warn(`Start next round failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
-    }
-  }
-
   @SubscribeMessage(SOCKET_EVENTS.MOVE_CARD)
   async handleMoveCard(@ConnectedSocket() client: Socket, @MessageBody() data: unknown) {
     try {
@@ -403,7 +370,9 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       } else {
         // Nobody reached the target: the round is over, not the game. Players
-        // ready up and the host deals the next one.
+        // ready up, and the last ready-up deals the next round automatically -
+        // the resulting `playing` state reaches everyone over the
+        // GAME_STATE_UPDATED that `handlePlayerReady` broadcasts.
         this.server.to(gameId).emit(SOCKET_EVENTS.ROUND_OVER, {
           gameState,
           round: result.round,
@@ -428,6 +397,11 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       const { gameId, isReady } = await validateWsPayload(PlayerReadyDto, data);
       const playerId = await this.requirePlayerId(client, gameId);
 
+      // Between rounds, the last ready-up also deals the next round inside
+      // `setPlayerReady`. Either way we re-read and broadcast the full state:
+      // a plain readiness change or a freshly-dealt `playing` board both reach
+      // every client through this one GAME_STATE_UPDATED. Redacted at birth by
+      // `clientGameState`, so the new decks do not leak.
       await this.gameService.setPlayerReady(gameId, playerId, isReady);
 
       const gameState = await this.clientGameState(gameId);
