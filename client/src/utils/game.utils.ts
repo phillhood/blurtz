@@ -25,7 +25,7 @@ export const getGameStatusTitle = (
     case "waiting":
       return playerCount === maxPlayers
         ? ``
-        : `Waiting for players... (${playerCount}/2)`;
+        : `Waiting for players... (${playerCount}/${maxPlayers})`;
     case "playing":
       return `Game in progress!`;
     case "round_over":

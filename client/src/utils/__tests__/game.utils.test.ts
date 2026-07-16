@@ -38,13 +38,21 @@ describe("getGameStatusTitle", () => {
     );
   });
 
-  // NOTE: only the 2-player case is asserted above, deliberately. The
-  // denominator in that string is the literal `2`, not `maxPlayers` - so a
-  // 3- or 4-player game waiting for people reports "(1/2)" and, at 2 of 4
-  // players, "(2/2)" while still waiting. maxPlayers is accepted and used
-  // only for the full check on the line above it. That is a real bug and it
-  // is reported as one; asserting the wrong string here would freeze it in
-  // place and call it correct.
+  it("counts against the game's own size, not a hardcoded 2", () => {
+    // The denominator used to be the literal `2` regardless of maxPlayers, so
+    // a 4-player game waiting for people reported "(1/2)" and - the case that
+    // proves it - sat at "(2/2)" while still waiting for two more, which reads
+    // as full. maxPlayers was accepted and used only for the full check.
+    expect(getGameStatusTitle("waiting", 1, 4)).toBe(
+      "Waiting for players... (1/4)"
+    );
+    expect(getGameStatusTitle("waiting", 2, 4)).toBe(
+      "Waiting for players... (2/4)"
+    );
+    expect(getGameStatusTitle("waiting", 2, 3)).toBe(
+      "Waiting for players... (2/3)"
+    );
+  });
 
   it("distinguishes a round that ended from a game that ended", () => {
     // Two different screens hang off these: round_over is an interstitial the
