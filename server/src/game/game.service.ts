@@ -244,7 +244,8 @@ export class GameService {
     name: string,
     userId: string,
     maxPlayers: number = 2,
-    isPrivate: boolean = false
+    isPrivate: boolean = false,
+    targetScore: number = GAME_CONSTANTS.DEFAULT_TARGET_SCORE
   ) {
     const alias = await this.generateUniqueAlias();
     const savedGame = await this.prisma.game.create({
@@ -253,6 +254,7 @@ export class GameService {
         alias,
         maxPlayers,
         isPrivate,
+        targetScore,
         status: "waiting",
         hostId: userId,
         gameState: initializeGameState() as unknown as object,

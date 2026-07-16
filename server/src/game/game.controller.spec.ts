@@ -70,6 +70,7 @@ describe("GameController", () => {
       getGameState: jest.fn(),
       getPlayerIdForUser: jest.fn(),
       startGame: jest.fn(),
+      createGame: jest.fn(),
     };
 
     const module: TestingModule = await Test.createTestingModule({
@@ -138,6 +139,42 @@ describe("GameController", () => {
 
       expect(body).not.toContain(HIDDEN_CARD_ID);
       expect(body).toContain(VISIBLE_CARD_ID);
+    });
+  });
+
+  describe("POST /", () => {
+    it("passes the target score through to the service", async () => {
+      gameService.createGame.mockResolvedValue({ id: GAME_ID } as never);
+
+      await controller.createGame(
+        { name: "Friday Night", maxPlayers: 3, isPrivate: true, targetScore: 25 },
+        requestFor(MEMBER_USER_ID)
+      );
+
+      expect(gameService.createGame).toHaveBeenCalledWith(
+        "Friday Night",
+        MEMBER_USER_ID,
+        3,
+        true,
+        25
+      );
+    });
+
+    it("leaves the target score undefined when the body omits it, so the service default stands", async () => {
+      gameService.createGame.mockResolvedValue({ id: GAME_ID } as never);
+
+      await controller.createGame(
+        { name: "Friday Night", maxPlayers: 2, isPrivate: false },
+        requestFor(MEMBER_USER_ID)
+      );
+
+      expect(gameService.createGame).toHaveBeenCalledWith(
+        "Friday Night",
+        MEMBER_USER_ID,
+        2,
+        false,
+        undefined
+      );
     });
   });
 
