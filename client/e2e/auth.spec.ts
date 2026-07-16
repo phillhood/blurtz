@@ -64,36 +64,28 @@ test.describe("Authentication", () => {
   });
 
   /**
-   * BUG (real, user-facing, not fixed here - out of scope for this task).
+   * What the app DOES with a 401 - the other half of the test above.
    *
-   * A rejected login tells the user NOTHING. The API answers 401 "Invalid
-   * credentials" and `authStore.login` even stores that string, but nothing
-   * ever renders it:
+   * This used to be a `test.fail()`. A rejected login told the user nothing:
    *
-   *   1. `authStore.login` starts by setting the store-wide `loading: true`.
-   *   2. `App.tsx` reads that same `loading` and returns `<div>Loading...</div>`
+   *   1. `authStore.login` began by setting the store-wide `loading: true`.
+   *   2. `App.tsx` read that same `loading` and returned `<div>Loading...</div>`
    *      INSTEAD of the router - so the whole tree, `<Login>` included,
-   *      unmounts while the request is in flight.
-   *   3. The request fails, `loading` goes false, and `App` mounts a BRAND NEW
-   *      `<Login>` - whose local `error` state is `""`, because it is a new
-   *      component. `Login.tsx`'s `setError(err.message)` ran on the corpse of
-   *      the old one.
+   *      unmounted while the request was in flight.
+   *   3. The request failed, `loading` went false, and `App` mounted a BRAND
+   *      NEW `<Login>` - whose local `error` state is `""`, because it is a new
+   *      component. `Login.tsx`'s `setError(err.message)` had run on the corpse
+   *      of the old one.
    *
-   * The user sees a flash of "Loading...", then an empty login form: no error,
-   * and the username they typed is gone too. `Register` has the same shape, so
-   * a duplicate username is equally silent.
+   * The user got a flash of "Loading...", then an empty login form: no error,
+   * and the username they typed gone too.
    *
-   * `test.fail()` and not a deleted assertion: this test RUNS, and the day
-   * somebody fixes the bug Playwright reports "expected to fail but passed"
-   * and this comment gets deleted. A test that asserted the broken behaviour
-   * would instead lock it in.
+   * The fix was to stop conflating two different things called `loading`.
+   * `authStore.loading` means "the persisted session is still being resolved" -
+   * the one case where `App` genuinely has nothing to route - and `login` no
+   * longer touches it. Both forms already had their own local in-flight state.
    */
   test("an invalid login shows the user an error", async ({ page }) => {
-    test.fail(
-      true,
-      "App.tsx unmounts the router while authStore.loading is true, so Login's local error state is discarded"
-    );
-
     const user = await createUser("noerror");
 
     await page.goto("/login");
@@ -102,6 +94,9 @@ test.describe("Authentication", () => {
     await page.getByRole("button", { name: "Sign In" }).click();
 
     await expect(page.getByText("Invalid credentials")).toBeVisible();
+    // The form survived the round trip, so a retry is a retype of the password
+    // and not of everything.
+    await expect(page.getByPlaceholder("Username")).toHaveValue(user.username);
   });
 
   test("the login form links to register and back", async ({ page }) => {

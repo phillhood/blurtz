@@ -13,6 +13,15 @@ import { AppContainer } from "@styles";
 const App: React.FC = () => {
   const { user, loading } = useAuthContext();
 
+  // Returning something other than <Router> UNMOUNTS the whole tree, so this
+  // is only allowed to be true while there is genuinely nothing to route: at
+  // boot, before `fetchUserProfile` has said whether the persisted token is a
+  // session. `authStore.loading` now means that and only that.
+  //
+  // It used to be set by `login` too, which made this line fire on every login
+  // attempt - and a rejected login therefore remounted a BRAND NEW <Login>,
+  // whose local `error` state is "". The user saw a flash of "Loading...", an
+  // empty form, and no reason why.
   if (loading) {
     return <div>Loading...</div>;
   }

@@ -74,7 +74,14 @@ describe("authStore", () => {
       );
     });
 
-    it("should set loading state during login", async () => {
+    // `loading` is the BOOT flag - "we do not know yet whether the persisted
+    // token is a session" - and `App` unmounts the entire router while it is
+    // true. It used to be set here as well, which is why a rejected login
+    // showed the user nothing: `login` flipped it, `App` threw the `<Login>`
+    // away mid-request, and the fresh one mounted afterwards had an empty
+    // `error` and empty inputs. This asserts login leaves it alone; the forms
+    // track their own in-flight state locally.
+    it("should NOT touch the store-wide loading flag during login", async () => {
       const mockResponse = {
         user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
         token: "mock-token",
@@ -82,14 +89,26 @@ describe("authStore", () => {
       vi.mocked(authService.login).mockImplementation(
         () =>
           new Promise((resolve) => {
-            // Check loading state during the request
-            const state = useAuthStore.getState();
-            expect(state.loading).toBe(true);
+            expect(useAuthStore.getState().loading).toBe(false);
             resolve(mockResponse);
           })
       );
 
       await useAuthStore.getState().login("testuser", "password123");
+
+      expect(useAuthStore.getState().loading).toBe(false);
+    });
+
+    it("should NOT touch the store-wide loading flag when login fails", async () => {
+      vi.mocked(authService.login).mockRejectedValue(
+        new Error("Invalid credentials")
+      );
+
+      await expect(
+        useAuthStore.getState().login("testuser", "wrongpassword")
+      ).rejects.toThrow("Invalid credentials");
+
+      expect(useAuthStore.getState().loading).toBe(false);
     });
 
     it("should handle login error", async () => {
