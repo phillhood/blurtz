@@ -988,23 +988,45 @@ describe("GameService", () => {
     // A finished game is a record. Deleting the Player row it points at nulls
     // `winnerPlayerId` through the schema's ON DELETE SET NULL - the game
     // silently forgets who won it.
-    it("refuses to leave a finished game, preserving the winner's row", async () => {
-      (prismaService.game.findUnique as jest.Mock).mockResolvedValue({
-        id: "game-1",
-        status: "finished",
-        hostId: "user-winner",
-        winnerPlayerId: "p1",
-        players: [
-          { id: "p1", userId: "user-winner", user: { id: "user-winner" } },
-          { id: "p2", userId: "user-loser", user: { id: "user-loser" } },
-        ],
-      });
-      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
-
-      await expect(service.leaveGame("game-1", "user-winner")).rejects.toThrow(
-        BadRequestException
+    //
+    // It no-ops rather than throwing because leaving a finished game is the
+    // NORMAL way out of one: the client sits on the final scoreboard with a
+    // Leave button that sends a plain leave. The row must survive; the player
+    // must still get out.
+    it("leaves a finished game alone - no delete, no host write", async () => {
+      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
+        gameRow({
+          status: "finished",
+          hostId: "user-winner",
+          winnerPlayerId: "p1",
+          gameState: { bankPiles: [] },
+          players: [
+            playerRow("p1", null, {
+              userId: "user-winner",
+              user: { id: "user-winner", username: "winner" },
+            }),
+            playerRow("p2", null, {
+              userId: "user-loser",
+              user: { id: "user-loser", username: "loser" },
+            }),
+          ],
+        })
       );
+      (prismaService.player.delete as jest.Mock).mockResolvedValue({});
+      (prismaService.game.update as jest.Mock).mockResolvedValue({});
+      (prismaService.user.update as jest.Mock).mockResolvedValue({});
+
+      const state = await service.leaveGame("game-1", "user-winner");
+
+      // The record is untouched: the row stays, the winner still points at it,
+      // and the host is not handed to the loser on the way past.
       expect(prismaService.player.delete).not.toHaveBeenCalled();
+      expect(prismaService.game.update).not.toHaveBeenCalled();
+      expect(prismaService.user.update).not.toHaveBeenCalled();
+      // And the caller still gets state back, so the gateway can let them out
+      // of the room.
+      expect(state.winner).toBe("p1");
+      expect(state.status).toBe("finished");
     });
   });
 

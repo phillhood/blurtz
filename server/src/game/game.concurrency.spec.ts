@@ -1018,9 +1018,10 @@ describe("GameService concurrency (real database)", () => {
         data: { winnerPlayerId: winnerRow.id },
       });
 
-      await expect(service.leaveGame(game.id, winner.id)).rejects.toThrow(
-        BadRequestException
-      );
+      // Leaving is allowed - it is how a player gets out of the final
+      // scoreboard - it just must not take the record with it.
+      const state = await service.leaveGame(game.id, winner.id);
+      expect(state.winner).toBe(winnerRow.id);
 
       const after = await prisma.game.findUnique({
         where: { id: game.id },
@@ -1028,10 +1029,12 @@ describe("GameService concurrency (real database)", () => {
       });
 
       // Pre-fix this player was deleted and the FK nulled the winner: the
-      // game forgot it had been won at all.
+      // game forgot it had been won at all, and the host was handed to the
+      // loser on the way past.
       expect(after.winnerPlayerId).toBe(winnerRow.id);
       expect(after.players).toHaveLength(2);
       expect(after.status).toBe("finished");
+      expect(after.hostId).toBe(winner.id);
     });
   });
 

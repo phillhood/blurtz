@@ -418,10 +418,22 @@ export class GameService {
   }
 
   /**
-   * Runs under the game lock: leaving an in-progress game ends it, and the
-   * waiting-game path is a read-then-delete that can also flip the game to
-   * `finished`. Both are game-ending mutations, so they serialize on the same
-   * row as everything else.
+   * Leave a game. What that MEANS depends entirely on the game's status:
+   *
+   *   waiting    -> walk out of a lobby: delete the Player row, hand on the
+   *                 host, finish the game if the room is now empty. Nothing is
+   *                 credited - nobody played anything.
+   *   playing    -> forfeit it.
+   *   round_over -> forfeit it. The interstitial is part of the game.
+   *   finished   -> no-op. It is a record; there is nothing left to leave.
+   *
+   * That list is the fix. This method used to ask one question - "is it
+   * playing?" - and treat every other status as a waiting lobby, which is
+   * right for exactly one of the three and silently destructive for the other
+   * two.
+   *
+   * Runs under the game lock: every branch above either ends a game or mutates
+   * its membership, so they serialize on the same row as everything else.
    */
   async leaveGame(gameId: string, userId: string): Promise<GameState> {
     return this.gameRepository.withGameLock(gameId, async (tx) => {
@@ -447,16 +459,63 @@ export class GameService {
         throw new NotFoundException("Player not found in this game");
       }
 
-      // If game is playing, this is a forfeit. The game was read under the
-      // lock, so hand it straight over rather than re-reading it.
-      if (game.status === "playing") {
-        this.logger.log(`Player ${userId} leaving active game ${gameId} - treating as forfeit`);
+      // Every branch below names the statuses it handles. This used to ask
+      // only "is it playing?" and treat everything else as a waiting lobby,
+      // which was wrong about both of the statuses that are neither:
+      // `round_over` got a real game deleted out from under itself, and
+      // `finished` got history rewritten.
+
+      // A finished game is a RECORD. Deleting a Player row out of one is how a
+      // game forgot who won it: `Game.winnerPlayerId` is ON DELETE SET NULL
+      // (deliberately - see the schema), so the winner it named silently
+      // became null, and the host reassignment below then handed the game to
+      // the loser on its way past.
+      //
+      // A NO-OP, not a rejection, and the difference is the client. Leaving a
+      // finished game is the normal way out of one: the final scoreboard
+      // renders in the game view with the header's Leave button still on it,
+      // and that button sends a plain leave for any status that is not
+      // `playing`. Throwing here would put an error toast on the end of every
+      // completed game AND strand the socket in the room - the gateway only
+      // reaches `client.leave(gameId)` if this returns. So: nothing to delete,
+      // nothing to reassign, hand back the state and let them go.
+      if (game.status === "finished") {
+        this.logger.log(
+          `Player ${userId} left finished game ${gameId} - record preserved`
+        );
+        return this.readGameState(tx, gameId);
+      }
+
+      // An in-progress game - being played, or sat in the round-over
+      // interstitial - is left by forfeiting it. `applyForfeit` finishes it if
+      // that drops it below MIN_PLAYERS (crowning whoever is left and
+      // crediting the game to everyone who played it) and otherwise keeps it
+      // viable with a host who is still in it.
+      //
+      // The game was read under the lock, so hand it straight over rather than
+      // re-reading it.
+      if (game.status === "playing" || game.status === "round_over") {
+        this.logger.log(
+          `Player ${userId} leaving active game ${gameId} (${game.status}) - treating as forfeit`
+        );
         return this.applyForfeit(tx, game, player.id);
+      }
+
+      // `starting` and `paused` exist in the GameStatus enum and nothing has
+      // ever written either of them. Refuse rather than guess: the lobby path
+      // below would delete a player out of a `paused` game exactly the way it
+      // used to out of a `round_over` one, and that is the bug this method
+      // just stopped having. If either status is ever made real, this is the
+      // line that will say so.
+      if (game.status !== "waiting") {
+        throw new BadRequestException(
+          `Cannot leave a game with status ${game.status}`
+        );
       }
 
       this.logger.log(`Player ${userId} left game ${gameId}`);
 
-      // Otherwise, normal leave logic for waiting games
+      // The lobby path: nobody has been dealt a card here.
       const remainingPlayers = game.players.filter((p) => p.id !== player.id);
 
       // If no players left in waiting game, mark as finished.
@@ -466,7 +525,7 @@ export class GameService {
       // is the only terminal status there is. Crediting a gamesPlayed for it
       // would let anyone inflate their stats by creating and leaving games in
       // a loop. Stats are credited where a game is actually DECIDED: a Blitz
-      // that reaches the target, or a forfeit out of a `playing` game.
+      // that reaches the target, or a forfeit out of a game in progress.
       if (remainingPlayers.length === 0) {
         await tx.game.update({
           where: { id: gameId },
@@ -517,6 +576,21 @@ export class GameService {
    * a forfeit arriving behind a committed Blitz observe `finished` and bail
    * instead of clobbering it. Read the game anywhere else and the check is
    * just a stale value, which is precisely the bug this shape exists to stop.
+   *
+   * "In progress" means `playing` OR `round_over`. The interstitial is part of
+   * the game: rounds have been played, score is on the board and RoundResults
+   * are written - the only thing separating it from `playing` is that
+   * everyone is looking at a scoreboard. Walking out of it abandons a game
+   * that was really played, so it ends the same way walking out of `playing`
+   * does. Refusing it was half of what stranded a two-player game with one
+   * player, no winner and no way back in.
+   *
+   * `finished` is still refused, and that is the half the Blitz race needs: a
+   * forfeit behind a Blitz that ENDED the game observes `finished` and bails.
+   * A forfeit behind a Blitz that ended a ROUND now proceeds - correctly. It
+   * finishes the round_over game the Blitz committed without touching the
+   * scores that Blitz just wrote, which is not a clobber but the right answer
+   * to "they left".
    */
   private async applyForfeit(
     tx: DbClient,
@@ -528,7 +602,7 @@ export class GameService {
     },
     playerId: string
   ): Promise<GameState> {
-    if (game.status !== "playing") {
+    if (game.status !== "playing" && game.status !== "round_over") {
       throw new BadRequestException("Cannot forfeit - game is not in progress");
     }
 
