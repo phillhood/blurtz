@@ -7,3 +7,4 @@
  * relatively - `./rules` from the game module.
  */
 export * from "./engine";
+export * from "./redact";
