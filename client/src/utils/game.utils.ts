@@ -23,6 +23,8 @@ export const getGameStatusTitle = (
         : `Waiting for players... (${playerCount}/2)`;
     case "playing":
       return `Game in progress!`;
+    case "round_over":
+      return `Round over!`;
     case "finished":
       return `Game finished! - Winner: ${winner}`;
     default:
@@ -36,6 +38,10 @@ export const getStatusColor = (status: string): string => {
       return "#f59e0b";
     case "playing":
       return "#10b981";
+    // Amber like `waiting`, and for the same reason: both are a game paused on
+    // its players rather than a game running or a game done.
+    case "round_over":
+      return "#f59e0b";
     case "finished":
       return "#6b7280";
     default:

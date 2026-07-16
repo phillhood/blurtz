@@ -55,6 +55,7 @@ interface GameStoreActions {
   callBlitz: () => void;
   playerReady: (isReady: boolean) => void;
   startGame: () => void;
+  startNextRound: () => void;
   // Util
   clearError: () => void;
   setError: (error: string | null) => void;
@@ -177,6 +178,20 @@ export const useGameStore = create<GameStore>()(
 
           onCardFlipped: (newGameState: GameState) => {
             set({ gameState: newGameState, error: null });
+          },
+
+          // A round ended without anyone reaching the target. Nothing to do
+          // but swap the state in - it arrives with `status: "round_over"`,
+          // the scores accumulated and everyone's isReady cleared, and the
+          // round-over screen renders itself off that. The client does not
+          // compute a score or a round number; it mirrors what the server
+          // decided, like every other event here.
+          onRoundOver: (data: { gameState: GameState }) => {
+            set({ gameState: data.gameState, error: null });
+          },
+
+          onRoundStarted: (data: { gameState: GameState }) => {
+            set({ gameState: data.gameState, error: null, moveRejection: null });
           },
         };
 
@@ -363,6 +378,22 @@ export const useGameStore = create<GameStore>()(
         } catch (error) {
           set({
             error: error instanceof Error ? error.message : "Failed to start game",
+          });
+        }
+      },
+
+      startNextRound: () => {
+        const { gameState } = get();
+        if (!gameState) return;
+
+        try {
+          socketService.startNextRound(gameState.id);
+        } catch (error) {
+          set({
+            error:
+              error instanceof Error
+                ? error.message
+                : "Failed to start the next round",
           });
         }
       },

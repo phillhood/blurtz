@@ -1,9 +1,40 @@
 import React from "react";
+import { GameStatus } from "@types";
 import { useGameContext, useAuthContext } from "@hooks";
 import { PlayersList } from ".";
 import { ReadyButton, StartGameButton } from ".";
 
-const ReadySection: React.FC = () => {
+interface ReadySectionProps {
+  /** What the host's button does. */
+  onAct?: () => void;
+  /** The status this section is live in - the buttons grey out in any other. */
+  activeStatus?: GameStatus;
+  actLabel?: string;
+  actWaitingLabel?: string;
+  /** Hide the roster when the caller is already showing a scoreboard. */
+  showPlayers?: boolean;
+}
+
+/**
+ * "Everybody ready, then the host acts."
+ *
+ * Rendered twice, for the two phases that share that shape: the lobby before
+ * round 1, and the interstitial between rounds. The props are only the labels
+ * and the action - the readiness gate itself is identical, and deliberately so:
+ * it mirrors `assertReadyToDeal`, the ONE server-side predicate that both
+ * `startGame` and `startNextRound` are gated on.
+ *
+ * Nothing here decides anything. The server re-checks all of it and rejects a
+ * deal that does not qualify; this only decides what the player can see and
+ * press.
+ */
+const ReadySection: React.FC<ReadySectionProps> = ({
+  onAct,
+  activeStatus = "waiting",
+  actLabel,
+  actWaitingLabel,
+  showPlayers = true,
+}) => {
   const { user } = useAuthContext();
   const { gameState, currentPlayer, startGame } = useGameContext();
   const { players = [], status, hostId } = gameState || {};
@@ -14,7 +45,7 @@ const ReadySection: React.FC = () => {
 
   return (
     <div style={{ textAlign: "center", marginTop: "20px" }}>
-      <PlayersList players={players} />
+      {showPlayers && <PlayersList players={players} />}
 
       {!!currentPlayer && (
         <div style={{ marginBottom: "20px" }}>
@@ -24,11 +55,13 @@ const ReadySection: React.FC = () => {
 
       {allPlayersReady && (
         <StartGameButton
-          onStartGame={startGame}
+          onStartGame={onAct ?? startGame}
           playerCount={players.length}
           readyCount={readyCount}
-          disabled={status !== "waiting"}
+          disabled={status !== activeStatus}
           isHost={isHost}
+          label={actLabel}
+          waitingLabel={actWaitingLabel}
         />
       )}
 

@@ -28,6 +28,17 @@ export interface SocketCallbacks {
   onMoveRejected?: (data: { gameState: GameState; reason: string }) => void;
   onCardFlipped?: (gameState: GameState) => void;
   onBlitzCalled?: (data: { playerId: string }) => void;
+  /**
+   * A Blitz was scored but nobody reached targetScore. The game is not over -
+   * it is waiting for everyone to ready up for the next round.
+   */
+  onRoundOver?: (data: {
+    gameState: GameState;
+    round: number;
+    calledBy: string;
+  }) => void;
+  /** The next round has been dealt. Fresh decks, same cumulative scores. */
+  onRoundStarted?: (data: { gameState: GameState; round: number }) => void;
 }
 
 class SocketService {
@@ -158,6 +169,20 @@ class SocketService {
       this.callbacks.onBlitzCalled?.(data);
     });
 
+    this.socket.on(
+      SOCKET_EVENTS.ROUND_OVER,
+      (data: { gameState: GameState; round: number; calledBy: string }) => {
+        this.callbacks.onRoundOver?.(data);
+      }
+    );
+
+    this.socket.on(
+      SOCKET_EVENTS.ROUND_STARTED,
+      (data: { gameState: GameState; round: number }) => {
+        this.callbacks.onRoundStarted?.(data);
+      }
+    );
+
     this.socket.on(SOCKET_EVENTS.ERROR, (data: { message: string }) => {
       console.error("Game error:", data.message);
       this.callbacks.onError?.(data.message);
@@ -208,6 +233,13 @@ class SocketService {
       throw new Error("Socket not connected");
     }
     this.socket.emit(SOCKET_EVENTS.START_GAME, { gameId });
+  }
+
+  startNextRound(gameId: string) {
+    if (!this.socket?.connected) {
+      throw new Error("Socket not connected");
+    }
+    this.socket.emit(SOCKET_EVENTS.START_NEXT_ROUND, { gameId });
   }
 
   moveCard(

@@ -23,6 +23,7 @@ export const useGameContext = () => {
   const storeCallBlitz = useGameStore((state) => state.callBlitz);
   const storePlayerReady = useGameStore((state) => state.playerReady);
   const storeStartGame = useGameStore((state) => state.startGame);
+  const storeStartNextRound = useGameStore((state) => state.startNextRound);
 
   const currentPlayer = getCurrentPlayer(user?.id);
 
@@ -102,6 +103,10 @@ export const useGameContext = () => {
     storeStartGame();
   }, [storeStartGame]);
 
+  const startNextRound = useCallback(() => {
+    storeStartNextRound();
+  }, [storeStartNextRound]);
+
   return {
     gameState,
     connected,
@@ -114,6 +119,7 @@ export const useGameContext = () => {
     callBlitz,
     playerReady,
     startGame,
+    startNextRound,
     currentPlayer,
     error,
     clearError,
