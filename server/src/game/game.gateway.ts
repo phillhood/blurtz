@@ -234,8 +234,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // receiving every broadcast.
       await this.gameService.joinGame(gameId, userId);
 
+      // One socket survives navigation between games. Staying in the old room
+      // would keep delivering that game's broadcasts, and the client swaps
+      // `gameState` wholesale on every one - so the abandoned game would
+      // overwrite the board of the game actually on screen.
+      const previousGameId = (client.data as SocketData).gameId;
+      const movedRooms = previousGameId && previousGameId !== gameId;
+      if (movedRooms) {
+        await client.leave(previousGameId);
+      }
+
       await client.join(gameId);
       (client.data as SocketData).gameId = gameId;
+
+      if (movedRooms) {
+        await this.broadcastPresence(previousGameId);
+      }
 
       const gameState = await this.clientGameState(gameId);
 

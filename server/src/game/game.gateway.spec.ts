@@ -785,6 +785,31 @@ describe("GameGateway", () => {
       expect(lastErrorMessage(client)).toBe("Game is full");
     });
 
+    it("leaves the previous game's room when the same socket joins another", async () => {
+      const client = createAuthedSocket();
+      const OTHER_GAME_ID = "11111111-2222-4333-8444-555555555555";
+      client.data.gameId = OTHER_GAME_ID;
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      expect(client.leave).toHaveBeenCalledWith(OTHER_GAME_ID);
+      expect(client.join).toHaveBeenCalledWith(GAME_ID);
+      expect(client.data.gameId).toBe(GAME_ID);
+    });
+
+    it("does not leave the room it is already in when re-joining the same game", async () => {
+      const client = createAuthedSocket();
+      client.data.gameId = GAME_ID;
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      expect(client.leave).not.toHaveBeenCalled();
+    });
+
     it("joins the room with the connection's user once joinGame succeeds", async () => {
       const client = createAuthedSocket();
       gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
