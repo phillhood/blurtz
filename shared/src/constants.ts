@@ -29,6 +29,13 @@ export const GAME_CONSTANTS = {
   MAX_TARGET_SCORE: 500,
   // Must stay equal to Game.targetScore's schema default.
   DEFAULT_TARGET_SCORE: 100,
+  // How long a `round_over` game waits for the whole table to ready up before
+  // the players who have not are forfeited. It is one click on a scoreboard, so
+  // this is generous - and a player wrongly forfeited cannot be put back.
+  //
+  // Shared because it is protocol: the client may count it down. How OFTEN the
+  // server checks is not protocol and lives in the server.
+  ROUND_OVER_TIMEOUT_MS: 90_000,
 } as const;
 
 /**

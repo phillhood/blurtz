@@ -31,6 +31,13 @@ model Game {
   targetScore  Int            @default(100) @map("target_score")
   /// 1-based: a game sits at round 1 from creation until the first Blitz.
   currentRound Int            @default(1) @map("current_round")
+  /// When the game entered `round_over`, and the deadline the ready-up timeout
+  /// is measured from. Non-null IFF status is `round_over`.
+  ///
+  /// An explicit column rather than `updatedAt`: that one moves for any write
+  /// to the row, so a timeout leaning on it would silently reset itself the
+  /// first time anything else touched the game.
+  roundOverAt  DateTime?      @map("round_over_at")
   /// The winning PLAYER, not user - so it joins RoundResult.playerId.
   ///
   /// onDelete: SetNull, and the direction matters. The FK column lives on
@@ -49,6 +56,8 @@ model Game {
 
   @@index([status, isPrivate])
   @@index([hostId])
+  /// The timeout sweep's query: round_over games past their deadline.
+  @@index([status, roundOverAt])
   @@map("games")
 }
 
