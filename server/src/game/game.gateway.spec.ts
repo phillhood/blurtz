@@ -112,6 +112,8 @@ describe("GameGateway", () => {
       setPlayerReady: jest.fn(),
       forfeitGame: jest.fn(),
       getGameState: jest.fn(),
+      findTimedOutRoundOverGames: jest.fn(),
+      resolveRoundOverTimeout: jest.fn(),
     };
 
     const mockJwtService = {
@@ -668,6 +670,24 @@ describe("GameGateway", () => {
       expect(visible).toMatchObject({ id: VISIBLE_CARD_ID, value: 3 });
     });
 
+    it("redacts the round-over sweep's broadcast - nobody asked for it", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue(
+        internalState() as never
+      );
+
+      await gateway.sweepRoundOverTimeouts();
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_STATE_UPDATED
+      );
+
+      expect(emittedDrawPile(payload)[0]).toEqual({
+        id: `hidden:${DRAW_PILE_ID}:0`,
+        faceUp: false,
+      });
+    });
+
     it("redacts GAME_STARTED - the deal itself", async () => {
       const client = createAuthedSocket();
       gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
@@ -1014,6 +1034,91 @@ describe("GameGateway", () => {
       );
       expect(client.leave).toHaveBeenCalledWith(GAME_ID);
       expect(client.data.gameId).toBeUndefined();
+    });
+  });
+
+  // The sweep is the only thing here that broadcasts without anyone having asked
+  // for it, so the room is the only way its result reaches a client.
+  describe("sweepRoundOverTimeouts", () => {
+    /** The events broadcast to a room, in order. */
+    function roomEvents() {
+      return serverEmit.mock.calls.map((call) => call[0]);
+    }
+
+    it("broadcasts the resolved state to the game's room", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue({
+        id: GAME_ID,
+        status: "playing",
+        players: [],
+      } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(gameService.resolveRoundOverTimeout).toHaveBeenCalledWith(GAME_ID);
+      expect(gateway.server.to).toHaveBeenCalledWith(GAME_ID);
+      expect(roomEvents()).toEqual([SOCKET_EVENTS.GAME_STATE_UPDATED]);
+    });
+
+    it("says nothing when the game resolved to nothing", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      // Another instance got there first, or the table readied up under the
+      // lock. Either way no state changed, so no client may be told it did.
+      gameService.resolveRoundOverTimeout.mockResolvedValue(null);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it("announces a game the timeout ended", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue({
+        id: GAME_ID,
+        status: "finished",
+        winner: CONNECTED_PLAYER_ID,
+        players: [{ id: CONNECTED_PLAYER_ID, deck: null }],
+      } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(roomEvents()).toEqual([
+        SOCKET_EVENTS.GAME_STATE_UPDATED,
+        SOCKET_EVENTS.GAME_ENDED,
+      ]);
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_ENDED
+      );
+      expect(payload.reason).toBe("timeout");
+      expect(payload.winner).toMatchObject({ id: CONNECTED_PLAYER_ID });
+    });
+
+    it("keeps sweeping after one game fails", async () => {
+      const OTHER = OTHER_GAME_ID;
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID, OTHER]);
+      gameService.resolveRoundOverTimeout
+        .mockRejectedValueOnce(new Error("lock timeout"))
+        .mockResolvedValueOnce({
+          id: OTHER,
+          status: "playing",
+          players: [],
+        } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      // One wedged game must not strand every other timed-out table.
+      expect(gateway.server.to).toHaveBeenCalledWith(OTHER);
+      expect(roomEvents()).toEqual([SOCKET_EVENTS.GAME_STATE_UPDATED]);
+    });
+
+    it("survives the candidate query failing", async () => {
+      gameService.findTimedOutRoundOverGames.mockRejectedValue(
+        new Error("database is down")
+      );
+
+      await expect(gateway.sweepRoundOverTimeouts()).resolves.toBeUndefined();
+      expect(gameService.resolveRoundOverTimeout).not.toHaveBeenCalled();
     });
   });
 });

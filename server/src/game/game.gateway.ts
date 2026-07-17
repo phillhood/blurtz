@@ -9,6 +9,7 @@ import {
 } from "@nestjs/websockets";
 import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { Interval } from "@nestjs/schedule";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
 // Shared with the client, which is what makes "the client listens for the name
@@ -26,6 +27,15 @@ import {
   PlayerReadyDto,
   ForfeitGameDto,
 } from "./dto";
+
+/**
+ * How often the round-over deadline is swept for. NOT the deadline itself
+ * (`GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS`, which is shared because the client
+ * may count it down) - it is only the resolution the deadline is noticed at, so
+ * a timeout lands somewhere in [90s, 90s + this]. Server-local: how often we
+ * poll is nobody else's business.
+ */
+const ROUND_OVER_SWEEP_MS = 10000;
 
 /**
  * Per-socket state, stored in Socket.IO's official `data` bag.
@@ -118,6 +128,68 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       connectedUserIds: await this.connectedUserIds(gameId),
       timestamp: new Date(),
     });
+  }
+
+  /**
+   * Resolve every `round_over` game that has run out its ready-up deadline.
+   *
+   * A poll, not a `setTimeout` per game, and both halves of that are the point.
+   * An in-process timer dies with the process - leaving the frozen table this
+   * exists to unfreeze frozen forever, which is the very bug - and it would fire
+   * once per INSTANCE. The deadline is read back off the database instead, so a
+   * restart resumes it, and `withGameLock` makes a second instance's sweep
+   * block, re-read, and find nothing left to do.
+   *
+   * It lives on the gateway because its only output is a broadcast. Nobody made
+   * a request, so there is no handler to hand state back to: `this.server` -
+   * which the Redis adapter makes span every instance - is how the table finds
+   * out its round moved on without it. State is redacted here like everywhere
+   * else in this file.
+   */
+  @Interval(ROUND_OVER_SWEEP_MS)
+  async sweepRoundOverTimeouts() {
+    let gameIds: string[];
+
+    try {
+      gameIds = await this.gameService.findTimedOutRoundOverGames();
+    } catch (error) {
+      this.logger.warn(`Round-over sweep failed: ${getErrorMessage(error)}`);
+      return;
+    }
+
+    for (const gameId of gameIds) {
+      try {
+        const state = await this.gameService.resolveRoundOverTimeout(gameId);
+
+        // Null is the normal outcome of losing the race: another instance
+        // resolved it, or the table readied up under the lock. Nothing happened,
+        // so nothing is announced.
+        if (!state) {
+          continue;
+        }
+
+        const gameState = toClientGameState(state);
+
+        this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+          gameState,
+          timestamp: new Date(),
+        });
+
+        if (gameState.status === "finished") {
+          this.server.to(gameId).emit(SOCKET_EVENTS.GAME_ENDED, {
+            gameState,
+            reason: "timeout",
+            winner: gameState.players.find((p) => p.id === gameState.winner),
+            timestamp: new Date(),
+          });
+        }
+      } catch (error) {
+        // One wedged game must not stop the sweep resolving every other one.
+        this.logger.warn(
+          `Round-over timeout for game ${gameId} failed: ${getErrorMessage(error)}`
+        );
+      }
+    }
   }
 
   /**

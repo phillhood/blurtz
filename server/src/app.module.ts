@@ -1,5 +1,6 @@
 import { Module } from "@nestjs/common";
 import { ConfigModule } from "@nestjs/config";
+import { ScheduleModule } from "@nestjs/schedule";
 import { ThrottlerModule, ThrottlerGuard } from "@nestjs/throttler";
 import { APP_GUARD } from "@nestjs/core";
 import { LoggerModule } from "nestjs-pino";
@@ -28,6 +29,9 @@ import { validate } from "./config/env.validation";
         autoLogging: false,
       },
     }),
+    // Registers the gateway's round-over sweep. Only forRoot() starts the
+    // timers, so the specs - which build their own modules - stay timer-free.
+    ScheduleModule.forRoot(),
     ThrottlerModule.forRoot([
       {
         name: "short",
