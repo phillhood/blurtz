@@ -9,7 +9,7 @@ import { GameService } from "./game.service";
 import { GameRepository } from "./game.repository";
 import { PrismaService } from "@prisma";
 import { UserService } from "@user/user.service";
-import { CARD_COLORS, Card } from "@blurtz/shared";
+import { CARD_COLORS, Card, GAME_CONSTANTS } from "@blurtz/shared";
 
 // PlayerDeckSchema holds card ids to real v4 UUIDs, so fixtures must look like
 // one or they fail at the DB boundary rather than on the assertion.
@@ -68,6 +68,7 @@ describe("GameService", () => {
     const mockPrismaService = {
       game: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
       },
@@ -924,7 +925,7 @@ describe("GameService", () => {
 
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
-        data: { status: "finished", winnerPlayerId: "p2" },
+        data: { status: "finished", winnerPlayerId: "p2", roundOverAt: null },
       });
       // It was a real game, so it is credited like one.
       const calls = (prismaService.user.update as jest.Mock).mock.calls.map(
@@ -1030,6 +1031,42 @@ describe("GameService", () => {
       expect(hostWrites).toHaveLength(0);
     });
   });
+  // The candidate query. What it FINDS is settled against a real database in
+  // game.concurrency.spec.ts; what is pinned here is the filter, because a
+  // wrong one either forfeits live games or never fires at all.
+  describe("findTimedOutRoundOverGames", () => {
+    it("asks only for round_over games past the deadline", async () => {
+      (prismaService.game.findMany as jest.Mock).mockResolvedValue([
+        { id: "game-1" },
+      ]);
+      const before = Date.now();
+
+      expect(await service.findTimedOutRoundOverGames()).toEqual(["game-1"]);
+
+      const { where } = (prismaService.game.findMany as jest.Mock).mock
+        .calls[0][0];
+      expect(where.status).toBe("round_over");
+
+      // The cutoff is one timeout ago, so a game that entered the interstitial
+      // more recently than that cannot match.
+      const cutoff = where.roundOverAt.lte.getTime();
+      expect(cutoff).toBeGreaterThanOrEqual(
+        before - GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS
+      );
+      expect(cutoff).toBeLessThanOrEqual(
+        Date.now() - GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS
+      );
+    });
+
+    it("runs outside the lock - it decides nothing", async () => {
+      (prismaService.game.findMany as jest.Mock).mockResolvedValue([]);
+
+      await service.findTimedOutRoundOverGames();
+
+      expect(gameRepository.withGameLock).not.toHaveBeenCalled();
+    });
+  });
+
   describe("setPlayerReady", () => {
     function readyGame(status: string) {
       return {
@@ -1180,9 +1217,16 @@ describe("GameService", () => {
       expect(result.status).toBe("round_over");
       // A round_over game has a leader, not a winner.
       expect(result.winnerId).toBeNull();
+      // The interstitial is stamped as it starts: it is the deadline the
+      // ready-up timeout is measured from, and this is the only place that
+      // knows when it began.
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
-        data: { status: "round_over", winnerPlayerId: null },
+        data: {
+          status: "round_over",
+          winnerPlayerId: null,
+          roundOverAt: expect.any(Date),
+        },
       });
     });
 
@@ -1194,9 +1238,10 @@ describe("GameService", () => {
 
       expect(result.status).toBe("finished");
       expect(result.winnerId).toBe("p1");
+      // No interstitial to wait in, so no deadline to wait on.
       expect(prismaService.game.update).toHaveBeenCalledWith({
         where: { id: "game-1" },
-        data: { status: "finished", winnerPlayerId: "p1" },
+        data: { status: "finished", winnerPlayerId: "p1", roundOverAt: null },
       });
     });
 

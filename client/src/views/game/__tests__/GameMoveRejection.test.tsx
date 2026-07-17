@@ -5,12 +5,13 @@ import Game from "../Game";
 import { useAuthStore, useGameStore } from "@stores";
 import { socketService, SocketCallbacks } from "@services/socket.service";
 import { GameState } from "@types";
+import { SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 /**
  * These tests drive the REAL store through <Game>, on purpose. The defect they
- * pin down lives in the seam between the two: the store chose which field to
- * put a rejection reason in, and the view decided fatality by grepping that
- * field. Either half looks fine alone.
+ * pin down lives in the seam between the two: the store chooses which field a
+ * rejection reason lands in, and the view decides what to do about it. Either
+ * half looks fine alone.
  */
 vi.mock("@services/socket.service", () => ({
   socketService: {
@@ -82,9 +83,9 @@ describe("<Game> and a rejected move", () => {
     });
   });
 
-  // These reasons are chosen, not arbitrary: <Game> decides fatality with
-  // `error?.includes("not found")`, and these are real `validateMove` rejections
-  // that match it. Do not swap them for other strings - the match is the test.
+  // These reasons are chosen, not arbitrary: they are real `validateMove`
+  // rejections whose wording reads exactly like a fatal error. Do not swap them
+  // for tamer strings - sounding fatal while not being fatal is the test.
   it.each([
     "Destination pile not found",
     "Source pile not found",
@@ -125,10 +126,14 @@ describe("<Game> and a rejected move", () => {
     renderGame();
 
     act(() => {
-      callbacks.onError!("Game not found");
+      callbacks.onError!({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
     });
 
-    // The heuristic still does its job on the channel it was written for.
+    // The error channel still reaches the fatal screen - fixing the rejection
+    // path must not cost the one case that should take the board down.
     expect(screen.getByText("Game Error")).toBeInTheDocument();
     expect(screen.getByText("Game not found")).toBeInTheDocument();
   });

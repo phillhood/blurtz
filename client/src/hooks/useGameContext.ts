@@ -6,6 +6,8 @@ export const useGameContext = () => {
   const user = useAuthStore((state) => state.user);
   const gameState = useGameStore((state) => state.gameState);
   const connected = useGameStore((state) => state.connected);
+  const reconnecting = useGameStore((state) => state.reconnecting);
+  const connectedUserIds = useGameStore((state) => state.connectedUserIds);
   const error = useGameStore((state) => state.error);
   const clearError = useGameStore((state) => state.clearError);
   const moveRejection = useGameStore((state) => state.moveRejection);
@@ -110,6 +112,8 @@ export const useGameContext = () => {
   return {
     gameState,
     connected,
+    reconnecting,
+    connectedUserIds,
     joinGame,
     createAndJoinGame,
     leaveGame,

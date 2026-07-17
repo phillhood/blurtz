@@ -5,6 +5,7 @@ import { gameService } from "@services/game.service";
 import { queryClient } from "../../lib/queryClient";
 import { gameKeys } from "@hooks/queries/useGamesQuery";
 import { Game, GameState } from "@types";
+import { SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 vi.mock("@services/socket.service", () => ({
   socketService: {
@@ -51,6 +52,8 @@ describe("gameStore", () => {
       gameState: null,
       currentGameId: null,
       connected: false,
+      reconnecting: false,
+      connectedUserIds: null,
       socketInitialized: false,
       error: null,
       moveRejection: null,
@@ -161,7 +164,7 @@ describe("gameStore", () => {
   describe("onCardMoved", () => {
     it("replaces state wholesale and clears any previous error", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ error: "an earlier rejection" });
+      useGameStore.setState({ error: { code: null, message: "an earlier rejection" } });
 
       const movedState = gameState("game-1");
       callbacks.onCardMoved!(movedState);
@@ -171,13 +174,87 @@ describe("gameStore", () => {
     });
   });
 
+  describe("onPresenceUpdated", () => {
+    it("records who the server says is connected", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ currentGameId: "game-1" });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      expect(useGameStore.getState().connectedUserIds).toEqual([
+        "user-1",
+        "user-2",
+      ]);
+    });
+
+    it("replaces the whole set rather than merging it", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-1",
+        connectedUserIds: ["user-1"],
+      });
+
+      // user-2 dropping is the ONLY thing this frame says. Merging would make a
+      // player who left permanently present.
+      expect(useGameStore.getState().connectedUserIds).toEqual(["user-1"]);
+    });
+
+    it("ignores presence for a game this client is not in", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      callbacks.onPresenceUpdated!({
+        gameId: "game-2",
+        connectedUserIds: [],
+      });
+
+      expect(useGameStore.getState().connectedUserIds).toEqual([
+        "user-1",
+        "user-2",
+      ]);
+    });
+
+    it("starts out not knowing, rather than assuming an empty room", async () => {
+      await registeredCallbacks();
+
+      // An empty array reads as "everyone is gone" at the board. Until the
+      // server says, the answer is null - unknown.
+      expect(useGameStore.getState().connectedUserIds).toBeNull();
+    });
+
+    it("forgets the previous game's presence on joining another", async () => {
+      await registeredCallbacks();
+      useGameStore.setState({
+        currentGameId: "game-1",
+        connectedUserIds: ["user-1", "user-2"],
+      });
+
+      useGameStore.getState().joinGame("game-2", "user-1");
+
+      expect(useGameStore.getState().connectedUserIds).toBeNull();
+    });
+  });
+
   // Every handler below is "swap in what the server decided". What is worth
   // pinning is which are allowed to lose the board, and which clear the error
   // that would otherwise hide it.
   describe("connection lifecycle", () => {
     it("marks itself connected and clears a stale connection error", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ error: "Failed to connect to game server" });
+      useGameStore.setState({
+        error: { code: null, message: "Failed to connect to game server" },
+      });
 
       callbacks.onConnect!();
 
@@ -192,12 +269,43 @@ describe("gameStore", () => {
       const live = gameState("game-1");
       useGameStore.setState({ connected: true, gameState: live });
 
-      callbacks.onDisconnect!("transport close");
+      callbacks.onDisconnect!("transport close", true);
 
       expect(useGameStore.getState().connected).toBe(false);
       // socket.io reconnects on its own. Dropping gameState here would blank
       // the board on every blip and re-render it from nothing on recovery.
       expect(useGameStore.getState().gameState).toBe(live);
+    });
+
+    it("goes into reconnecting when the drop is one socket.io will retry", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ connected: true });
+
+      callbacks.onDisconnect!("transport close", true);
+
+      expect(useGameStore.getState().reconnecting).toBe(true);
+    });
+
+    it("does not claim to be reconnecting when nothing will retry", async () => {
+      const callbacks = await registeredCallbacks();
+      useGameStore.setState({ connected: true });
+
+      // The server closed it - socket.io does not retry that on its own, so a
+      // "reconnecting..." banner would spin forever over a dead socket.
+      callbacks.onDisconnect!("io server disconnect", false);
+
+      expect(useGameStore.getState().connected).toBe(false);
+      expect(useGameStore.getState().reconnecting).toBe(false);
+    });
+
+    it("clears reconnecting once the socket is back", async () => {
+      const callbacks = await registeredCallbacks();
+
+      callbacks.onDisconnect!("transport close", true);
+      callbacks.onConnect!();
+
+      expect(useGameStore.getState().connected).toBe(true);
+      expect(useGameStore.getState().reconnecting).toBe(false);
     });
 
     it("initializes the socket once, however many times it is asked", async () => {
@@ -216,7 +324,7 @@ describe("gameStore", () => {
 
       await useGameStore.getState().initializeSocket("user-1", "token");
 
-      expect(useGameStore.getState().error).toBe(
+      expect(useGameStore.getState().error?.message).toBe(
         "Failed to connect to game server"
       );
       // The flag has to come back down or the guard above would make the
@@ -236,19 +344,36 @@ describe("gameStore", () => {
   });
 
   describe("onError", () => {
-    it("surfaces the message on the fatal-eligible channel", async () => {
-      const callbacks = await registeredCallbacks();
-
-      callbacks.onError!("Something went wrong");
-
-      expect(useGameStore.getState().error).toBe("Something went wrong");
-    });
-
-    it("lets go of a game the server says is gone", async () => {
-      const callbacks = await registeredCallbacks();
+    const inAGame = () =>
       useGameStore.setState({ currentGameId: "game-1", userJoined: true });
 
-      callbacks.onError!("Game not found");
+    const stillInTheGame = () => {
+      expect(useGameStore.getState().currentGameId).toBe("game-1");
+      expect(useGameStore.getState().userJoined).toBe(true);
+    };
+
+    it("surfaces code and message together", async () => {
+      const callbacks = await registeredCallbacks();
+
+      callbacks.onError!({
+        code: SOCKET_ERROR_CODES.INVALID_PAYLOAD,
+        message: "gameId must be a UUID",
+      });
+
+      expect(useGameStore.getState().error).toEqual({
+        code: SOCKET_ERROR_CODES.INVALID_PAYLOAD,
+        message: "gameId must be a UUID",
+      });
+    });
+
+    it("lets go of a game the server says does not exist", async () => {
+      const callbacks = await registeredCallbacks();
+      inAGame();
+
+      callbacks.onError!({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
 
       // Holding currentGameId for a game that does not exist means every
       // reconnect re-joins a room that will refuse again, forever.
@@ -256,23 +381,52 @@ describe("gameStore", () => {
       expect(useGameStore.getState().userJoined).toBe(false);
     });
 
-    it("lets go on 'does not exist' too, not only on 'not found'", async () => {
+    it("lets go of a game the player is not a member of", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ currentGameId: "game-1", userJoined: true });
+      inAGame();
 
-      callbacks.onError!("That game does not exist");
+      callbacks.onError!({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
 
       expect(useGameStore.getState().currentGameId).toBeNull();
     });
 
-    it("keeps the player in the game for an error that is not about the game existing", async () => {
+    // The bug this contract exists for: PLAYER_NOT_FOUND is a lost race, and
+    // its message says "not found" - which is exactly what the old substring
+    // check keyed off.
+    it("keeps the player in the game when a transient error's message says 'not found'", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ currentGameId: "game-1", userJoined: true });
+      inAGame();
 
-      callbacks.onError!("It is not your turn");
+      callbacks.onError!({
+        code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+        message: "Player not found in this game",
+      });
 
-      expect(useGameStore.getState().currentGameId).toBe("game-1");
-      expect(useGameStore.getState().userJoined).toBe(true);
+      stillInTheGame();
+    });
+
+    it("keeps the player in the game for a code it does not recognise", async () => {
+      const callbacks = await registeredCallbacks();
+      inAGame();
+
+      callbacks.onError!({
+        code: "SOME_CODE_FROM_A_NEWER_SERVER",
+        message: "Game not found, apparently",
+      });
+
+      stillInTheGame();
+    });
+
+    it("keeps the player in the game for an error the client raised itself", async () => {
+      const callbacks = await registeredCallbacks();
+      inAGame();
+
+      callbacks.onError!({ code: null, message: "Failed to connect to game server" });
+
+      stillInTheGame();
     });
   });
 
@@ -280,7 +434,7 @@ describe("gameStore", () => {
     it("records the joined game and clears whatever the last attempt left behind", async () => {
       const callbacks = await registeredCallbacks();
       useGameStore.setState({
-        error: "Game not found",
+        error: { code: SOCKET_ERROR_CODES.GAME_NOT_FOUND, message: "Game not found" },
         moveRejection: "an old rejection",
         userLeft: true,
       });
@@ -348,7 +502,7 @@ describe("gameStore", () => {
   describe("game progress events", () => {
     it("swaps in a started game", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ error: "stale" });
+      useGameStore.setState({ error: { code: null, message: "stale" } });
 
       const started = gameState("game-1", { status: "playing" });
       callbacks.onGameStarted!(started);
@@ -359,7 +513,7 @@ describe("gameStore", () => {
 
     it("swaps in a state update", async () => {
       const callbacks = await registeredCallbacks();
-      useGameStore.setState({ error: "stale" });
+      useGameStore.setState({ error: { code: null, message: "stale" } });
 
       const updated = gameState("game-1");
       callbacks.onGameStateUpdated!(updated);
@@ -447,14 +601,14 @@ describe("gameStore", () => {
       useGameStore.getState().joinGame("game-1", "user-1");
 
       expect(socketService.joinGame).not.toHaveBeenCalled();
-      expect(useGameStore.getState().error).toBe("Not connected to game server");
+      expect(useGameStore.getState().error?.message).toBe("Not connected to game server");
     });
 
     it("refuses to join with no user", () => {
       useGameStore.getState().joinGame("game-1", "");
 
       expect(socketService.joinGame).not.toHaveBeenCalled();
-      expect(useGameStore.getState().error).toBe("Not connected to game server");
+      expect(useGameStore.getState().error?.message).toBe("Not connected to game server");
     });
 
     it("reports a throw from the socket rather than swallowing it", () => {
@@ -464,7 +618,7 @@ describe("gameStore", () => {
 
       useGameStore.getState().joinGame("game-1", "user-1");
 
-      expect(useGameStore.getState().error).toBe("Socket not connected");
+      expect(useGameStore.getState().error?.message).toBe("Socket not connected");
     });
   });
 
@@ -500,7 +654,7 @@ describe("gameStore", () => {
         .createAndJoinGame("Phill's Game", 2, false, 100, "user-1");
 
       expect(created).toBeNull();
-      expect(useGameStore.getState().error).toBe(
+      expect(useGameStore.getState().error?.message).toBe(
         "Failed to create game. Please try again later."
       );
       expect(socketService.joinGame).not.toHaveBeenCalled();
@@ -517,7 +671,7 @@ describe("gameStore", () => {
       // A game created over REST with no socket to join it with is a row in
       // the database nobody is in.
       expect(gameService.createGame).not.toHaveBeenCalled();
-      expect(useGameStore.getState().error).toBe("Not connected to game server");
+      expect(useGameStore.getState().error?.message).toBe("Not connected to game server");
     });
 
     it("does not join a created game that came back without an id", async () => {
@@ -529,7 +683,7 @@ describe("gameStore", () => {
 
       expect(created).toBeNull();
       expect(socketService.joinGame).not.toHaveBeenCalled();
-      expect(useGameStore.getState().error).toBe(
+      expect(useGameStore.getState().error?.message).toBe(
         "No game ID returned from server"
       );
     });
@@ -628,7 +782,7 @@ describe("gameStore", () => {
 
       useGameStore.getState().makeMove("card-1", "pile-a", "pile-b");
 
-      expect(useGameStore.getState().error).toBe("Socket not connected");
+      expect(useGameStore.getState().error?.message).toBe("Socket not connected");
     });
 
     it("flips a pile, calls blitz, readies up and starts against the current game", () => {
@@ -692,7 +846,7 @@ describe("gameStore", () => {
         act();
 
         // The socket's reason is the useful one, so it wins over the fallback.
-        expect(useGameStore.getState().error).toBe("Socket not connected");
+        expect(useGameStore.getState().error?.message).toBe("Socket not connected");
       }
     );
 
@@ -710,7 +864,7 @@ describe("gameStore", () => {
 
         // The reason the `instanceof Error` check is there at all: without the
         // fallback this would put `undefined` on screen.
-        expect(useGameStore.getState().error).toBe(fallback);
+        expect(useGameStore.getState().error?.message).toBe(fallback);
       }
     );
   });
@@ -810,8 +964,9 @@ describe("gameStore", () => {
 
   describe("error channel", () => {
     it("sets and clears the error", () => {
-      useGameStore.getState().setError("boom");
-      expect(useGameStore.getState().error).toBe("boom");
+      const error = { code: null, message: "boom" };
+      useGameStore.getState().setError(error);
+      expect(useGameStore.getState().error).toBe(error);
 
       useGameStore.getState().clearError();
       expect(useGameStore.getState().error).toBeNull();

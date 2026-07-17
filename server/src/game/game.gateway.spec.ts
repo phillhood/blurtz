@@ -1,10 +1,10 @@
 import { Test, TestingModule } from "@nestjs/testing";
 import { JwtService } from "@nestjs/jwt";
-import { ForbiddenException } from "@nestjs/common";
+import { BadRequestException, ForbiddenException, NotFoundException } from "@nestjs/common";
 import { Socket } from "socket.io";
 import { GameGateway } from "./game.gateway";
 import { GameService } from "./game.service";
-import { SOCKET_EVENTS } from "@blurtz/shared";
+import { SOCKET_EVENTS, SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 // The DTOs validate every id as a v4 UUID, so fixtures must look like one.
 const GAME_ID = "11111111-1111-4111-8111-111111111111";
@@ -20,6 +20,7 @@ const VICTIM_PLAYER_ID = "66666666-6666-4666-8666-666666666666";
 
 const CONNECTED_USER_ID = "user-connected";
 const CONNECTED_PLAYER_ID = "player-connected";
+const OTHER_USER_ID = "user-other";
 
 interface MockSocket {
   id: string;
@@ -59,12 +60,16 @@ function asSocket(socket: MockSocket): Socket {
   return socket as unknown as Socket;
 }
 
-/** The `message` of the last SOCKET_EVENTS.ERROR emitted to a socket. */
-function lastErrorMessage(socket: MockSocket): string | undefined {
+/** The payload of the last SOCKET_EVENTS.ERROR emitted to a socket. */
+function lastError(socket: MockSocket): { code?: string; message?: string } | undefined {
   const errorCalls = socket.emit.mock.calls.filter(
     (call) => call[0] === SOCKET_EVENTS.ERROR
   );
-  return errorCalls[errorCalls.length - 1]?.[1]?.message;
+  return errorCalls[errorCalls.length - 1]?.[1];
+}
+
+function lastErrorMessage(socket: MockSocket): string | undefined {
+  return lastError(socket)?.message;
 }
 
 /** The payload of the last event of `name` emitted to a socket. */
@@ -76,11 +81,24 @@ function lastEmit(socket: MockSocket, name: string) {
 /** A move result as GameService returns it. */
 const acceptedMove = { ok: true, state: { id: GAME_ID } } as never;
 
+/**
+ * Sockets in a room, as `fetchSockets()` reports them: `data.userId` is the only
+ * field presence reads. One id per socket, so repeating one is one user with two
+ * tabs open.
+ */
+function remoteSockets(...userIds: string[]) {
+  return userIds.map((userId, index) => ({
+    id: `remote-${index}`,
+    data: { userId },
+  }));
+}
+
 describe("GameGateway", () => {
   let gateway: GameGateway;
   let gameService: jest.Mocked<GameService>;
   let jwtService: jest.Mocked<JwtService>;
   let serverEmit: jest.Mock;
+  let fetchSockets: jest.Mock;
 
   beforeEach(async () => {
     const mockGameService = {
@@ -94,6 +112,8 @@ describe("GameGateway", () => {
       setPlayerReady: jest.fn(),
       forfeitGame: jest.fn(),
       getGameState: jest.fn(),
+      findTimedOutRoundOverGames: jest.fn(),
+      resolveRoundOverTimeout: jest.fn(),
     };
 
     const mockJwtService = {
@@ -119,10 +139,13 @@ describe("GameGateway", () => {
     jwtService = module.get(JwtService);
 
     // The gateway broadcasts through `this.server`, which Nest would normally
-    // inject at bootstrap.
+    // inject at bootstrap. `in(...).fetchSockets()` is the room membership
+    // presence is derived from; the Redis adapter makes it span every instance.
     serverEmit = jest.fn();
+    fetchSockets = jest.fn().mockResolvedValue([]);
     gateway.server = {
       to: jest.fn().mockReturnValue({ emit: serverEmit }),
+      in: jest.fn().mockReturnValue({ fetchSockets }),
     } as never;
 
     jest.clearAllMocks();
@@ -175,6 +198,209 @@ describe("GameGateway", () => {
       expect(jwtService.verifyAsync).toHaveBeenCalledWith("valid-token");
       expect(client.data.userId).toBe(CONNECTED_USER_ID);
       expect(client.disconnect).not.toHaveBeenCalled();
+    });
+  });
+
+  // Presence is who holds a socket in the room, derived on demand and broadcast
+  // as a whole set. A drop used to be a client-side no-op - PLAYER_LEFT with no
+  // state, which the client ignores - so nobody could tell a dropped opponent
+  // from one who had stopped playing.
+  describe("presence", () => {
+    /** The last PRESENCE_UPDATED broadcast to a room. */
+    function lastPresence() {
+      const calls = serverEmit.mock.calls.filter(
+        (call) => call[0] === SOCKET_EVENTS.PRESENCE_UPDATED
+      );
+      return calls[calls.length - 1]?.[1];
+    }
+
+    function droppedSocket(): MockSocket {
+      const client = createAuthedSocket();
+      client.data.gameId = GAME_ID;
+      return client;
+    }
+
+    it("tells the room who is still connected when a socket drops", async () => {
+      const client = droppedSocket();
+      // Socket.IO empties a socket's rooms before it fires `disconnect`, so the
+      // dropped socket is already gone from what the room reports.
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(gateway.server.in).toHaveBeenCalledWith(GAME_ID);
+      expect(lastPresence()).toMatchObject({
+        gameId: GAME_ID,
+        connectedUserIds: [OTHER_USER_ID],
+      });
+    });
+
+    it("does not tell the room that a dropped player LEFT the game", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      // The Player row survives a drop and the same user rejoins and plays on.
+      // PLAYER_LEFT is a genuine departure and would end their game everywhere.
+      const left = serverEmit.mock.calls.filter(
+        (call) => call[0] === SOCKET_EVENTS.PLAYER_LEFT
+      );
+      expect(left).toEqual([]);
+    });
+
+    it("reports an empty room when the last socket drops", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue([]);
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(lastPresence()).toMatchObject({ connectedUserIds: [] });
+    });
+
+    it("says nothing when a socket that was in no game drops", async () => {
+      const client = createAuthedSocket();
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it("sends the current set to a joiner, not only later changes", async () => {
+      const client = createAuthedSocket();
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+      fetchSockets.mockResolvedValue(
+        remoteSockets(CONNECTED_USER_ID, OTHER_USER_ID)
+      );
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      // To the room - which the joiner is now in - rather than `client.to(...)`,
+      // which is everyone EXCEPT them.
+      expect(lastPresence()).toMatchObject({
+        connectedUserIds: [CONNECTED_USER_ID, OTHER_USER_ID],
+      });
+    });
+
+    it("counts a user holding two sockets once", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(
+        remoteSockets(OTHER_USER_ID, OTHER_USER_ID, CONNECTED_USER_ID)
+      );
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      expect(lastPresence().connectedUserIds).toEqual([
+        OTHER_USER_ID,
+        CONNECTED_USER_ID,
+      ]);
+    });
+
+    it("names users and carries no game state", async () => {
+      const client = droppedSocket();
+      fetchSockets.mockResolvedValue(remoteSockets(OTHER_USER_ID));
+
+      await gateway.handleDisconnect(asSocket(client));
+
+      // Presence is connection state. Smuggling a board into it would put an
+      // unredacted-by-default payload on a path that never goes near the
+      // redactor.
+      expect(lastPresence()).not.toHaveProperty("gameState");
+      expect(gameService.getGameState).not.toHaveBeenCalled();
+    });
+  });
+
+  // Every ERROR carries a `code`. It is the only thing the client is allowed to
+  // branch on, so a handler that emitted a message alone would silently hand the
+  // client back nothing to classify - and its default is "not fatal".
+  describe("the error contract", () => {
+    const move = {
+      gameId: GAME_ID,
+      cardId: CARD_ID,
+      fromPileId: FROM_PILE_ID,
+      toPileId: TO_PILE_ID,
+    };
+
+    it("emits NOT_A_PLAYER with its message when the membership gate refuses", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(null);
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
+    });
+
+    it("carries a code the service threw through to the wire", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        })
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
+    });
+
+    // The distinction the client depends on: both say "not found", only one is
+    // an eviction. Collapsing them here is the original bug, one layer down.
+    it("does not dress a lost race up as NOT_A_PLAYER", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found in this game",
+        })
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.PLAYER_NOT_FOUND);
+    });
+
+    it("falls back to UNKNOWN for an exception carrying no code", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(
+        new BadRequestException("Game is not in progress")
+      );
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)).toMatchObject({
+        code: SOCKET_ERROR_CODES.UNKNOWN,
+        message: "Game is not in progress",
+      });
+    });
+
+    it("falls back to UNKNOWN for a plain thrown Error", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.moveCard.mockRejectedValue(new Error("connection pool timeout"));
+
+      await gateway.handleMoveCard(asSocket(client), move);
+
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.UNKNOWN);
+    });
+
+    it("emits INVALID_PAYLOAD when the payload fails validation", async () => {
+      const client = createAuthedSocket();
+
+      await gateway.handleMoveCard(asSocket(client), { gameId: "not-a-uuid" });
+
+      expect(gameService.moveCard).not.toHaveBeenCalled();
+      expect(lastError(client)?.code).toBe(SOCKET_ERROR_CODES.INVALID_PAYLOAD);
     });
   });
 
@@ -444,6 +670,24 @@ describe("GameGateway", () => {
       expect(visible).toMatchObject({ id: VISIBLE_CARD_ID, value: 3 });
     });
 
+    it("redacts the round-over sweep's broadcast - nobody asked for it", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue(
+        internalState() as never
+      );
+
+      await gateway.sweepRoundOverTimeouts();
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_STATE_UPDATED
+      );
+
+      expect(emittedDrawPile(payload)[0]).toEqual({
+        id: `hidden:${DRAW_PILE_ID}:0`,
+        faceUp: false,
+      });
+    });
+
     it("redacts GAME_STARTED - the deal itself", async () => {
       const client = createAuthedSocket();
       gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
@@ -559,6 +803,31 @@ describe("GameGateway", () => {
       expect(client.join).not.toHaveBeenCalled();
       expect(client.data.gameId).toBeUndefined();
       expect(lastErrorMessage(client)).toBe("Game is full");
+    });
+
+    it("leaves the previous game's room when the same socket joins another", async () => {
+      const client = createAuthedSocket();
+      const OTHER_GAME_ID = "11111111-2222-4333-8444-555555555555";
+      client.data.gameId = OTHER_GAME_ID;
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      expect(client.leave).toHaveBeenCalledWith(OTHER_GAME_ID);
+      expect(client.join).toHaveBeenCalledWith(GAME_ID);
+      expect(client.data.gameId).toBe(GAME_ID);
+    });
+
+    it("does not leave the room it is already in when re-joining the same game", async () => {
+      const client = createAuthedSocket();
+      client.data.gameId = GAME_ID;
+      gameService.joinGame.mockResolvedValue({ id: GAME_ID } as never);
+      gameService.getGameState.mockResolvedValue({ id: GAME_ID } as never);
+
+      await gateway.handleJoinGame(asSocket(client), { gameId: GAME_ID });
+
+      expect(client.leave).not.toHaveBeenCalled();
     });
 
     it("joins the room with the connection's user once joinGame succeeds", async () => {
@@ -765,6 +1034,91 @@ describe("GameGateway", () => {
       );
       expect(client.leave).toHaveBeenCalledWith(GAME_ID);
       expect(client.data.gameId).toBeUndefined();
+    });
+  });
+
+  // The sweep is the only thing here that broadcasts without anyone having asked
+  // for it, so the room is the only way its result reaches a client.
+  describe("sweepRoundOverTimeouts", () => {
+    /** The events broadcast to a room, in order. */
+    function roomEvents() {
+      return serverEmit.mock.calls.map((call) => call[0]);
+    }
+
+    it("broadcasts the resolved state to the game's room", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue({
+        id: GAME_ID,
+        status: "playing",
+        players: [],
+      } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(gameService.resolveRoundOverTimeout).toHaveBeenCalledWith(GAME_ID);
+      expect(gateway.server.to).toHaveBeenCalledWith(GAME_ID);
+      expect(roomEvents()).toEqual([SOCKET_EVENTS.GAME_STATE_UPDATED]);
+    });
+
+    it("says nothing when the game resolved to nothing", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      // Another instance got there first, or the table readied up under the
+      // lock. Either way no state changed, so no client may be told it did.
+      gameService.resolveRoundOverTimeout.mockResolvedValue(null);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(serverEmit).not.toHaveBeenCalled();
+    });
+
+    it("announces a game the timeout ended", async () => {
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID]);
+      gameService.resolveRoundOverTimeout.mockResolvedValue({
+        id: GAME_ID,
+        status: "finished",
+        winner: CONNECTED_PLAYER_ID,
+        players: [{ id: CONNECTED_PLAYER_ID, deck: null }],
+      } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      expect(roomEvents()).toEqual([
+        SOCKET_EVENTS.GAME_STATE_UPDATED,
+        SOCKET_EVENTS.GAME_ENDED,
+      ]);
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_ENDED
+      );
+      expect(payload.reason).toBe("timeout");
+      expect(payload.winner).toMatchObject({ id: CONNECTED_PLAYER_ID });
+    });
+
+    it("keeps sweeping after one game fails", async () => {
+      const OTHER = OTHER_GAME_ID;
+      gameService.findTimedOutRoundOverGames.mockResolvedValue([GAME_ID, OTHER]);
+      gameService.resolveRoundOverTimeout
+        .mockRejectedValueOnce(new Error("lock timeout"))
+        .mockResolvedValueOnce({
+          id: OTHER,
+          status: "playing",
+          players: [],
+        } as never);
+
+      await gateway.sweepRoundOverTimeouts();
+
+      // One wedged game must not strand every other timed-out table.
+      expect(gateway.server.to).toHaveBeenCalledWith(OTHER);
+      expect(roomEvents()).toEqual([SOCKET_EVENTS.GAME_STATE_UPDATED]);
+    });
+
+    it("survives the candidate query failing", async () => {
+      gameService.findTimedOutRoundOverGames.mockRejectedValue(
+        new Error("database is down")
+      );
+
+      await expect(gateway.sweepRoundOverTimeouts()).resolves.toBeUndefined();
+      expect(gameService.resolveRoundOverTimeout).not.toHaveBeenCalled();
     });
   });
 });

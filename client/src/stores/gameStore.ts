@@ -1,6 +1,7 @@
 import { create } from "zustand";
 import { devtools } from "zustand/middleware";
-import { Game, GameState, Player } from "@types";
+import { Game, GameError, GameState, Player } from "@types";
+import { isFatalErrorCode } from "@utils";
 import { gameService } from "@services/game.service";
 import { socketService, SocketCallbacks } from "@services/socket.service";
 import { queryClient } from "../lib/queryClient";
@@ -11,20 +12,34 @@ interface GameStoreState {
   gameState: GameState | null;
   currentGameId: string | null;
   connected: boolean;
+  /**
+   * The socket dropped and is being retried. Distinct from `!connected`, which
+   * is also true before the first connect ever succeeds and after a close that
+   * will never be retried - a board must not promise a reconnection nobody is
+   * attempting.
+   */
+  reconnecting: boolean;
+  /**
+   * Which users hold a socket in this game right now, or `null` while the server
+   * has not said yet. Not part of `gameState`: presence is connection state and
+   * arrives on its own event.
+   *
+   * `null` means unknown, and unknown must read as present - showing a player as
+   * dropped because a frame has not landed yet is a worse lie than showing them
+   * as fine a moment too long.
+   */
+  connectedUserIds: string[] | null;
   socketInitialized: boolean;
   /**
-   * Something went wrong with the connection, the room, or a request. <Game>
-   * decides whether this is fatal by looking at its text, so ONLY put things
-   * here that are allowed to be fatal.
+   * Something went wrong with the connection, the room, or a request. Fatality
+   * is read off `error.code` alone - see `isFatalErrorCode`.
    */
-  error: string | null;
+  error: GameError | null;
   /**
-   * Why the server refused the last move. Deliberately NOT `error`.
-   *
-   * Rejection reasons are free text ("Destination pile not found"), and <Game>
-   * decides fatality by substring-matching `error` for "not found" - so sharing
-   * the field would eject a player from a game they can still play. A refused
-   * move is never fatal, so it gets a channel that heuristic cannot see.
+   * Why the server refused the last move. Deliberately NOT `error`: a refused
+   * move arrives with state to reconcile against and expires on its own toast
+   * timer, which is a different lifecycle from an error, not just a different
+   * severity.
    */
   moveRejection: string | null;
   // Internal flags
@@ -57,12 +72,21 @@ interface GameStoreActions {
   startGame: () => void;
   // Util
   clearError: () => void;
-  setError: (error: string | null) => void;
+  setError: (error: GameError | null) => void;
   clearMoveRejection: () => void;
   getCurrentPlayer: (userId: string | undefined) => Player | null;
 }
 
 type GameStore = GameStoreState & GameStoreActions;
+
+/**
+ * A failure the client itself raised. Never carries a code - only the server
+ * issues those - and an absent code is never fatal.
+ */
+const clientError = (message: string): GameError => ({ code: null, message });
+
+const caughtError = (error: unknown, fallback: string): GameError =>
+  clientError(error instanceof Error ? error.message : fallback);
 
 export const useGameStore = create<GameStore>()(
   devtools(
@@ -71,6 +95,8 @@ export const useGameStore = create<GameStore>()(
       gameState: null,
       currentGameId: null,
       connected: false,
+      reconnecting: false,
+      connectedUserIds: null,
       socketInitialized: false,
       error: null,
       moveRejection: null,
@@ -84,22 +110,26 @@ export const useGameStore = create<GameStore>()(
 
         const callbacks: SocketCallbacks = {
           onConnect: () => {
-            set({ connected: true, error: null });
+            set({ connected: true, reconnecting: false, error: null });
           },
 
-          onDisconnect: () => {
-            set({ connected: false });
+          // <Game>'s join effect re-joins the room on the next `connected`, so
+          // the board keeps its state here and the server replaces it with a
+          // fresh one on the way back in.
+          onDisconnect: (_reason: string, willReconnect: boolean) => {
+            set({ connected: false, reconnecting: willReconnect });
           },
 
-          onError: (errorMessage: string) => {
-            set({ error: errorMessage });
+          // Only a fatal code drops the room bookkeeping. A transient failure
+          // leaves it alone: the player is still in the game, and forgetting
+          // which one would strand them on a board that no longer knows itself.
+          onError: (error: GameError) => {
+            set({ error });
 
-            if (
-              errorMessage.includes("not found") ||
-              errorMessage.includes("does not exist")
-            ) {
+            if (isFatalErrorCode(error.code)) {
               set({
                 currentGameId: null,
+                connectedUserIds: null,
                 userJoined: false,
                 userLeft: false,
               });
@@ -123,6 +153,7 @@ export const useGameStore = create<GameStore>()(
             set({
               gameState: null,
               currentGameId: null,
+              connectedUserIds: null,
               userJoined: false,
               userLeft: true,
               moveRejection: null,
@@ -147,6 +178,14 @@ export const useGameStore = create<GameStore>()(
             if (data.gameState) {
               set({ gameState: data.gameState });
             }
+          },
+
+          // Presence for a room this client is not looking at must not land on
+          // the board: nothing makes a socket leave its old room when the player
+          // navigates from one game to another.
+          onPresenceUpdated: (data) => {
+            if (data.gameId !== get().currentGameId) return;
+            set({ connectedUserIds: data.connectedUserIds });
           },
 
           // Swap the state in, exactly like every other event here. It arrives
@@ -198,13 +237,16 @@ export const useGameStore = create<GameStore>()(
         try {
           await socketService.connect(token);
         } catch {
-          set({ error: "Failed to connect to game server", socketInitialized: false });
+          set({
+            error: clientError("Failed to connect to game server"),
+            socketInitialized: false,
+          });
         }
       },
 
       disconnectSocket: () => {
         socketService.disconnect();
-        set({ connected: false, socketInitialized: false });
+        set({ connected: false, reconnecting: false, socketInitialized: false });
       },
 
       // Connection actions
@@ -216,7 +258,7 @@ export const useGameStore = create<GameStore>()(
         userId: string
       ): Promise<Game | null> => {
         if (!userId || !socketService.connected) {
-          set({ error: "Not connected to game server" });
+          set({ error: clientError("Not connected to game server") });
           return null;
         }
 
@@ -236,22 +278,21 @@ export const useGameStore = create<GameStore>()(
           get().joinGame(newGame.id, userId);
           return newGame;
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to create game",
-          });
+          set({ error: caughtError(error, "Failed to create game") });
           return null;
         }
       },
 
       joinGame: (gameId: string, userId: string) => {
         if (!userId || !socketService.connected) {
-          set({ error: "Not connected to game server" });
+          set({ error: clientError("Not connected to game server") });
           return;
         }
 
         try {
           set({
             currentGameId: gameId,
+            connectedUserIds: null,
             userJoined: false,
             userLeft: false,
             error: null,
@@ -259,9 +300,7 @@ export const useGameStore = create<GameStore>()(
           });
           socketService.joinGame(gameId);
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to join game",
-          });
+          set({ error: caughtError(error, "Failed to join game") });
         }
       },
 
@@ -284,6 +323,7 @@ export const useGameStore = create<GameStore>()(
             userJoined: false,
             currentGameId: null,
             gameState: null,
+            connectedUserIds: null,
             moveRejection: null,
           });
 
@@ -295,9 +335,7 @@ export const useGameStore = create<GameStore>()(
             socketService.leaveGame(gameId);
           }
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to leave game",
-          });
+          set({ error: caughtError(error, "Failed to leave game") });
         }
       },
 
@@ -308,9 +346,7 @@ export const useGameStore = create<GameStore>()(
         try {
           socketService.moveCard(gameState.id, cardId, fromPileId, toPileId);
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to make move",
-          });
+          set({ error: caughtError(error, "Failed to make move") });
         }
       },
 
@@ -321,9 +357,7 @@ export const useGameStore = create<GameStore>()(
         try {
           socketService.flipCard(gameState.id, pileId);
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to flip card",
-          });
+          set({ error: caughtError(error, "Failed to flip card") });
         }
       },
 
@@ -346,9 +380,7 @@ export const useGameStore = create<GameStore>()(
         try {
           socketService.callBlitz(gameState.id);
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to call blitz",
-          });
+          set({ error: caughtError(error, "Failed to call blitz") });
         }
       },
 
@@ -359,10 +391,7 @@ export const useGameStore = create<GameStore>()(
         try {
           socketService.playerReady(gameState.id, isReady);
         } catch (error) {
-          set({
-            error:
-              error instanceof Error ? error.message : "Failed to set ready status",
-          });
+          set({ error: caughtError(error, "Failed to set ready status") });
         }
       },
 
@@ -373,15 +402,13 @@ export const useGameStore = create<GameStore>()(
         try {
           socketService.startGame(gameState.id);
         } catch (error) {
-          set({
-            error: error instanceof Error ? error.message : "Failed to start game",
-          });
+          set({ error: caughtError(error, "Failed to start game") });
         }
       },
 
       // Util
       clearError: () => set({ error: null }),
-      setError: (error: string | null) => set({ error }),
+      setError: (error: GameError | null) => set({ error }),
       clearMoveRejection: () => set({ moveRejection: null }),
 
       getCurrentPlayer: (userId: string | undefined) => {

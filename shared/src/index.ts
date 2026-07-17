@@ -7,5 +7,6 @@
  * API shapes, UI types) belongs in that side's package.
  */
 export * from "./constants";
+export * from "./errors";
 export * from "./types";
 export * from "./rules";

@@ -23,10 +23,15 @@ const throwApiError = async (response: Response): Promise<never> => {
     body && typeof body === "object" && "message" in body
       ? (body as { message?: unknown }).message
       : undefined;
+  // A route that threads a typed reason puts it in `code`; the rest fall back to
+  // Nest's default body, where `error` holds the HTTP status text. Preferring
+  // `code` is what lets REST and the socket name the same failure the same way.
   const code =
-    body && typeof body === "object" && "error" in body
-      ? (body as { error?: unknown }).error
-      : undefined;
+    body && typeof body === "object" && "code" in body
+      ? (body as { code?: unknown }).code
+      : body && typeof body === "object" && "error" in body
+        ? (body as { error?: unknown }).error
+        : undefined;
 
   // Nest's ValidationPipe returns `message` as a string array; join for display.
   const message = Array.isArray(rawMessage)

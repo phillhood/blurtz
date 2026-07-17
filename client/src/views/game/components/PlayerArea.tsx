@@ -16,6 +16,11 @@ interface PlayerAreaProps {
   isCurrentPlayer: boolean;
   opponentCount: number;
   pendingMoveCardIds?: Set<string>;
+  /**
+   * Whether this player is holding a socket. Defaults to connected: a caller
+   * that knows nothing about presence must not paint everyone as dropped.
+   */
+  isConnected?: boolean;
 }
 
 const PlayerArea: React.FC<PlayerAreaProps> = ({
@@ -23,6 +28,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
   isCurrentPlayer,
   opponentCount,
   pendingMoveCardIds,
+  isConnected = true,
 }) => {
   const { flipDrawPile, callBlitz, gameState } = useGameContext();
   const [showBlurtzButton, setShowBlurtzButton] = useState(false);
@@ -101,15 +107,38 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
           width: "100%",
         }}
       >
-        <PlayerName isOpponent={!isCurrentPlayer}>
-          {player.user.username}
-        </PlayerName>
+        <div style={{ display: "flex", alignItems: "center", gap: "6px" }}>
+          <span
+            aria-hidden="true"
+            style={{
+              width: "8px",
+              height: "8px",
+              borderRadius: "50%",
+              backgroundColor: isConnected ? "#16A34A" : "#DC2626",
+              flexShrink: 0,
+            }}
+          />
+          <PlayerName isOpponent={!isCurrentPlayer}>
+            {player.user.username}
+          </PlayerName>
+          {!isConnected && (
+            <span style={{ fontSize: "0.75rem", color: "#DC2626" }}>
+              Disconnected
+            </span>
+          )}
+        </div>
         <ScoreDisplay isOpponent={!isCurrentPlayer}>
           Score: {player.bankPileCount ?? 0}
         </ScoreDisplay>
       </div>
 
-      <CardArea isOpponent={!isCurrentPlayer} opponentCount={opponentCount}>
+      <CardArea
+        isOpponent={!isCurrentPlayer}
+        opponentCount={opponentCount}
+        // A dropped player's board is still live - the server plays no move for
+        // them, and they may be back mid-round. Dimmed, never hidden.
+        style={{ opacity: isConnected ? 1 : 0.5 }}
+      >
           <DrawPile
             pile={player.deck.drawPile}
             onPileClick={handleDrawPileClick}

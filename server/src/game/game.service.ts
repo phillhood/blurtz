@@ -22,6 +22,7 @@ import {
   scoreRound,
   validateMove,
   GAME_CONSTANTS,
+  SOCKET_ERROR_CODES,
   GameListing,
   GameState,
   MoveResult,
@@ -297,7 +298,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       const existingPlayer = game.players.find((p) => p.userId === userId);
@@ -420,12 +424,18 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       const player = game.players.find((p) => p.user.id === userId);
       if (!player) {
-        throw new NotFoundException("Player not found in this game");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found in this game",
+        });
       }
 
       // A finished game is a RECORD. `Game.winnerPlayerId` is ON DELETE SET NULL
@@ -507,7 +517,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       return this.applyForfeit(tx, game, playerId);
@@ -545,7 +558,10 @@ export class GameService {
 
     const player = game.players.find((p) => p.id === playerId);
     if (!player) {
-      throw new NotFoundException("Player not found in this game");
+      throw new NotFoundException({
+        code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+        message: "Player not found in this game",
+      });
     }
 
     const remainingPlayers = game.players.filter((p) => p.id !== playerId);
@@ -558,6 +574,7 @@ export class GameService {
         data: {
           status: "finished",
           winnerPlayerId: winner.id,
+          roundOverAt: null,
         },
       });
       // A forfeit is a real finish: the winner won it and the forfeiter played
@@ -574,6 +591,7 @@ export class GameService {
         data: {
           status: "finished",
           winnerPlayerId: null,
+          roundOverAt: null,
         },
       });
       // Nobody is left to win it, but the player who was here played it.
@@ -624,7 +642,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "waiting") {
@@ -640,7 +661,10 @@ export class GameService {
       // calls this directly, and `hostId` outlives the host's Player row if
       // leaveGame ever failed to reassign it.
       if (!game.players.some((p) => p.userId === userId)) {
-        throw new ForbiddenException("You are not a player in this game");
+        throw new ForbiddenException({
+          code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+          message: "You are not a player in this game",
+        });
       }
 
       this.assertReadyToDeal(game.players, "start the game");
@@ -694,6 +718,9 @@ export class GameService {
       data: {
         status: "playing",
         currentRound: { increment: 1 },
+        // The interstitial is over, so its deadline must go with it: the sweep
+        // reads this column, and a `playing` game carrying one is a lie.
+        roundOverAt: null,
         // The shared board goes back to empty foundations. Bank piles are
         // per-round: last round's 1-10 runs are scored and gone.
         gameState: initializeGameState() as unknown as object,
@@ -732,7 +759,10 @@ export class GameService {
     });
 
     if (!game) {
-      throw new NotFoundException("Game not found");
+      throw new NotFoundException({
+        code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+        message: "Game not found",
+      });
     }
 
     const gameState = game.gameState as any;
@@ -775,7 +805,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -784,7 +817,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const playerDeck = this.parseDeck(playerId, player.deck);
@@ -826,7 +862,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       // The two states a deal can be waiting on - the only two where readiness
@@ -839,7 +878,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       await tx.player.update({
@@ -865,6 +907,125 @@ export class GameService {
           await this.advanceRound(tx, game);
         }
       }
+    });
+  }
+
+  /**
+   * Has a `round_over` game run out of patience?
+   *
+   * Null is not expired - it is a game that is not in the interstitial at all.
+   */
+  private hasRoundOverExpired(roundOverAt: Date | null): boolean {
+    return (
+      roundOverAt !== null &&
+      Date.now() - roundOverAt.getTime() >= GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS
+    );
+  }
+
+  /**
+   * Games sitting in `round_over` past their ready-up deadline.
+   *
+   * Unlocked and on the pooled client, deliberately: this is a list of
+   * CANDIDATES, not a decision. `resolveRoundOverTimeout` re-reads each one
+   * under the game lock and re-checks the deadline there, so a candidate that
+   * another instance already resolved - or that readied up while this query was
+   * in flight - resolves to nothing.
+   */
+  async findTimedOutRoundOverGames(): Promise<string[]> {
+    const deadline = new Date(Date.now() - GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS);
+    const games = await this.prisma.game.findMany({
+      where: { status: "round_over", roundOverAt: { lte: deadline } },
+      select: { id: true },
+    });
+
+    return games.map((game) => game.id);
+  }
+
+  /**
+   * Resolve a `round_over` game nobody finished readying up: forfeit every
+   * player who never readied, then deal the next round if the players left are
+   * ready for it. Returns null when there was nothing to do.
+   *
+   * This runs on the SAME lock and calls the SAME `advanceRound` as a genuine
+   * final ready-up, and that is the whole point rather than tidiness: a timeout
+   * dealing on a path of its own would double-deal against a real last ready-up
+   * landing at the same instant - the exact race `setPlayerReady` takes the lock
+   * to prevent.
+   *
+   * Readiness is the gate on the round advance, so readiness - not presence - is
+   * what this resolves. A player sat watching the scoreboard without clicking
+   * blocks the table exactly as much as one who closed the tab.
+   */
+  async resolveRoundOverTimeout(gameId: string): Promise<GameState | null> {
+    return this.gameRepository.withGameLock(gameId, async (tx) => {
+      const game = await tx.game.findUnique({
+        where: { id: gameId },
+        // Lowest cumulative score first, because the forfeits run in this order
+        // and the LAST player standing is crowned by `applyForfeit`. When the
+        // whole table walked out that makes the leader the winner - the same
+        // tiebreak `callBlitz` finishes a game on - instead of whoever Postgres
+        // happened to return last.
+        include: { players: { orderBy: [{ score: "asc" }, { id: "asc" }] } },
+      });
+
+      // Re-checked under the lock rather than trusted from the candidate query:
+      // the table may have readied up and dealt itself the next round in
+      // between.
+      if (
+        game.status !== "round_over" ||
+        !this.hasRoundOverExpired(game.roundOverAt)
+      ) {
+        return null;
+      }
+
+      const nonReady = game.players.filter((p) => !p.isReady);
+      if (nonReady.length === 0) {
+        return null;
+      }
+
+      let forfeited = 0;
+      for (const player of nonReady) {
+        // Re-read per forfeit: `applyForfeit` decides the end state from the
+        // players it is handed and the previous pass deleted one of them. Its
+        // own in-progress guard is also what terminates this loop when NOBODY
+        // readied - the second-to-last forfeit finishes the game, and the last
+        // player is not forfeited out of a game that is already over.
+        const current = await tx.game.findUnique({
+          where: { id: gameId },
+          include: { players: { select: { id: true, userId: true } } },
+        });
+
+        if (current.status !== "round_over") {
+          break;
+        }
+
+        await this.applyForfeit(tx, current, player.id);
+        forfeited++;
+      }
+
+      const resolved = await tx.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
+
+      // The forfeits removed exactly the players who were blocking the advance,
+      // so a game still in the interstitial with a quorum left is by
+      // construction all-ready - and deals through the one method that deals.
+      if (
+        resolved.status === "round_over" &&
+        resolved.players.length >= GAME_CONSTANTS.MIN_PLAYERS &&
+        resolved.players.every((p) => p.isReady)
+      ) {
+        await this.advanceRound(tx, resolved);
+      }
+
+      const state = await this.readGameState(tx, gameId);
+      this.logger.log(
+        `Game ${gameId} timed out in round_over - forfeited ${forfeited} ` +
+          `player(s) who never readied, now ${state.status}`
+      );
+
+      return state;
     });
   }
 
@@ -903,7 +1064,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -912,7 +1076,10 @@ export class GameService {
 
       const callingPlayer = game.players.find((p) => p.id === playerId);
       if (!callingPlayer) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const callingPlayerDeck = this.parseDeck(playerId, callingPlayer.deck);
@@ -978,6 +1145,10 @@ export class GameService {
           // would make every between-rounds scoreboard claim the game was
           // already decided.
           winnerPlayerId: isFinished ? winnerPlayerId : null,
+          // The interstitial starts HERE, so this is the only place that can
+          // honestly say when. `resolveRoundOverTimeout` measures its deadline
+          // from it.
+          roundOverAt: isFinished ? null : new Date(),
         },
       });
 
@@ -1039,7 +1210,10 @@ export class GameService {
       });
 
       if (!game) {
-        throw new NotFoundException("Game not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.GAME_NOT_FOUND,
+          message: "Game not found",
+        });
       }
 
       if (game.status !== "playing") {
@@ -1048,7 +1222,10 @@ export class GameService {
 
       const player = game.players.find((p) => p.id === playerId);
       if (!player) {
-        throw new NotFoundException("Player not found");
+        throw new NotFoundException({
+          code: SOCKET_ERROR_CODES.PLAYER_NOT_FOUND,
+          message: "Player not found",
+        });
       }
 
       const playerDeck = this.parseDeck(playerId, player.deck);

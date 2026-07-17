@@ -3,12 +3,22 @@ import { io, Socket } from "socket.io-client";
 // listens for and the name the server emits are the same constant rather than
 // two hand-synced copies.
 import { SOCKET_EVENTS } from "@blurtz/shared";
-import { GameState, Player } from "@types";
+import { GameError, GameState, Player } from "@types";
 
 export interface SocketCallbacks {
   onConnect?: () => void;
-  onDisconnect?: (reason: string) => void;
-  onError?: (error: string) => void;
+  /**
+   * The socket went down. `willReconnect` is socket.io's own `socket.active` -
+   * true for a dropped transport it is about to retry, false when either side
+   * closed the connection deliberately. It is the difference between "hold on"
+   * and "you are done here".
+   */
+  onDisconnect?: (reason: string, willReconnect: boolean) => void;
+  /**
+   * Something failed. Carries the server's `code` so the store can classify it
+   * without reading the message; a failure this client raised itself has none.
+   */
+  onError?: (error: GameError) => void;
   onGameJoined?: (gameState: GameState) => void;
   onGameLeft?: (gameId: string) => void;
   onGameStateUpdated?: (gameState: GameState) => void;
@@ -36,7 +46,19 @@ export interface SocketCallbacks {
     calledBy?: string;
   }) => void;
   onPlayerJoined?: (data: { gameState?: GameState; userId: string }) => void;
+  /**
+   * A player genuinely left - their Player row is gone. A player who merely
+   * dropped does NOT arrive here; they arrive on `onPresenceUpdated`.
+   */
   onPlayerLeft?: (data: { gameState?: GameState; userId: string }) => void;
+  /**
+   * Who currently holds a socket in the game's room. Always the whole set, so a
+   * frame that arrives late corrects everything rather than half of it.
+   */
+  onPresenceUpdated?: (data: {
+    gameId: string;
+    connectedUserIds: string[];
+  }) => void;
   onCardMoved?: (gameState: GameState) => void;
   /**
    * The server refused this client's move. Carries state, so the board can be
@@ -61,6 +83,8 @@ class SocketService {
   private callbacks: SocketCallbacks = {};
   private isConnected = false;
   private connectionPromise: Promise<Socket> | null = null; // Add this
+  /** Whether the INITIAL connect has resolved one way or the other. */
+  private settled = false;
 
   connect(token: string): Promise<Socket> {
     if (this.connectionPromise) {
@@ -77,11 +101,18 @@ class SocketService {
         this.socket.close();
       }
 
+      this.settled = false;
+
       this.socket = io(`http://${window.location.hostname}:3031`, {
         auth: { token },
         transports: ["websocket", "polling"],
         reconnection: true,
-        reconnectionAttempts: 3,
+        // For as long as the tab is open. Socket.IO backs the delay off to
+        // `reconnectionDelayMax`, so even a long outage costs about six attempts
+        // a minute - and a finite cap silently strands a player whose train went
+        // into a tunnel in a game they are still in, with no way back but a
+        // refresh they have no reason to know about.
+        reconnectionAttempts: Infinity,
         reconnectionDelay: 2000,
         reconnectionDelayMax: 10000,
         timeout: 10000,
@@ -90,8 +121,11 @@ class SocketService {
 
       this.setupEventListeners();
 
+      // Fires again on every reconnect, not just the first connect - which is
+      // what re-arms `connected` after a drop. Resolving twice is a no-op.
       this.socket.on("connect", () => {
         this.isConnected = true;
+        this.settled = true;
         this.connectionPromise = null;
         this.callbacks.onConnect?.();
         resolve(this.socket!);
@@ -100,8 +134,18 @@ class SocketService {
       this.socket.on("connect_error", (err) => {
         console.error("Socket connection error:", err);
         this.isConnected = false;
+
+        // A failed RETRY is not news: the reconnecting state already says so,
+        // and the manager retries for as long as the tab is open - reporting
+        // each one would put an error toast on screen every ten seconds forever.
+        if (this.settled) return;
+
+        this.settled = true;
         this.connectionPromise = null;
-        this.callbacks.onError?.("Failed to connect to game server");
+        this.callbacks.onError?.({
+          code: null,
+          message: "Failed to connect to game server",
+        });
         reject(err);
       });
 
@@ -117,7 +161,9 @@ class SocketService {
 
     this.socket.on("disconnect", (reason) => {
       this.isConnected = false;
-      this.callbacks.onDisconnect?.(reason);
+      // `socket.active` is socket.io's own answer to "am I about to retry?".
+      // Reading it beats matching on `reason`: the manager decides, not us.
+      this.callbacks.onDisconnect?.(reason, this.socket?.active === true);
     });
 
     this.socket.on(
@@ -180,6 +226,13 @@ class SocketService {
     );
 
     this.socket.on(
+      SOCKET_EVENTS.PRESENCE_UPDATED,
+      (data: { gameId: string; connectedUserIds: string[] }) => {
+        this.callbacks.onPresenceUpdated?.(data);
+      }
+    );
+
+    this.socket.on(
       SOCKET_EVENTS.CARD_MOVED,
       (data: { gameState: GameState }) => {
         this.callbacks.onCardMoved?.(data.gameState);
@@ -211,10 +264,19 @@ class SocketService {
       }
     );
 
-    this.socket.on(SOCKET_EVENTS.ERROR, (data: { message: string }) => {
-      console.error("Game error:", data.message);
-      this.callbacks.onError?.(data.message);
-    });
+    // `code` is passed through unvalidated on purpose: a code this build does
+    // not know is still a code, and the store already treats anything outside
+    // its fatal list as transient.
+    this.socket.on(
+      SOCKET_EVENTS.ERROR,
+      (data: { code?: string; message: string }) => {
+        console.error("Game error:", data.code, data.message);
+        this.callbacks.onError?.({
+          code: data.code ?? null,
+          message: data.message,
+        });
+      }
+    );
   }
 
   setCallbacks(callbacks: SocketCallbacks) {
@@ -228,6 +290,7 @@ class SocketService {
       this.socket = null;
       this.isConnected = false;
       this.connectionPromise = null;
+      this.settled = false;
       this.callbacks = {};
     }
   }

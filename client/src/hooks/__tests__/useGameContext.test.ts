@@ -3,6 +3,7 @@ import { renderHook, act } from "@testing-library/react";
 import { useGameContext } from "../useGameContext";
 import { useAuthStore, useGameStore } from "@stores";
 import { GameState, User } from "@types";
+import { SOCKET_ERROR_CODES } from "@blurtz/shared";
 
 vi.mock("@services/socket.service", () => ({
   socketService: {
@@ -231,16 +232,17 @@ describe("useGameContext", () => {
   it("exposes the two error channels separately", () => {
     // <Game> judges fatality off `error` alone. If this hook merged them, a
     // refused move would take the board down.
-    useGameStore.setState({ error: "Game not found", moveRejection: "bad pile" });
+    const error = { code: SOCKET_ERROR_CODES.GAME_NOT_FOUND, message: "Game not found" };
+    useGameStore.setState({ error, moveRejection: "bad pile" });
 
     const { result } = renderHook(() => useGameContext());
 
-    expect(result.current.error).toBe("Game not found");
+    expect(result.current.error).toBe(error);
     expect(result.current.moveRejection).toBe("bad pile");
 
     act(() => result.current.clearMoveRejection());
     expect(useGameStore.getState().moveRejection).toBeNull();
-    expect(useGameStore.getState().error).toBe("Game not found");
+    expect(useGameStore.getState().error).toBe(error);
 
     act(() => result.current.clearError());
     expect(useGameStore.getState().error).toBeNull();

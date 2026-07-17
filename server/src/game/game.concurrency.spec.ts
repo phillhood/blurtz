@@ -9,6 +9,7 @@ import {
   Card,
   CARD_COLORS,
   CARD_VALUES,
+  GAME_CONSTANTS,
   MoveResult,
   Pile,
   PlayerDeck,
@@ -1044,6 +1045,283 @@ describe("GameService concurrency (real database)", () => {
       expect(after.players).toHaveLength(2);
       expect(after.status).toBe("finished");
       expect(after.hostId).toBe(winner.id);
+    });
+  });
+
+  // The round-over ready-up timeout, on a real database because that is where
+  // the deadline lives. Every game here has its `roundOverAt` seeded directly
+  // and no timer is ever armed in this process - which is not a shortcut but the
+  // design: what resolves these games is a column, so a restarted server
+  // resolves them too.
+  describe("a round_over game nobody readies up", () => {
+    const EXPIRED = GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS + 1000;
+    const FRESH = 1000;
+
+    /**
+     * A round_over game whose interstitial started `ageMs` ago, one player per
+     * spec. The first player is the host.
+     */
+    async function seedTimedOut(
+      ageMs: number,
+      specs: Array<{ isReady: boolean; score: number }>
+    ) {
+      const users = [];
+      for (let i = 0; i < specs.length; i++) {
+        users.push(await makeUser(`timeout-${i}`));
+      }
+
+      const game = await prisma.game.create({
+        data: {
+          name: TEST_TAG,
+          alias: uuidv4().slice(0, 8).toUpperCase(),
+          maxPlayers: 4,
+          status: "round_over",
+          targetScore: 100,
+          currentRound: 1,
+          hostId: users[0].id,
+          roundOverAt: new Date(Date.now() - ageMs),
+          gameState: { bankPiles: [] },
+        },
+      });
+
+      const players = [];
+      for (let i = 0; i < specs.length; i++) {
+        players.push(
+          await prisma.player.create({
+            data: {
+              userId: users[i].id,
+              gameId: game.id,
+              deck: JSON.parse(JSON.stringify(buildDeck().deck)),
+              isReady: specs[i].isReady,
+              score: specs[i].score,
+            },
+          })
+        );
+      }
+
+      return { gameId: game.id, players, users };
+    }
+
+    async function readGame(gameId: string) {
+      return prisma.game.findUnique({
+        where: { id: gameId },
+        include: { players: true },
+      });
+    }
+
+    it("is left alone before its deadline, by the sweep and under the lock", async () => {
+      const { gameId } = await seedTimedOut(FRESH, [
+        { isReady: true, score: 5 },
+        { isReady: false, score: 3 },
+      ]);
+
+      expect(await service.findTimedOutRoundOverGames()).not.toContain(gameId);
+      // Not just absent from the candidate list - refused outright, so a stale
+      // candidate id cannot forfeit anyone early either.
+      expect(await service.resolveRoundOverTimeout(gameId)).toBeNull();
+
+      const game = await readGame(gameId);
+      expect(game.status).toBe("round_over");
+      expect(game.players).toHaveLength(2);
+    });
+
+    it("forfeits the player who never readied and deals for the ones who did", async () => {
+      const { gameId, players } = await seedTimedOut(EXPIRED, [
+        { isReady: true, score: 5 },
+        { isReady: true, score: 4 },
+        { isReady: false, score: 3 },
+      ]);
+
+      expect(await service.findTimedOutRoundOverGames()).toContain(gameId);
+      expect(await service.resolveRoundOverTimeout(gameId)).not.toBeNull();
+
+      const game = await readGame(gameId);
+      expect(game.status).toBe("playing");
+      expect(game.currentRound).toBe(2);
+      expect(game.roundOverAt).toBeNull();
+      expect(game.players.map((p) => p.id).sort()).toEqual(
+        [players[0].id, players[1].id].sort()
+      );
+
+      // Dealt through `advanceRound` like any other round: whole decks, and
+      // readiness consumed.
+      for (const player of game.players) {
+        expect(countDeckCards(player.deck as unknown as PlayerDeck)).toBe(
+          CARDS_PER_PLAYER
+        );
+        expect(player.isReady).toBe(false);
+      }
+    });
+
+    it("ends a two-player game with the player who readied as the winner", async () => {
+      // The vanisher is AHEAD on score: a forfeit is a loss regardless.
+      const { gameId, players, users } = await seedTimedOut(EXPIRED, [
+        { isReady: true, score: 8 },
+        { isReady: false, score: 12 },
+      ]);
+
+      await service.resolveRoundOverTimeout(gameId);
+
+      const game = await readGame(gameId);
+      expect(game.status).toBe("finished");
+      expect(game.winnerPlayerId).toBe(players[0].id);
+      expect(game.players.map((p) => p.id)).toEqual([players[0].id]);
+      expect(game.roundOverAt).toBeNull();
+
+      // A game that was really played and really decided, credited like one.
+      const dbUsers = await prisma.user.findMany({
+        where: { id: { in: users.map((u) => u.id) } },
+      });
+      expect(dbUsers.every((u) => u.gamesPlayed === 1)).toBe(true);
+      expect(dbUsers.find((u) => u.id === users[0].id).gamesWon).toBe(1);
+      expect(dbUsers.find((u) => u.id === users[1].id).gamesWon).toBe(0);
+    });
+
+    it("forfeits every non-ready player and reassigns a host that leaves with them", async () => {
+      const { gameId, players } = await seedTimedOut(EXPIRED, [
+        // The host, and one of the two who never readied.
+        { isReady: false, score: 7 },
+        { isReady: true, score: 9 },
+        { isReady: true, score: 5 },
+        { isReady: false, score: 2 },
+      ]);
+
+      await service.resolveRoundOverTimeout(gameId);
+
+      const game = await readGame(gameId);
+      // Two forfeits, and the two who readied play on - so the round advances
+      // rather than the game ending.
+      expect(game.players.map((p) => p.id).sort()).toEqual(
+        [players[1].id, players[2].id].sort()
+      );
+      expect(game.status).toBe("playing");
+      expect(game.currentRound).toBe(2);
+      expect(game.players.map((p) => p.userId)).toContain(game.hostId);
+    });
+
+    it("terminates when nobody readies at all, leaving the leader standing", async () => {
+      const { gameId, players } = await seedTimedOut(EXPIRED, [
+        { isReady: false, score: 4 },
+        { isReady: false, score: 20 },
+        { isReady: false, score: 11 },
+      ]);
+
+      await service.resolveRoundOverTimeout(gameId);
+
+      const game = await readGame(gameId);
+      // It ENDS. The forfeits run lowest score first, so the player who was
+      // leading is the one `applyForfeit` is left holding - the same tiebreak a
+      // Blitz finishes a game on, rather than Postgres' row order.
+      expect(game.status).toBe("finished");
+      expect(game.winnerPlayerId).toBe(players[1].id);
+      expect(game.players.map((p) => p.id)).toEqual([players[1].id]);
+
+      // And it stays ended: nothing left for the next sweep to pick up, so this
+      // cannot loop.
+      expect(await service.findTimedOutRoundOverGames()).not.toContain(gameId);
+      expect(await service.resolveRoundOverTimeout(gameId)).toBeNull();
+    });
+
+    // The restart question. Nothing in this process scheduled anything for this
+    // game, and the service that resolves it below did not exist when the game
+    // expired - which is what a restarted server is.
+    it("is resolved by a service that did not exist when it timed out", async () => {
+      const { gameId } = await seedTimedOut(EXPIRED, [
+        { isReady: true, score: 1 },
+        { isReady: false, score: 0 },
+      ]);
+
+      const restarted = await Test.createTestingModule({
+        providers: [GameService, GameRepository, PrismaService, UserService],
+      }).compile();
+
+      try {
+        const restartedService = restarted.get(GameService);
+        expect(await restartedService.findTimedOutRoundOverGames()).toContain(
+          gameId
+        );
+        const state = await restartedService.resolveRoundOverTimeout(gameId);
+        expect(state.status).toBe("finished");
+      } finally {
+        await restarted.close();
+      }
+    });
+
+    // THE race this whole design is shaped around. The timeout deals and so does
+    // a genuine last ready-up, so they must serialize on the game row exactly as
+    // two ready-ups do - which is why the timeout goes through `withGameLock`
+    // and `advanceRound` rather than dealing on a path of its own.
+    it("deals the next round exactly once when the timeout races a last ready-up", async () => {
+      // Two players ready. The third is who the timeout is coming for - and who
+      // clicks Ready at the last possible instant.
+      const { gameId, players } = await seedTimedOut(EXPIRED, [
+        { isReady: true, score: 9 },
+        { isReady: true, score: 5 },
+        { isReady: false, score: 3 },
+      ]);
+      const straggler = players[2].id;
+
+      // Hold the ready-up inside its transaction - straggler written ready, at
+      // the deal, not yet committed - and open the timeout in that window.
+      //
+      // Fired with a bare Promise.all these two rarely overlap at all: the
+      // first commits while the second is still opening a connection, and the
+      // test then passes with the lock taken straight out. A race that does not
+      // race is not a test.
+      let reached: () => void;
+      let release: () => void;
+      const atTheDeal = new Promise<void>((resolve) => (reached = resolve));
+      const held = new Promise<void>((resolve) => (release = resolve));
+
+      const realDealDecks = (service as any).dealDecks.bind(service);
+      const spy = jest
+        .spyOn(service as any, "dealDecks")
+        .mockImplementation(async (...args: unknown[]) => {
+          reached();
+          await held;
+          return realDealDecks(...args);
+        });
+
+      let readyUp: PromiseSettledResult<void>;
+      try {
+        const readyUpCall = service.setPlayerReady(gameId, straggler, true);
+        await atTheDeal;
+
+        const timeoutCall = service.resolveRoundOverTimeout(gameId);
+        // Ample time for the timeout to read the table and forfeit off that
+        // read, which is precisely what it does when no lock holds it back.
+        await new Promise((resolve) => setTimeout(resolve, 250));
+        release();
+
+        [readyUp] = await Promise.allSettled([readyUpCall, timeoutCall]);
+      } finally {
+        spy.mockRestore();
+      }
+
+      const game = await readGame(gameId);
+
+      // The ready-up held the lock, so it deals and the timeout can only find a
+      // `playing` game and do nothing.
+      expect(readyUp.status).toBe("fulfilled");
+
+      // The straggler readied in time. Unlocked, the timeout forfeits them off
+      // its stale read anyway - deleting a player out of a live round holding a
+      // deck that was just dealt to them.
+      expect(game.players).toHaveLength(3);
+      expect(game.players.map((p) => p.id)).toContain(straggler);
+
+      // Dealt EXACTLY once: two advances put this at round 3.
+      expect(game.currentRound).toBe(2);
+      expect(game.status).toBe("playing");
+      expect(game.roundOverAt).toBeNull();
+
+      // One whole deck each - not a deck dealt twice, and not a torn half-deal.
+      for (const player of game.players) {
+        const deck = player.deck as unknown as PlayerDeck;
+        expect(countDeckCards(deck)).toBe(CARDS_PER_PLAYER);
+        expect(deck.blurtzPile.cards).toHaveLength(10);
+        expect(player.isReady).toBe(false);
+      }
     });
   });
 

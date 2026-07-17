@@ -9,13 +9,14 @@ import {
 } from "@nestjs/websockets";
 import { ForbiddenException, Logger, UnauthorizedException } from "@nestjs/common";
 import { JwtService } from "@nestjs/jwt";
+import { Interval } from "@nestjs/schedule";
 import { Server, Socket } from "socket.io";
 import { GameService } from "./game.service";
 // Shared with the client, which is what makes "the client listens for the name
 // the server emits" a compile-time fact rather than two copies to keep in step.
-import { toClientGameState, SOCKET_EVENTS } from "@blurtz/shared";
+import { toClientGameState, SOCKET_EVENTS, SOCKET_ERROR_CODES } from "@blurtz/shared";
 import { validateWsPayload } from "@utils";
-import { getErrorMessage } from "@utils/error-handler";
+import { getErrorMessage, getErrorCode } from "@utils/error-handler";
 import {
   JoinRoomDto,
   LeaveRoomDto,
@@ -26,6 +27,15 @@ import {
   PlayerReadyDto,
   ForfeitGameDto,
 } from "./dto";
+
+/**
+ * How often the round-over deadline is swept for. NOT the deadline itself
+ * (`GAME_CONSTANTS.ROUND_OVER_TIMEOUT_MS`, which is shared because the client
+ * may count it down) - it is only the resolution the deadline is noticed at, so
+ * a timeout lands somewhere in [90s, 90s + this]. Server-local: how often we
+ * poll is nobody else's business.
+ */
+const ROUND_OVER_SWEEP_MS = 10000;
 
 /**
  * Per-socket state, stored in Socket.IO's official `data` bag.
@@ -39,11 +49,25 @@ interface SocketData {
   gameId?: string;
 }
 
+/**
+ * `pingInterval`/`pingTimeout` are what decide how long a drop stays invisible.
+ *
+ * A player who loses their network sends no FIN - the socket just goes quiet -
+ * so the heartbeat is the ONLY thing that notices, and presence cannot be
+ * broadcast until it does. Engine.IO's defaults (25s + 20s) put that at 45
+ * seconds, which is most of a Nertz round: the opponents would spend it
+ * watching a live board that nobody is behind.
+ *
+ * 10s + 10s bounds it at 20. Lower detects faster but starts calling a briefly
+ * throttled background tab dead, and a false drop is worse than a slow one.
+ */
 @WebSocketGateway({
   cors: {
     origin: ["http://localhost:3000", "http://localhost:3030"],
     credentials: true,
   },
+  pingInterval: 10000,
+  pingTimeout: 10000,
 })
 export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
   @WebSocketServer()
@@ -71,6 +95,101 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
    */
   private async clientGameState(gameId: string) {
     return toClientGameState(await this.gameService.getGameState(gameId));
+  }
+
+  /**
+   * Who is holding a socket in `gameId`, right now.
+   *
+   * Presence is DERIVED from room membership rather than stored: a column would
+   * need cleaning up after a crash and would lie after a restart, and an
+   * in-memory map would be wrong the moment a second instance existed. The Redis
+   * adapter makes `fetchSockets()` span every instance, so the room is already
+   * the answer.
+   *
+   * Deduplicated: two tabs are one player.
+   */
+  private async connectedUserIds(gameId: string): Promise<string[]> {
+    const sockets = await this.server.in(gameId).fetchSockets();
+    const userIds = sockets
+      .map((socket) => (socket.data as SocketData).userId)
+      .filter((userId) => Boolean(userId));
+
+    return [...new Set(userIds)];
+  }
+
+  /**
+   * Tell the room who is connected - the whole set, never a delta. It is at most
+   * four ids, and a set that arrives late still corrects itself where a missed
+   * delta stays wrong forever.
+   */
+  private async broadcastPresence(gameId: string) {
+    this.server.to(gameId).emit(SOCKET_EVENTS.PRESENCE_UPDATED, {
+      gameId,
+      connectedUserIds: await this.connectedUserIds(gameId),
+      timestamp: new Date(),
+    });
+  }
+
+  /**
+   * Resolve every `round_over` game that has run out its ready-up deadline.
+   *
+   * A poll, not a `setTimeout` per game, and both halves of that are the point.
+   * An in-process timer dies with the process - leaving the frozen table this
+   * exists to unfreeze frozen forever, which is the very bug - and it would fire
+   * once per INSTANCE. The deadline is read back off the database instead, so a
+   * restart resumes it, and `withGameLock` makes a second instance's sweep
+   * block, re-read, and find nothing left to do.
+   *
+   * It lives on the gateway because its only output is a broadcast. Nobody made
+   * a request, so there is no handler to hand state back to: `this.server` -
+   * which the Redis adapter makes span every instance - is how the table finds
+   * out its round moved on without it. State is redacted here like everywhere
+   * else in this file.
+   */
+  @Interval(ROUND_OVER_SWEEP_MS)
+  async sweepRoundOverTimeouts() {
+    let gameIds: string[];
+
+    try {
+      gameIds = await this.gameService.findTimedOutRoundOverGames();
+    } catch (error) {
+      this.logger.warn(`Round-over sweep failed: ${getErrorMessage(error)}`);
+      return;
+    }
+
+    for (const gameId of gameIds) {
+      try {
+        const state = await this.gameService.resolveRoundOverTimeout(gameId);
+
+        // Null is the normal outcome of losing the race: another instance
+        // resolved it, or the table readied up under the lock. Nothing happened,
+        // so nothing is announced.
+        if (!state) {
+          continue;
+        }
+
+        const gameState = toClientGameState(state);
+
+        this.server.to(gameId).emit(SOCKET_EVENTS.GAME_STATE_UPDATED, {
+          gameState,
+          timestamp: new Date(),
+        });
+
+        if (gameState.status === "finished") {
+          this.server.to(gameId).emit(SOCKET_EVENTS.GAME_ENDED, {
+            gameState,
+            reason: "timeout",
+            winner: gameState.players.find((p) => p.id === gameState.winner),
+            timestamp: new Date(),
+          });
+        }
+      } catch (error) {
+        // One wedged game must not stop the sweep resolving every other one.
+        this.logger.warn(
+          `Round-over timeout for game ${gameId} failed: ${getErrorMessage(error)}`
+        );
+      }
+    }
   }
 
   /**
@@ -103,17 +222,21 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     }
   }
 
-  handleDisconnect(client: Socket) {
+  /**
+   * A drop, not a departure. The Player row survives and `joinGame` returns
+   * early for an existing player, so the same user rejoins and plays on - which
+   * is why this emits PRESENCE_UPDATED and NOT `PLAYER_LEFT`: nobody left, and
+   * saying they did would end their game for every other client.
+   *
+   * Socket.IO removes a socket from its rooms before it fires `disconnect`, so
+   * the set read here already excludes this one.
+   */
+  async handleDisconnect(client: Socket) {
     const { userId, gameId } = client.data as SocketData;
 
     if (gameId && userId) {
       this.logger.log(`Socket disconnected: user ${userId} from game ${gameId}`);
-      client.leave(gameId);
-
-      this.server.to(gameId).emit(SOCKET_EVENTS.PLAYER_LEFT, {
-        userId,
-        timestamp: new Date(),
-      });
+      await this.broadcastPresence(gameId);
     }
   }
 
@@ -125,7 +248,10 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const { userId } = client.data as SocketData;
 
     if (!userId) {
-      throw new UnauthorizedException("Not authenticated");
+      throw new UnauthorizedException({
+        code: SOCKET_ERROR_CODES.UNAUTHENTICATED,
+        message: "Not authenticated",
+      });
     }
 
     return userId;
@@ -144,10 +270,29 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
     const playerId = await this.gameService.getPlayerIdForUser(gameId, userId);
 
     if (!playerId) {
-      throw new ForbiddenException("You are not a player in this game");
+      throw new ForbiddenException({
+        code: SOCKET_ERROR_CODES.NOT_A_PLAYER,
+        message: "You are not a player in this game",
+      });
     }
 
     return playerId;
+  }
+
+  /**
+   * Report a failed operation to the socket that caused it.
+   *
+   * `code` is what the client branches on; `message` is only ever displayed. The
+   * two must not swap roles - a client that reads meaning out of a message is
+   * one server-side rename away from ejecting a player mid-game.
+   */
+  private emitError(client: Socket, context: string, error: unknown) {
+    this.logger.warn(`${context}: ${getErrorMessage(error)}`);
+    client.emit(SOCKET_EVENTS.ERROR, {
+      code: getErrorCode(error),
+      message: getErrorMessage(error),
+      timestamp: new Date(),
+    });
   }
 
   @SubscribeMessage(SOCKET_EVENTS.JOIN_ROOM)
@@ -161,8 +306,22 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
       // receiving every broadcast.
       await this.gameService.joinGame(gameId, userId);
 
+      // One socket survives navigation between games. Staying in the old room
+      // would keep delivering that game's broadcasts, and the client swaps
+      // `gameState` wholesale on every one - so the abandoned game would
+      // overwrite the board of the game actually on screen.
+      const previousGameId = (client.data as SocketData).gameId;
+      const movedRooms = previousGameId && previousGameId !== gameId;
+      if (movedRooms) {
+        await client.leave(previousGameId);
+      }
+
       await client.join(gameId);
       (client.data as SocketData).gameId = gameId;
+
+      if (movedRooms) {
+        await this.broadcastPresence(previousGameId);
+      }
 
       const gameState = await this.clientGameState(gameId);
 
@@ -176,12 +335,12 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         gameState,
         timestamp: new Date(),
       });
+
+      // To the room, which now includes this socket: the joiner needs the
+      // CURRENT set, not only the changes that happen after it arrives.
+      await this.broadcastPresence(gameId);
     } catch (error) {
-      this.logger.warn(`Join room failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Join room failed", error);
     }
   }
 
@@ -217,11 +376,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Leave room failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Leave room failed", error);
     }
   }
 
@@ -243,11 +398,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Start game failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Start game failed", error);
     }
   }
 
@@ -296,11 +447,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Move card failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Move card failed", error);
     }
   }
 
@@ -320,11 +467,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Flip card failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Flip card failed", error);
     }
   }
 
@@ -375,11 +518,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         });
       }
     } catch (error) {
-      this.logger.warn(`Call blitz failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Call blitz failed", error);
     }
   }
 
@@ -401,11 +540,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Player ready failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Player ready failed", error);
     }
   }
 
@@ -440,11 +575,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         timestamp: new Date(),
       });
     } catch (error) {
-      this.logger.warn(`Forfeit game failed: ${getErrorMessage(error)}`);
-      client.emit(SOCKET_EVENTS.ERROR, {
-        message: getErrorMessage(error),
-        timestamp: new Date(),
-      });
+      this.emitError(client, "Forfeit game failed", error);
     }
   }
 }
