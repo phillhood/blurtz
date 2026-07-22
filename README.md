@@ -16,3 +16,8 @@ make down  # Stop services
 ```
 
 Client runs on `:3030`, server on `:3031`.
+
+## Contributing
+
+Conventions for branches, commits, comments, testing, and docs live in
+[`CONTRIBUTING.md`](./CONTRIBUTING.md).
