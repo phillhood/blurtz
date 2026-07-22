@@ -1,8 +1,8 @@
 # Contributing to Blurtz
 
 The committed, canonical home for the repo's conventions. Two things live elsewhere on purpose:
-codebase architecture and agent-specific navigation are in `CLAUDE.md` (local, gitignored), and
-active planning — phase plans, specs, handoffs — is in `.dev/` (local, gitignored).
+codebase architecture and agent-specific navigation are in `CLAUDE.md` (committed), and active
+planning — phase plans, specs, handoffs — is in `.dev/` (local, gitignored).
 
 ## Branches
 
@@ -85,7 +85,7 @@ cannot fail is not a test. The existing gates stay green.
 |---|---|---|---|
 | `README.md` | yes | what Blurtz is + how to run it | the stack or run steps change |
 | `CONTRIBUTING.md` | yes | these conventions | a convention changes |
-| `CLAUDE.md` | no (gitignored) | architecture deep-dive, codebase facts, agent traps | you change architecture it describes |
+| `CLAUDE.md` | yes | architecture deep-dive, codebase facts, agent traps | you change architecture it describes |
 | `.dev/` | no (gitignored) | ephemeral planning: phase plans, specs, handoffs | per phase; not committed by design |
 
 - **Keep `README` and `CONTRIBUTING` free of ephemeral state** (status, phase progress) — that lives
