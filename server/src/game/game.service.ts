@@ -259,13 +259,16 @@ export class GameService {
         status: "waiting",
         hostId: userId,
         gameState: initializeGameState() as unknown as object,
+        // Seat the host in the same write: a separate join could throw after the
+        // game row committed, stranding an empty game. The id is not public yet,
+        // so this needs no lock and no full-join validation.
+        players: {
+          create: { userId, deck: null, isReady: false, score: 0 },
+        },
       },
     });
 
     this.logger.log(`Game created: ${savedGame.id} (${alias}) by user ${userId}`);
-
-    // The host is always allowed into their own game, private or not.
-    await this.joinGame(savedGame.id, userId, { allowPrivate: true });
 
     return savedGame;
   }
