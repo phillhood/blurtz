@@ -148,3 +148,31 @@ export interface MoveCardEvent {
   fromPosition: number;
   toPosition: number;
 }
+
+export interface MatchHistoryItem {
+  gameId: string;
+  name: string;
+  playedAt: string; // ISO timestamp (game.createdAt)
+  targetScore: number;
+  rounds: number; // rounds played (game.currentRound)
+  players: { username: string; finalScore: number }[]; // sorted by finalScore desc
+  myScore: number;
+  won: boolean;
+}
+
+export interface GameRoundResult {
+  username: string;
+  roundScore: number;
+  cumulativeScore: number;
+  bankPileCount: number;
+  blurtzRemaining: number;
+  calledBlurtz: boolean;
+}
+
+export interface GameResultsDetail {
+  gameId: string;
+  name: string;
+  targetScore: number;
+  winnerUsername: string | null;
+  rounds: { round: number; results: GameRoundResult[] }[];
+}
