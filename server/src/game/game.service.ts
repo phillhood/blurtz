@@ -177,14 +177,14 @@ export class GameService {
   async getAvailableGames(): Promise<GameListing[]> {
     const games = await this.prisma.game.findMany({
       where: { status: "waiting", isPrivate: false },
-      include: {
-        players: {
-          include: {
-            user: {
-              select: { id: true, username: true },
-            },
-          },
-        },
+      select: {
+        id: true,
+        name: true,
+        alias: true,
+        maxPlayers: true,
+        status: true,
+        createdAt: true,
+        _count: { select: { players: true } },
       },
     });
 
@@ -193,7 +193,7 @@ export class GameService {
       name: game.name,
       alias: game.alias,
       maxPlayers: game.maxPlayers,
-      currentPlayers: game.players.length,
+      currentPlayers: game._count.players,
       status: game.status,
       createdAt: game.createdAt,
     }));
@@ -219,14 +219,14 @@ export class GameService {
         status: { in: ["waiting", "starting", "playing", "round_over", "paused"] },
         id: { in: gameIds },
       },
-      include: {
-        players: {
-          include: {
-            user: {
-              select: { id: true, username: true },
-            },
-          },
-        },
+      select: {
+        id: true,
+        name: true,
+        alias: true,
+        maxPlayers: true,
+        status: true,
+        createdAt: true,
+        _count: { select: { players: true } },
       },
     });
 
@@ -235,7 +235,7 @@ export class GameService {
       name: game.name,
       alias: game.alias,
       maxPlayers: game.maxPlayers,
-      currentPlayers: game.players.length,
+      currentPlayers: game._count.players,
       status: game.status,
       createdAt: game.createdAt,
     }));

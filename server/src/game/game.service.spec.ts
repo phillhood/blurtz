@@ -1574,6 +1574,29 @@ describe("GameService", () => {
     });
   });
 
+  describe("lobby queries - getAvailableGames and getActiveGames", () => {
+    it("counts lobby players without selecting player rows", async () => {
+      (prismaService.game.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "g1",
+          name: "G",
+          alias: "AAA111",
+          maxPlayers: 4,
+          status: "waiting",
+          createdAt: new Date(),
+          _count: { players: 2 },
+        },
+      ]);
+
+      const listings = await service.getAvailableGames();
+
+      const arg = (prismaService.game.findMany as jest.Mock).mock.calls[0][0];
+      expect(arg.select._count).toEqual({ select: { players: true } });
+      expect(arg.include).toBeUndefined();
+      expect(listings[0]).toMatchObject({ id: "g1", currentPlayers: 2 });
+    });
+  });
+
   describe("game stats on a forfeit", () => {
     it("credits the winner and the forfeiter when a forfeit ends the game", async () => {
       (prismaService.game.findUnique as jest.Mock).mockResolvedValue(
