@@ -179,7 +179,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
           this.server.to(gameId).emit(SOCKET_EVENTS.GAME_ENDED, {
             gameState,
             reason: "timeout",
-            winner: gameState.players.find((p) => p.id === gameState.winner),
+            winnerId: gameState.winner,
             timestamp: new Date(),
           });
         }
@@ -563,7 +563,7 @@ export class GameGateway implements OnGatewayConnection, OnGatewayDisconnect {
         this.server.to(gameId).emit(SOCKET_EVENTS.GAME_ENDED, {
           gameState,
           reason: "forfeit",
-          winner: gameState.players.find((p) => p.id === gameState.winner),
+          winnerId: gameState.winner,
           timestamp: new Date(),
         });
       }

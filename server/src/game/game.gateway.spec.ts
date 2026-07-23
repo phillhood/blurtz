@@ -1010,6 +1010,26 @@ describe("GameGateway", () => {
       );
     });
 
+    it("announces the game ended when a forfeit finishes it", async () => {
+      const client = createAuthedSocket();
+      gameService.getPlayerIdForUser.mockResolvedValue(CONNECTED_PLAYER_ID);
+      gameService.forfeitGame.mockResolvedValue({
+        id: GAME_ID,
+        status: "finished",
+        winner: CONNECTED_PLAYER_ID,
+        players: [{ id: CONNECTED_PLAYER_ID, deck: null }],
+      } as never);
+
+      await gateway.handleForfeitGame(asSocket(client), { gameId: GAME_ID });
+
+      const [, payload] = serverEmit.mock.calls.find(
+        (call) => call[0] === SOCKET_EVENTS.GAME_ENDED
+      );
+      expect(payload.reason).toBe("forfeit");
+      expect(payload.winnerId).toBe(CONNECTED_PLAYER_ID);
+      expect(payload).not.toHaveProperty("winner");
+    });
+
     it("rejects leave_game from a non-player", async () => {
       const client = createAuthedSocket();
       gameService.getPlayerIdForUser.mockResolvedValue(null);
@@ -1091,7 +1111,8 @@ describe("GameGateway", () => {
         (call) => call[0] === SOCKET_EVENTS.GAME_ENDED
       );
       expect(payload.reason).toBe("timeout");
-      expect(payload.winner).toMatchObject({ id: CONNECTED_PLAYER_ID });
+      expect(payload.winnerId).toBe(CONNECTED_PLAYER_ID);
+      expect(payload).not.toHaveProperty("winner");
     });
 
     it("keeps sweeping after one game fails", async () => {

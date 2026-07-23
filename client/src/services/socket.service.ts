@@ -3,7 +3,7 @@ import { io, Socket } from "socket.io-client";
 // listens for and the name the server emits are the same constant rather than
 // two hand-synced copies.
 import { SOCKET_EVENTS } from "@blurtz/shared";
-import { GameError, GameState, Player } from "@types";
+import { GameError, GameState } from "@types";
 
 export interface SocketCallbacks {
   onConnect?: () => void;
@@ -24,24 +24,14 @@ export interface SocketCallbacks {
   onGameStateUpdated?: (gameState: GameState) => void;
   onGameStarted?: (gameState: GameState) => void;
   /**
-   * The game is over. Shaped after what the gateway ACTUALLY emits, which is
-   * not one shape but two:
-   *
-   *   - `handleCallBlitz` sends `{ gameState, reason: "blitz", winnerId,
-   *     scores, calledBy, timestamp }`
-   *   - `handleForfeitGame` sends `{ gameState, reason: "forfeit", winner,
-   *     timestamp }` - and `winner` is `undefined` when the game finished with
-   *     nobody left to win it.
-   *
-   * So everything except `gameState` and `reason` is optional here. Nothing
-   * needs to pick between them: `gameState.winner` carries the winning
-   * player's id on both paths, and that is what the UI reads.
+   * The game is over. The gateway normalizes all three emit sites (blitz,
+   * forfeit, round-over timeout) to the same shape: `{ gameState, reason,
+   * winnerId }`. Blitz additionally carries `scores` and `calledBy`.
    */
   onGameEnded?: (data: {
     gameState: GameState;
     reason: string;
     winnerId?: string | null;
-    winner?: Player;
     scores?: Record<string, number>;
     calledBy?: string;
   }) => void;
@@ -203,7 +193,6 @@ class SocketService {
         gameState: GameState;
         reason: string;
         winnerId?: string | null;
-        winner?: Player;
         scores?: Record<string, number>;
         calledBy?: string;
       }) => {
