@@ -7,6 +7,7 @@ import { LoggerModule } from "nestjs-pino";
 import { AuthModule } from "@auth/auth.module";
 import { GameModule } from "@game/game.module";
 import { UserModule } from "@user/user.module";
+import { HistoryModule } from "./history/history.module";
 import { HealthModule } from "./health/health.module";
 import { PrismaModule } from "@prisma";
 import { RedisModule } from "@redis";
@@ -55,6 +56,7 @@ import { validate } from "./config/env.validation";
     AuthModule,
     GameModule,
     UserModule,
+    HistoryModule,
   ],
   providers: [
     {
