@@ -322,19 +322,4 @@ describe("gameService", () => {
     });
   });
 
-  describe("leaveGame", () => {
-    it("posts to the leave route for the game in question", async () => {
-      let hit: string | undefined;
-      server.use(
-        http.post(`${BASE_URL}/api/game/:gameId/leave`, ({ params }) => {
-          hit = params.gameId as string;
-          return HttpResponse.json({ success: true });
-        })
-      );
-
-      await gameService.leaveGame("game-7");
-
-      expect(hit).toBe("game-7");
-    });
-  });
 });

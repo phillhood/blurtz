@@ -6,7 +6,6 @@ import {
   Param,
   UseGuards,
   Request,
-  Delete,
   ForbiddenException,
   NotFoundException,
 } from "@nestjs/common";
@@ -114,22 +113,6 @@ export class GameController {
       success: true,
       message: `Joined game with alias ${alias} successfully`,
       data: game,
-    };
-  }
-
-  @Delete(":id/leave")
-  @ApiOperation({ summary: "Leave a game" })
-  @SwaggerResponse({ status: 200, description: "Left game successfully" })
-  @SwaggerResponse({ status: 404, description: "Game not found" })
-  async leaveGame(
-    @Param() params: GameIdParamDto,
-    @Request() req
-  ): Promise<ApiResponse> {
-    const { id: gameId } = params;
-    await this.gameService.leaveGame(gameId, req.user.sub);
-    return {
-      success: true,
-      message: "Left game successfully",
     };
   }
 

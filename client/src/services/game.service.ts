@@ -99,9 +99,6 @@ export class GameService {
     }
   }
 
-  async leaveGame(gameId: string): Promise<void> {
-    return apiClient.post(`/api/game/${gameId}/leave`);
-  }
 }
 
 export const gameService = new GameService();
