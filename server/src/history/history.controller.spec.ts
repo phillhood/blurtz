@@ -24,4 +24,11 @@ describe("HistoryController", () => {
     expect(historyService.getMatchHistory).toHaveBeenCalledWith("u-me");
     expect(res).toEqual({ success: true, data: [{ gameId: "g1" }] });
   });
+
+  it("wraps a game's results, passing the id and the requesting user", async () => {
+    historyService.getGameResults.mockResolvedValue({ gameId: "g1", rounds: [] });
+    const res = await controller.getResults({ id: "g1" }, { user: { sub: "u-me" } });
+    expect(historyService.getGameResults).toHaveBeenCalledWith("g1", "u-me");
+    expect(res).toEqual({ success: true, data: { gameId: "g1", rounds: [] } });
+  });
 });
