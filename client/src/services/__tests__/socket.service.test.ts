@@ -122,8 +122,9 @@ describe("socketService subscriptions", () => {
     expect(useGameStore.getState().gameState).toBe(state);
   });
 
-  // The forfeit path sends a different shape - `winner` (a Player, possibly
-  // undefined) instead of `winnerId`, and no scores. The store must not care.
+  // The forfeit path uses the same normalized shape as every other game_ended
+  // frame - `winnerId`, here null since a forfeit has no winner. The store
+  // must not care.
   it("delivers a forfeit game_ended frame with no winner", async () => {
     await useGameStore.getState().initializeSocket("user-1", "token");
 
@@ -131,7 +132,7 @@ describe("socketService subscriptions", () => {
     handlers.get(SOCKET_EVENTS.GAME_ENDED)!({
       gameState: state,
       reason: "forfeit",
-      winner: undefined,
+      winnerId: null,
     });
 
     expect(useGameStore.getState().gameState).toBe(state);

@@ -1,4 +1,4 @@
-import { ForbiddenException, Injectable, NotFoundException } from "@nestjs/common";
+import { ForbiddenException, Injectable } from "@nestjs/common";
 import { PrismaService } from "@prisma";
 import { GameResultsDetail, GameRoundResult, MatchHistoryItem } from "@blurtz/shared";
 
@@ -60,8 +60,7 @@ export class HistoryService {
         },
       },
     });
-    if (!game) throw new NotFoundException("Game not found");
-    if (!game.players.some((p) => p.userId === userId)) {
+    if (!game || !game.players.some((p) => p.userId === userId)) {
       throw new ForbiddenException("Not a player in this game");
     }
 

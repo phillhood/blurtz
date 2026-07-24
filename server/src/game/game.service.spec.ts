@@ -162,9 +162,6 @@ describe("GameService", () => {
 
     it("creates the game and seats the host in one atomic write", async () => {
       const joinSpy = jest.spyOn(service, "joinGame");
-      (prismaService.game.create as jest.Mock).mockResolvedValue({ id: "game-1", alias: "ABC123" });
-      // generateUniqueAlias reads game.findUnique; make it report the alias free.
-      (prismaService.game.findUnique as jest.Mock).mockResolvedValue(null);
 
       await service.createGame("Test", "host-user", 2, false, 100);
 

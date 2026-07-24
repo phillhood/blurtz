@@ -1,5 +1,5 @@
 import { Test } from "@nestjs/testing";
-import { ForbiddenException, NotFoundException } from "@nestjs/common";
+import { ForbiddenException } from "@nestjs/common";
 import { HistoryService } from "./history.service";
 import { PrismaService } from "@prisma";
 
@@ -75,9 +75,9 @@ describe("HistoryService.getGameResults", () => {
     ],
   };
 
-  it("404s a missing game", async () => {
+  it("403s a missing game (no id probing)", async () => {
     prisma.game.findUnique.mockResolvedValue(null);
-    await expect(service.getGameResults("nope", "u-me")).rejects.toBeInstanceOf(NotFoundException);
+    await expect(service.getGameResults("nope", "u-me")).rejects.toBeInstanceOf(ForbiddenException);
   });
 
   it("403s a non-member", async () => {
