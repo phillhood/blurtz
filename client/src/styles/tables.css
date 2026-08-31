@@ -1,0 +1,78 @@
+/* tables */
+
+.blurtz-seats {
+  display: flex;
+  gap: 4px;
+  align-items: center;
+  min-width: 62px;
+}
+
+.blurtz-seat {
+  width: 11px;
+  height: 15px;
+  border-radius: 2.5px;
+  display: block;
+}
+
+.blurtz-seat--on {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.blurtz-seat--you {
+  background: var(--color-purple-bright);
+  box-shadow: 0 0 8px -1px color-mix(in srgb, var(--color-purple-bright) 60%, transparent);
+}
+
+.blurtz-seat--off {
+  border: 1px dashed rgba(255, 255, 255, 0.15);
+}
+
+.blurtz-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+}
+
+.blurtz-status__pip {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  flex: none;
+}
+
+.blurtz-status--live {
+  color: #e9d5ff;
+}
+
+.blurtz-status--live .blurtz-status__pip {
+  background: var(--color-purple-bright);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-purple-bright) 20%, transparent);
+  animation: statusBreathe 2.2s ease-in-out infinite;
+}
+
+.blurtz-status--spent {
+  color: var(--color-text-muted);
+}
+
+.blurtz-status--spent .blurtz-status__pip {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+}
+
+@keyframes statusBreathe {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.45; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurtz-status--live .blurtz-status__pip {
+    animation: none;
+  }
+}
