@@ -210,3 +210,18 @@ describe("BankPilesArea", () => {
     expect(container.querySelector("[style*='cursor: grab']")).toBeNull();
   });
 });
+
+describe("BankPilesArea sizing", () => {
+  it("renders foundations at foundation size, not play size", () => {
+    const bankPiles = [pile("bank-0", [card(1)]), pile("bank-1", [card(2)])];
+    renderIn(
+      <BankPilesArea bankPiles={bankPiles} canDropOnPile={() => false} />
+    );
+    const cards = screen.getAllByTestId("game-card");
+    expect(cards.length).toBeGreaterThan(0);
+    for (const rendered of cards) {
+      expect(rendered).toHaveAttribute("data-card-size", "foundation");
+    }
+  });
+});
+

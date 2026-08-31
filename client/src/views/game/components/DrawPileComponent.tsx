@@ -1,10 +1,11 @@
 import React from "react";
-import { PileLabel } from "@styles";
+import { PileLabel, type CardSize } from "@styles";
 import { Pile } from "@types";
 import { isVisibleCard } from "@utils";
 import { CardPile, FannedCards, EmptyPile } from ".";
 
 interface DrawPileComponentProps {
+  size?: CardSize;
   pile: Pile;
   onPileClick: () => void;
   canFlip: boolean;
@@ -26,6 +27,7 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
   isDraggable,
   isCurrentPlayer = false,
   pendingMoveCardIds,
+  size = "play",
 }) => {
   // Guard against undefined pile (can happen during game state transitions)
   if (!pile) {
@@ -78,6 +80,7 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
           >
             {hasDrawPile ? (
               <CardPile
+                size={size}
                 cards={drawPileCards}
                 pileId={`${pile.id}-draw`}
                 isDraggable={false}

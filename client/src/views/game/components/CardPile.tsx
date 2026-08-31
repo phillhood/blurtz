@@ -1,5 +1,6 @@
 import React from "react";
 import { ClientCard } from "@types";
+import { type CardSize } from "@styles";
 import { Card } from ".";
 
 interface CardPileProps {
@@ -23,6 +24,8 @@ interface CardPileProps {
   hideCountBadge?: boolean;
   /** Card IDs pending a move (hidden until game state updates) */
   pendingMoveCardIds?: Set<string>;
+  /** How large the cards render. Foundations and opponents are not play-sized. */
+  size?: CardSize;
 }
 
 /**
@@ -41,6 +44,7 @@ const CardPile: React.FC<CardPileProps> = ({
   stackOffset = 3,
   hideCountBadge = false,
   pendingMoveCardIds,
+  size = "play",
 }) => {
   if (cards.length === 0) {
     return null;
@@ -70,6 +74,7 @@ const CardPile: React.FC<CardPileProps> = ({
             card={{ id: cards[cards.length - 2 - index].id, faceUp: false }}
             pileId={pileId}
             isDraggable={false}
+            size={size}
           />
         </div>
       ))}
@@ -91,6 +96,7 @@ const CardPile: React.FC<CardPileProps> = ({
           onDrop={onDrop}
           canDrop={canDrop}
           isPendingMove={pendingMoveCardIds?.has(topCard.id) ?? false}
+          size={size}
         />
         {/* Card count badge - positioned on top card */}
         {!hideCountBadge && cards.length > 1 && (

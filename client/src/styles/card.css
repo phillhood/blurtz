@@ -272,3 +272,13 @@
     --card-h: 96px;
   }
 }
+
+.blurtz-slot--foundation {
+  --card-w: 52px;
+  --card-h: 70px;
+}
+
+.blurtz-slot--token {
+  --card-w: 26px;
+  --card-h: 36px;
+}

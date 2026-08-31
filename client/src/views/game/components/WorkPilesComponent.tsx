@@ -1,12 +1,13 @@
 import React from "react";
 import { useDroppable, useDndContext } from "@dnd-kit/core";
-import { WorkPiles as WorkPilesStyled, WorkPile as WorkPileStyled, PileLabel } from "@styles";
+import { WorkPiles as WorkPilesStyled, WorkPile as WorkPileStyled, PileLabel, type CardSize } from "@styles";
 import { ClientCard, Pile } from "@types";
 import { isVisibleCard } from "@utils";
 import { FannedCardPile } from ".";
 import { DragData } from "./Card";
 
 interface WorkPilesComponentProps {
+  size?: CardSize;
   workPiles: Pile[];
   canDropOnPile: (index: number, card: ClientCard) => boolean;
   isDraggable: boolean;
@@ -20,6 +21,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
   isDraggable,
   isCurrentPlayer,
   pendingMoveCardIds,
+  size = "play",
 }) => {
   const { active } = useDndContext();
   const dragData = active?.data.current as DragData | undefined;
@@ -67,6 +69,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
               {cards.length > 0 && (
                 <div style={{ position: "absolute", top: 0, left: 0 }}>
                   <FannedCardPile
+                    size={size}
                     cards={cards}
                     pileId={pile.id}
                     isDraggable={isDraggable}

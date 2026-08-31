@@ -2,7 +2,7 @@ import React, { useState, useRef, useCallback, useMemo } from "react";
 import { useDraggable, useDroppable, useDndContext } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { ClientCard, VisibleCard } from "@types";
-import { GameCard, CardNumber } from "@styles";
+import { GameCard, CardNumber, type CardSize } from "@styles";
 import { DragData } from "./Card";
 import { cardHue } from "@utils/card.utils";
 
@@ -26,6 +26,7 @@ interface FannedCardPileProps {
   canDrop?: (card: ClientCard) => boolean;
   stackOffset?: number;
   pendingMoveCardIds?: Set<string>;
+  size?: CardSize;
 }
 
 const FannedCardPile: React.FC<FannedCardPileProps> = ({
@@ -35,6 +36,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
   onDrop,
   canDrop,
   stackOffset = DEFAULT_STACK_OFFSET,
+  size = "play",
   pendingMoveCardIds,
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number>(-1); // Sticky - controls expansion
@@ -170,6 +172,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 
         return (
           <FannedCard
+            size={size}
             key={card.id}
             card={card}
             pileId={pileId}
@@ -190,6 +193,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 };
 
 interface FannedCardProps {
+  size?: CardSize;
   card: VisibleCard;
   pileId: string;
   index: number;
@@ -215,6 +219,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
   canDrop,
   isHiddenInDrag,
   isPendingMove,
+  size = "play",
 }) => {
   const dragId = `card-${card.id}`;
   const dropId = `drop-${pileId}-${card.id}`;
@@ -280,6 +285,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
       <GameCard
         hue={cardHue(card.color)}
         cardType={card.color.type}
+        size={size}
         isDragging={isDragging}
         canDrop={canDropHere}
         disableHoverEffect={!isTopCard}

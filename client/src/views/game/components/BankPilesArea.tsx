@@ -1,6 +1,6 @@
 import React from "react";
 import { useDroppable } from "@dnd-kit/core";
-import { CenterArea, BankPiles, WorkPile, PileLabel } from "@styles";
+import { CenterArea, BankPiles, PileLabel } from "@styles";
 import { ClientCard, Pile } from "@types";
 import { CardPile } from ".";
 import { DragData } from "./Card";
@@ -27,7 +27,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
         <PileLabel style={{ paddingBottom: "8px" }}>Bank</PileLabel>
         <BankPiles>
           {activePiles.map(({ pile, index }) => (
-            <WorkPile key={pile.id}>
+            <div className="blurtz-slot blurtz-slot--foundation" key={pile.id}>
               <CardPile
                 cards={pile.cards}
                 pileId={pile.id}
@@ -37,18 +37,19 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
                 maxStackDisplay={2}
                 stackOffset={3}
                 hideCountBadge
+                size="foundation"
               />
-            </WorkPile>
+            </div>
           ))}
           {/* Always show a placeholder for starting new piles */}
           {firstEmptyPile && (
-            <WorkPile>
+            <div className="blurtz-slot blurtz-slot--foundation">
               <EmptyPileDropZone
                 pileId={firstEmptyPile.id}
                 pileIndex={firstEmptyIndex}
                 canDrop={(card) => canDropOnPile(firstEmptyIndex, card)}
               />
-            </WorkPile>
+            </div>
           )}
         </BankPiles>
       </div>
@@ -80,12 +81,17 @@ const EmptyPileDropZone: React.FC<{
         alignItems: "center",
         justifyContent: "center",
         textAlign: "center",
-        fontSize: "0.8rem",
-        fontFamily: "Germania One, sans-serif",
-        color: "#94a3b8",
-        backgroundColor: canDropHere ? "rgba(16, 185, 129, 0.2)" : "transparent",
-        border: canDropHere ? "2px dashed #10b981" : "2px dashed #475569",
-        borderRadius: "6px",
+        fontSize: "0.7rem",
+        letterSpacing: "0.18em",
+        textTransform: "uppercase",
+        color: "var(--color-text-muted)",
+        backgroundColor: canDropHere
+          ? "rgba(168, 85, 247, 0.12)"
+          : "transparent",
+        border: canDropHere
+          ? "2px dashed var(--color-purple-bright)"
+          : "1.5px dashed rgba(255, 255, 255, 0.15)",
+        borderRadius: "var(--radius-xs)",
       }}
     >
       1

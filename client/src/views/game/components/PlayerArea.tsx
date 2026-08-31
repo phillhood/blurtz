@@ -8,6 +8,7 @@ import {
   PlayerName,
   ScoreDisplay,
   BlurtzButton,
+  type CardSize,
 } from "@styles";
 import { BlurtzPile, WorkPile, DrawPile } from ".";
 
@@ -72,6 +73,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
   };
 
   const isDraggable = isCurrentPlayer && gameState?.status === "playing";
+  const cardSize: CardSize = isCurrentPlayer ? "play" : "token";
   const isBlurtzAvailable =
     isCurrentPlayer &&
     player.deck.blurtzPile.cards.length === 0 &&
@@ -147,6 +149,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             playerId={player.id}
             isCurrentPlayer={isCurrentPlayer}
             pendingMoveCardIds={pendingMoveCardIds}
+            size={cardSize}
           />
           <WorkPile
             workPiles={player.deck.workPiles}
@@ -154,12 +157,14 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             isDraggable={isDraggable}
             isCurrentPlayer={isCurrentPlayer}
             pendingMoveCardIds={pendingMoveCardIds}
+            size={cardSize}
           />
           <BlurtzPile
             pile={player.deck.blurtzPile}
             onCardClick={() => handleCardClick("blurtz")}
             isDraggable={isDraggable}
             pendingMoveCardIds={pendingMoveCardIds}
+            size={cardSize}
           />
         </CardArea>
       {showBlurtzButton && (
