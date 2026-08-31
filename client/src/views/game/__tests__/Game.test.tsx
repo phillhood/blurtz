@@ -556,3 +556,15 @@ describe("Game", () => {
     );
   });
 });
+
+describe("a seat with no deck", () => {
+  it("renders the lobby for a player who has not been dealt to", () => {
+    // A Player row exists from the moment someone joins, but `deck` is null
+    // until the host deals. Anything reading `player.deck.x` on every render -
+    // rather than inside a handler that only fires mid-game - crashes the whole
+    // lobby, and no fixture with a dealt board can catch it.
+    gameContextState.currentPlayer = { id: "p-1", deck: null } as unknown;
+
+    expect(() => renderGame("/game/game-1")).not.toThrow();
+  });
+});

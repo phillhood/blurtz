@@ -2,12 +2,12 @@ import React, { useEffect, useRef, useState } from "react";
 import { useParams, useNavigate } from "react-router-dom";
 import { DndContext, DragEndEvent, DragStartEvent, DragOverlay, useSensor, useSensors, PointerSensor, TouchSensor, KeyboardSensor } from "@dnd-kit/core";
 import { useGameContext, useAuthContext } from "@hooks";
-import { ClientCard, PileType, VisibleCard } from "@types";
+import { ClientCard, VisibleCard } from "@types";
 import { isVisibleCard, isFatalErrorCode } from "@utils";
 // The rules, from the one place they live. Imported by package name through
 // the workspace symlink - there is no path alias for @blurtz/shared, on
 // purpose.
-import { canPlace, cardsMovedBy } from "@blurtz/shared";
+import { cardsMovedBy } from "@blurtz/shared";
 import { GameContainer, GameBoard, CenterArea, OpponentsRow, GameCard, CardNumber } from "@styles";
 import {
   GameLoadingScreen,
@@ -24,6 +24,7 @@ import {
 import { DragData } from "./components/Card";
 import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
 import { cardHue } from "@utils/card.utils";
+import { useMoveResolver } from "./hooks/useMoveResolver";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -52,6 +53,10 @@ const Game: React.FC = () => {
   // up in the first place.
   const [activeCards, setActiveCards] = useState<VisibleCard[]>([]);
   const { pendingMoveCardIds, markPending } = usePendingMoveCards(gameState);
+  const moveResolver = useMoveResolver(
+    gameState?.bankPiles,
+    currentPlayer?.deck?.workPiles
+  );
 
   // Configure sensors for @dnd-kit
   const sensors = useSensors(
@@ -112,51 +117,14 @@ const Game: React.FC = () => {
     navigator.clipboard.writeText(gameState?.alias || "");
   };
 
-  // The drop affordances below find the pile, then hand the rule to
-  // `canPlace` - the same function the server decides the real move with. They
-  // do not decide anything themselves: the server is authoritative and
-  // re-validates every move, so all this changes is whether a target lights up
-  // under the cursor.
-  //
-  // Both start by refusing a face-down card, and that is not padding: a
-  // face-down card has no value to compare, on the wire or in the type, so
-  // there is no rule to apply to one. Nothing draggable is face-down anyway.
+  // The drop affordance finds the pile and hands the question to the resolver,
+  // which is the same decision the real move goes through. It decides nothing
+  // itself: the server re-validates every move, so all this changes is whether
+  // a target lights up under the cursor.
   const canDropOnBankPile = (pileIndex: number, draggedCard: ClientCard) => {
-    if (!draggedCard.faceUp) return false;
-
     const pile = gameState?.bankPiles[pileIndex];
-    const topCard = pile?.cards[pile.cards.length - 1];
-    // A bank pile's top card is always face-up in a real game; if it somehow
-    // is not, there is nothing to compare against and the drop is refused
-    // rather than treated as an empty pile.
-    if (topCard && !topCard.faceUp) return false;
-
-    return canPlace("bank", topCard, draggedCard);
-  };
-
-  // Check if a pile ID belongs to a Bank pile
-  const isBankPile = (pileId: string): boolean => {
-    return gameState?.bankPiles.some(p => p.id === pileId) ?? false;
-  };
-
-  // Check if a pile ID belongs to current player's Work piles
-  const isCurrentPlayerWorkPile = (pileId: string): boolean => {
-    return currentPlayer?.deck.workPiles.some(p => p.id === pileId) ?? false;
-  };
-
-  // Validate Work pile drop
-  const canDropOnWorkPile = (pileId: string, draggedCard: ClientCard): boolean => {
-    if (!draggedCard.faceUp) return false;
-
-    const pile = currentPlayer?.deck.workPiles.find(p => p.id === pileId);
     if (!pile) return false;
-
-    const topCard = pile.cards[pile.cards.length - 1];
-    if (topCard && !topCard.faceUp) return false;
-
-    // An empty work pile accepts any card. `canPlace` is the only copy of that
-    // rule - do not re-state it here.
-    return canPlace("work", topCard, draggedCard);
+    return moveResolver.resolve(draggedCard, "", pile.id) !== null;
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -168,7 +136,7 @@ const Game: React.FC = () => {
       // Dragging out of a work pile picks up the stack above the card. The
       // destination is not known yet, so this asks what a work→work move would
       // carry - the widest a move from here can reach.
-      const workPile = currentPlayer?.deck.workPiles.find(p => p.id === dragData.fromPileId);
+      const workPile = currentPlayer?.deck?.workPiles.find(p => p.id === dragData.fromPileId);
       if (workPile) {
         const stack = cardsMovedBy("work", "work", workPile.cards, dragData.card.id);
         if (stack.length > 0) {
@@ -181,76 +149,25 @@ const Game: React.FC = () => {
     }
   };
 
-  /**
-   * The cards this move will actually carry, for the pending-move bookkeeping.
-   *
-   * Destination-aware: only a work→work move takes the stack above the card.
-   * Delegates to the engine's `cardsMovedBy` so both sides run one function.
-   */
-  const getMovingCardIds = (fromPileId: string, cardId: string, toType: PileType): string[] => {
-    const workPile = currentPlayer?.deck.workPiles.find(p => p.id === fromPileId);
-    if (!workPile) return [cardId];
-
-    const moving = cardsMovedBy("work", toType, workPile.cards, cardId);
-    return moving.length > 0 ? moving.map(c => c.id) : [cardId];
-  };
-
   // Handle @dnd-kit drag end event
   const handleDragEnd = (event: DragEndEvent) => {
     setActiveCards([]);
     const { active, over } = event;
-
     if (!over) return;
 
     const dragData = active.data.current as DragData;
-    const dropData = over.data.current as { pileId?: string; pileIndex?: number; isEmpty?: boolean; card?: ClientCard } | undefined;
-    const dropId = over.id as string;
+    const dropData = over.data.current as { pileId?: string } | undefined;
+    if (!dropData?.pileId || !dragData) return;
 
-    // Dropping back on the same pile - no-op
-    if (dropData?.pileId === dragData.fromPileId) return;
+    const resolved = moveResolver.resolve(
+      dragData.card,
+      dragData.fromPileId,
+      dropData.pileId
+    );
+    if (!resolved) return;
 
-    // Check if dropping on an empty pile (Bank or Work)
-    if (dropData?.pileId && dropData?.isEmpty) {
-      // Check if it's a Bank pile
-      const bankPileIndex = gameState?.bankPiles.findIndex(p => p.id === dropData.pileId) ?? -1;
-      if (bankPileIndex >= 0 && canDropOnBankPile(bankPileIndex, dragData.card)) {
-        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "bank");
-        markPending(movingIds);
-        makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
-        return;
-      }
-      // Check if it's a Work pile (empty work piles accept any card)
-      if (isCurrentPlayerWorkPile(dropData.pileId)) {
-        const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "work");
-        markPending(movingIds);
-        makeMove(dragData.card.id, dragData.fromPileId, dropData.pileId);
-        return;
-      }
-      return;
-    }
-
-    // Dropping on a card
-    if (dropId.startsWith("drop-") && dropData?.pileId) {
-      const targetPileId = dropData.pileId;
-
-      // Check if it's a Bank pile
-      if (isBankPile(targetPileId)) {
-        const pileIndex = gameState?.bankPiles.findIndex(p => p.id === targetPileId) ?? -1;
-        if (pileIndex >= 0 && canDropOnBankPile(pileIndex, dragData.card)) {
-          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "bank");
-          markPending(movingIds);
-          makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
-        }
-      }
-      // Check if it's a Work pile (current player only)
-      else if (isCurrentPlayerWorkPile(targetPileId)) {
-        if (canDropOnWorkPile(targetPileId, dragData.card)) {
-          const movingIds = getMovingCardIds(dragData.fromPileId, dragData.card.id, "work");
-          markPending(movingIds);
-          makeMove(dragData.card.id, dragData.fromPileId, targetPileId);
-        }
-      }
-    }
+    markPending(resolved.movingCardIds);
+    makeMove(dragData.card.id, dragData.fromPileId, resolved.toPileId);
   };
 
   const goToDashboard = () => navigate("/dashboard");
