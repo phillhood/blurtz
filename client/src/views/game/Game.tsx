@@ -27,6 +27,7 @@ import { cardHue } from "@utils/card.utils";
 import { useMoveResolver } from "./hooks/useMoveResolver";
 import { useCardSelection } from "./hooks/useCardSelection";
 import { useRejectedCards } from "./hooks/useRejectedCards";
+import { useDealAnimation } from "./hooks/useDealAnimation";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -60,6 +61,7 @@ const Game: React.FC = () => {
     currentPlayer?.deck?.workPiles
   );
   const selection = useCardSelection(gameState);
+  const dealing = useDealAnimation(gameState?.currentRound);
   const { rejectedIds, rememberAttempt } = useRejectedCards(moveRejection);
   const legalTargetIds = selection.selected
     ? moveResolver.legalTargetIds(
@@ -274,7 +276,7 @@ const Game: React.FC = () => {
         <GameStatusDisplay />
 
         {gameState.status === "playing" && (
-          <GameBoard isPicking={!!selection.selected}>
+          <GameBoard isPicking={!!selection.selected} isDealing={dealing}>
             <OpponentsRow
               opponentCount={opponentCount}
               className="opponents-row"

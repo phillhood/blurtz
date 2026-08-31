@@ -517,3 +517,26 @@
     transition: none;
   }
 }
+
+/* The deal is the one long animation, and it happens once a round while
+   nobody can act yet. */
+@keyframes blurtz-deal {
+  from {
+    opacity: 0;
+    transform: translateY(-24px) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.blurtz-board[data-dealing="true"] .blurtz-card {
+  animation: blurtz-deal 0.24s var(--ease-spring) backwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurtz-board[data-dealing="true"] .blurtz-card {
+    animation: none;
+  }
+}

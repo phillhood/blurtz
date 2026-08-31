@@ -17,10 +17,12 @@ export const GameContainer: React.FC<LayoutProps> = ({ className, children, ...p
 
 interface GameBoardProps extends LayoutProps {
   isPicking?: boolean;
+  isDealing?: boolean;
 }
 
 export const GameBoard: React.FC<GameBoardProps> = ({
   isPicking = false,
+  isDealing = false,
   className,
   children,
   ...props
@@ -29,6 +31,7 @@ export const GameBoard: React.FC<GameBoardProps> = ({
     <div
       className={clsx("blurtz-board", className)}
       data-picking={isPicking ? "true" : undefined}
+      data-dealing={isDealing ? "true" : undefined}
       data-testid="game-board"
       {...props}
     >

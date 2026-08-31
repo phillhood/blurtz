@@ -147,7 +147,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
         opponentCount={opponentCount}
         // A dropped player's board is still live - the server plays no move for
         // them, and they may be back mid-round. Dimmed, never hidden.
-        style={{ opacity: isConnected ? 1 : 0.5 }}
+        style={{ opacity: isConnected ? 1 : 0.5, transition: "opacity 0.3s ease" }}
       >
           <DrawPile
             pile={player.deck.drawPile}
