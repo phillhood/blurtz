@@ -52,7 +52,7 @@ const ConfirmDialog: React.FC<ConfirmDialogProps> = ({
       >
         {/* Header */}
         <div className="px-6 pt-6 border-b border-slate-600 mb-5">
-          <h3 className="text-slate-50 text-2xl font-semibold m-0 mb-4 font-['Germania_One']">
+          <h3 className="text-slate-50 text-2xl font-semibold m-0 mb-4 font-[family-name:var(--font-display)]">
             {title}
           </h3>
         </div>

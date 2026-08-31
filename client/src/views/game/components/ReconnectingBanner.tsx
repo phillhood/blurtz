@@ -17,7 +17,7 @@ const ReconnectingBanner: React.FC = () => (
       padding: "8px 16px",
       backgroundColor: "rgba(217, 119, 6, 0.95)",
       color: "white",
-      fontFamily: "Germania One, sans-serif",
+      fontFamily: "var(--font-body)",
       fontSize: "0.95rem",
       textAlign: "center",
     }}

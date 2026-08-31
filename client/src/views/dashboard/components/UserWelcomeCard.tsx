@@ -27,7 +27,7 @@ const UserWelcomeCard: React.FC<UserWelcomeCardProps> = ({ user }) => {
         style={{
           margin: "0 0 10px 0",
           color: "#1f2937",
-          fontFamily: "Germania One, sans-serif",
+          fontFamily: "var(--font-body)",
         }}
       >
         Welcome back, {user.username}!

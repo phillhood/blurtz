@@ -37,7 +37,7 @@ const GameStatusDisplay: React.FC = () => {
 
   return (
     <GameStatus>
-      <h2 style={{ fontFamily: "Germania One", color: "#ffffff" }}>
+      <h2 style={{ fontFamily: "var(--font-display)", color: "#ffffff" }}>
         {getGameStatusTitle(
           status || "waiting",
           playerCount,

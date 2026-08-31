@@ -59,7 +59,7 @@ export const Title: React.FC<HTMLAttributes<HTMLHeadingElement>> = ({
   return (
     <h1
       className={clsx(
-        "font-['Germania_One'] text-[2.5rem] font-bold text-center mb-8",
+        "font-[family-name:var(--font-display)] text-[2.5rem] font-bold text-center mb-8",
         "bg-white bg-clip-text text-transparent",
         className
       )}

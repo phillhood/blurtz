@@ -128,7 +128,7 @@ const EmptyWorkPileDropZone: React.FC<{
         justifyContent: "center",
         textAlign: "center",
         fontSize: "0.8rem",
-        fontFamily: "Germania One, sans-serif",
+        fontFamily: "var(--font-body)",
         color: "#94a3b8",
         backgroundColor: canDropHere
           ? "rgba(16, 185, 129, 0.2)"

@@ -49,7 +49,7 @@ const GameToast: React.FC<GameToastProps> = ({
         color: "white",
         borderRadius: "8px",
         boxShadow: "0 4px 12px rgba(0, 0, 0, 0.3)",
-        fontFamily: "Germania One, sans-serif",
+        fontFamily: "var(--font-body)",
         fontSize: "1rem",
         maxWidth: "90vw",
         textAlign: "center",
