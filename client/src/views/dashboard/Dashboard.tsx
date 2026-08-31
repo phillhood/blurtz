@@ -3,9 +3,9 @@ import { useNavigate } from "react-router-dom";
 import { useAuthContext, useGameContext } from "@hooks";
 import { useGames } from "@hooks";
 import { useJoinGameById, useJoinGameByCode } from "@hooks/queries/useGamesQuery";
-import { PageContainer } from "@styles";
+import { PageContainer, Button } from "@styles";
 import { LoadingScreen } from "@components/ui";
-import { UserWelcomeCard, GamesList, CreateGameModal } from "./components";
+import { TableList, CreateGameModal } from "./components";
 import JoinGameModal from "./components/JoinGameModal";
 import { JoinGameRequest } from "@types";
 
@@ -81,37 +81,52 @@ const Dashboard: React.FC = () => {
     return <LoadingScreen title="Loading dashboard..." />;
   }
 
+  const waiting = activeGames.length;
+  const hour = new Date().getHours();
+  const greeting = hour < 12 ? "morning" : hour < 18 ? "afternoon" : "evening";
+
   return (
     <PageContainer>
-      <div style={{ maxWidth: "800px", margin: "0 auto" }}>
-        {user && (
-          <div style={{ marginBottom: "2rem" }}>
-            <UserWelcomeCard user={user} />
-          </div>
-        )}
-
-        <GamesList
-          activeGames={activeGames}
-          availableGames={availableGames}
-          loading={loading}
-          onJoinGame={handleJoinGame}
-          onJoinGameByCode={handleOpenJoinModal}
-          onCreateGame={handleOpenCreateModal}
-          onRefreshGames={handleRefreshGames}
-        />
-
-        <CreateGameModal
-          isOpen={isCreateModalOpen}
-          onClose={handleCloseCreateModal}
-          onCreateGame={handleCreateGame}
-        />
-
-        <JoinGameModal
-          isOpen={isJoinModalOpen}
-          onClose={handleCloseJoinModal}
-          onJoinGame={handleJoinGame}
-        />
+      <div className="blurtz-pagebar">
+        <div>
+          <h1 className="blurtz-pagetitle">{`Good ${greeting}, ${user?.username ?? ""}`}</h1>
+          <p className="blurtz-pagesub">
+            {waiting === 1
+              ? "1 table waiting on you"
+              : `${waiting} tables waiting on you`}
+          </p>
+        </div>
+        <div className="blurtz-pagebar__actions">
+          <Button variant="tertiary" onClick={handleOpenJoinModal} disabled={loading}>
+            Join by code
+          </Button>
+          <Button variant="primary" onClick={handleOpenCreateModal} disabled={loading}>
+            New table
+          </Button>
+        </div>
       </div>
+
+      <TableList
+        activeGames={activeGames}
+        availableGames={availableGames}
+        loading={loading}
+        onJoinGame={handleJoinGame}
+        onJoinGameByCode={handleOpenJoinModal}
+        onCreateGame={handleOpenCreateModal}
+        onRefreshGames={handleRefreshGames}
+      />
+
+      <CreateGameModal
+        isOpen={isCreateModalOpen}
+        onClose={handleCloseCreateModal}
+        onCreateGame={handleCreateGame}
+      />
+
+      <JoinGameModal
+        isOpen={isJoinModalOpen}
+        onClose={handleCloseJoinModal}
+        onJoinGame={handleJoinGame}
+      />
     </PageContainer>
   );
 };

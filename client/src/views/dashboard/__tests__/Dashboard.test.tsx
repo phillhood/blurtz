@@ -23,7 +23,7 @@ vi.mock("react-router-dom", async () => {
 });
 
 vi.mock("@hooks", () => ({
-  useAuthContext: () => ({ user: { id: "user-1", username: "ada" } }),
+  useAuthContext: () => ({ user: { id: "user-1", username: "designpass" } }),
   useGameContext: () => ({ createAndJoinGame: mockCreateAndJoinGame }),
   useGames: () => games,
   useUserStats: () => ({ gamesPlayed: 5, gamesWon: 2, winRate: 40 }),
@@ -44,11 +44,15 @@ const game = (id: string, name: string, over: Partial<Game> = {}): Game =>
     status: "waiting",
     maxPlayers: 4,
     currentPlayers: 1,
+    targetScore: 100,
+    currentRound: 1,
+    hostUsername: "corvid",
     createdAt: new Date(2024, 0, 3),
     ...over,
   }) as Game;
 
-const renderDashboard = () => {
+const renderDashboard = (over: Partial<typeof games> = {}) => {
+  Object.assign(games, over);
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false }, mutations: { retry: false } },
   });
@@ -65,20 +69,43 @@ const renderDashboard = () => {
 describe("Dashboard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    games.activeGames = [];
-    games.availableGames = [];
+    games.activeGames = [
+      game("game-mine", "Thursday regulars", { status: "playing", currentPlayers: 4 }),
+    ];
+    games.availableGames = [
+      game("game-1", "Midnight rush"),
+      game("game-2", "Open Game"),
+    ];
     games.loading = false;
   });
 
-  it("greets the user with their stats", () => {
+  it("leads with the tables waiting on the player", () => {
     renderDashboard();
 
-    expect(screen.getByText("Welcome back, ada!")).toBeInTheDocument();
-    expect(screen.getByText("Games Played: 5")).toBeInTheDocument();
+    expect(
+      screen.getByRole("heading", { name: /Good .+, designpass/ })
+    ).toBeInTheDocument();
+    expect(screen.getByText("1 table waiting on you")).toBeInTheDocument();
+  });
+
+  it("puts the player's own tables above the open ones", () => {
+    renderDashboard();
+
+    const names = screen.getAllByRole("button", { name: /Rejoin|Join$/ });
+
+    expect(names[0]).toHaveAccessibleName("Rejoin");
+  });
+
+  it("says so when there is nothing to join", () => {
+    renderDashboard({ activeGames: [], availableGames: [] });
+
+    expect(screen.getByText("No open tables")).toBeInTheDocument();
   });
 
   it("shows a loading screen only until the first games arrive", () => {
     games.loading = true;
+    games.activeGames = [];
+    games.availableGames = [];
     const { unmount } = render(
       <QueryClientProvider client={new QueryClient()}>
         <MemoryRouter>
@@ -101,7 +128,7 @@ describe("Dashboard", () => {
     mockCreateAndJoinGame.mockResolvedValue({ id: "game-new" });
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "New Game" }));
+    await user.click(screen.getByRole("button", { name: "New table" }));
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday");
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
@@ -119,7 +146,7 @@ describe("Dashboard", () => {
     mockCreateAndJoinGame.mockResolvedValue(null);
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "New Game" }));
+    await user.click(screen.getByRole("button", { name: "New table" }));
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday");
     await user.click(screen.getByRole("button", { name: "Create Game" }));
 
@@ -132,7 +159,7 @@ describe("Dashboard", () => {
     vi.mocked(gameService.joinGame).mockResolvedValue(game("game-2", "Open Game"));
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "Join Game" }));
+    await user.click(screen.getByRole("button", { name: "Join" }));
 
     await waitFor(() =>
       expect(gameService.joinGame).toHaveBeenCalledWith({ id: "game-2" })
@@ -144,7 +171,7 @@ describe("Dashboard", () => {
     vi.mocked(gameService.joinGame).mockResolvedValue(game("game-3", "Coded"));
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "Join by Code" }));
+    await user.click(screen.getByRole("button", { name: "Join by code" }));
     await user.type(
       screen.getByPlaceholderText("e.g., happy-blue-lemur"),
       "happy-blue-cat"
@@ -164,7 +191,7 @@ describe("Dashboard", () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {});
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "Join Game" }));
+    await user.click(screen.getByRole("button", { name: "Join" }));
 
     await waitFor(() => expect(gameService.joinGame).toHaveBeenCalled());
     // Navigating into a game the server refused would land on a board that
@@ -176,7 +203,7 @@ describe("Dashboard", () => {
   it("refreshes the lobby on demand", async () => {
     const user = renderDashboard();
 
-    await user.click(screen.getByTitle("Refresh Games"));
+    await user.click(screen.getByRole("button", { name: "Refresh" }));
 
     expect(games.refetch).toHaveBeenCalled();
   });
@@ -184,7 +211,7 @@ describe("Dashboard", () => {
   it("opens and closes the create modal without creating anything", async () => {
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "New Game" }));
+    await user.click(screen.getByRole("button", { name: "New table" }));
     expect(screen.getByText("Create New Game")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
@@ -198,12 +225,14 @@ describe("Dashboard", () => {
   it("opens and closes the join modal without joining anything", async () => {
     const user = renderDashboard();
 
-    await user.click(screen.getByRole("button", { name: "Join by Code" }));
+    await user.click(screen.getByRole("button", { name: "Join by code" }));
     expect(screen.getByText("Join Game by Code")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.queryByText("Join Game by Code")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByText("Join Game by Code")).not.toBeInTheDocument()
+    );
     expect(gameService.joinGame).not.toHaveBeenCalled();
   });
 });

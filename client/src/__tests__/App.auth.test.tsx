@@ -41,15 +41,15 @@ describe("App - a rejected login", () => {
 
     render(<App />);
 
-    await user.type(screen.getByPlaceholderText("Username"), "someone");
-    await user.type(screen.getByPlaceholderText("Password"), "wrong-password");
+    await user.type(screen.getByLabelText("Username"), "someone");
+    await user.type(screen.getByLabelText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
     expect(await screen.findByText("Invalid credentials")).toBeInTheDocument();
     // The credentials survived. They did not before: the inputs were a new
     // component's, so they came back blank and the user had to retype both.
-    expect(screen.getByPlaceholderText("Username")).toHaveValue("someone");
-    expect(screen.getByPlaceholderText("Password")).toHaveValue(
+    expect(screen.getByLabelText("Username")).toHaveValue("someone");
+    expect(screen.getByLabelText("Password")).toHaveValue(
       "wrong-password"
     );
     // Refused means refused - still on the login form, no session.
@@ -65,13 +65,13 @@ describe("App - a rejected login", () => {
 
     render(<App />);
 
-    await user.type(screen.getByPlaceholderText("Username"), "someone");
-    await user.type(screen.getByPlaceholderText("Password"), "wrong-password");
+    await user.type(screen.getByLabelText("Username"), "someone");
+    await user.type(screen.getByLabelText("Password"), "wrong-password");
     await user.click(screen.getByRole("button", { name: "Sign In" }));
 
     // Mid-flight: the form is still mounted, the button says so, and the
     // tree-replacing "Loading..." is nowhere.
-    expect(screen.getByRole("heading", { name: "Welcome Back" })).toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "Welcome back" })).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "Signing in..." })).toBeDisabled();
     expect(screen.queryByText("Loading...")).not.toBeInTheDocument();
 
