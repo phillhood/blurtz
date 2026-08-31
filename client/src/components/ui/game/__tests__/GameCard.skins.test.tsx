@@ -43,3 +43,24 @@ describe("GameCard", () => {
     );
   });
 });
+
+describe("the emissive skin", () => {
+  it("leaves a face-down card's back alone at every size", () => {
+    // The token override paints from `--hue`; a face-down card's hue is the
+    // unknown-colour token, so without the exclusion a card back renders as a
+    // pale slate rectangle instead of the deck pattern.
+    const { container } = render(
+      <div className="skin-emissive">
+        <GameCard
+          hue="var(--color-card-unknown)"
+          cardType="a"
+          size="token"
+          faceDown
+        />
+      </div>
+    );
+    const card = container.querySelector("[data-face-down='true']");
+    expect(card).not.toBeNull();
+    expect(card).toHaveAttribute("data-card-size", "token");
+  });
+});

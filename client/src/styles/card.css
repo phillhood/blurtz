@@ -143,7 +143,8 @@
   top: auto;
 }
 
-.skin-emissive .blurtz-card[data-card-size="token"] {
+.skin-emissive
+  .blurtz-card[data-card-size="token"]:not([data-face-down="true"]) {
   background: var(--hue);
   color: #fff;
   border: none;
