@@ -25,7 +25,7 @@ interface Series {
 }
 
 const buildSeries = (detail: GameResultsDetail): Series[] => {
-  const usernames = (detail.rounds[0]?.results ?? []).map((result) => result.username);
+  const usernames = orderedUsernames(detail);
 
   return usernames.map((username) => {
     const points = [0];
@@ -55,6 +55,16 @@ const describe = (detail: GameResultsDetail, series: Series[]): string => {
  * `me` is purple, every opponent shares one muted grey, and identity is carried
  * by the label at the end of each line rather than by hue.
  */
+const orderedUsernames = (detail: GameResultsDetail): string[] => {
+  const last = detail.rounds[detail.rounds.length - 1];
+  if (!last) {
+    return [];
+  }
+  return [...last.results]
+    .sort((a, b) => b.cumulativeScore - a.cumulativeScore)
+    .map((result) => result.username);
+};
+
 const ScoreRaceChart: React.FC<ScoreRaceChartProps> = ({ detail, me }) => {
   const series = buildSeries(detail);
   const rounds = detail.rounds.length;

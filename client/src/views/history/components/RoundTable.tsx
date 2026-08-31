@@ -9,13 +9,23 @@ interface RoundTableProps {
 
 const signed = (value: number): string => (value > 0 ? `+${value}` : `${value}`);
 
+const orderedUsernames = (detail: GameResultsDetail): string[] => {
+  const last = detail.rounds[detail.rounds.length - 1];
+  if (!last) {
+    return [];
+  }
+  return [...last.results]
+    .sort((a, b) => b.cumulativeScore - a.cumulativeScore)
+    .map((result) => result.username);
+};
+
 /**
  * Round-by-round scores, rounds down and players across. Not a fallback for the
  * chart: it is the accessible equivalent and ships visible, so it carries the
  * per-round delta, the running total and who called Blurtz.
  */
 const RoundTable: React.FC<RoundTableProps> = ({ detail, me }) => {
-  const usernames = (detail.rounds[0]?.results ?? []).map((result) => result.username);
+  const usernames = orderedUsernames(detail);
 
   return (
     <table className="blurtz-rounds">

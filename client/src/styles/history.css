@@ -170,3 +170,74 @@
     align-items: start;
   }
 }
+
+.blurtz-panel {
+  background: var(--color-panel-recessed);
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-md);
+  padding: 20px;
+  min-width: 0;
+}
+
+.blurtz-panel__title {
+  margin: 0 0 12px;
+  font-family: var(--font-body);
+  font-size: 10.5px;
+  font-weight: 500;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+}
+
+.blurtz-panel__foot {
+  margin: 10px 0 0;
+  font-size: 9.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+/* A legend as well as the end labels: two encodings for four series, so
+   identity never rests on the line colour alone. */
+.blurtz-legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  margin-bottom: 12px;
+  font-size: 12px;
+  color: var(--color-text-secondary);
+}
+
+.blurtz-legend__item i {
+  width: 14px;
+  height: 3px;
+  border-radius: 2px;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 6px;
+  background: #7c8899;
+}
+
+.blurtz-legend__item--me i {
+  background: var(--color-purple-bright);
+}
+
+.blurtz-legend__item--target i {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* The chart's labels live in the SVG's own user units, so a narrow container
+   shrinks them below legibility. It scrolls instead, and the page body never
+   scrolls sideways with it. */
+.blurtz-race__scroll,
+.blurtz-rounds__scroll {
+  overflow-x: auto;
+}
+
+.blurtz-race__scroll > svg {
+  min-width: 460px;
+}
+
+.blurtz-rounds__scroll > table {
+  min-width: 300px;
+}

@@ -97,8 +97,35 @@ const GameResults: React.FC = () => {
       </div>
 
       <div className="blurtz-results">
-        <ScoreRaceChart detail={data} me={me} />
-        <RoundTable detail={data} me={me} />
+        <section className="blurtz-panel">
+          <h2 className="blurtz-panel__title">Cumulative score by round</h2>
+          <div className="blurtz-legend">
+            <span className="blurtz-legend__item blurtz-legend__item--me">
+              <i />
+              {me || "you"}
+            </span>
+            <span className="blurtz-legend__item">
+              <i />
+              opponents
+            </span>
+            <span className="blurtz-legend__item blurtz-legend__item--target">
+              <i />
+              {`target ${data.targetScore}`}
+            </span>
+          </div>
+          <div className="blurtz-race__scroll">
+            <ScoreRaceChart detail={data} me={me} />
+          </div>
+        </section>
+        <section className="blurtz-panel">
+          <h2 className="blurtz-panel__title">Round by round</h2>
+          <div className="blurtz-rounds__scroll">
+            <RoundTable detail={data} me={me} />
+          </div>
+          <p className="blurtz-panel__foot">
+            Large number: that round. Small: running total.
+          </p>
+        </section>
       </div>
     </PageContainer>
   );
