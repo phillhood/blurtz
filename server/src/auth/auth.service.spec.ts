@@ -225,6 +225,7 @@ describe("AuthService", () => {
           username: true,
           gamesPlayed: true,
           gamesWon: true,
+          cardSkin: true,
           createdAt: true,
         },
       });

@@ -12,6 +12,7 @@ model User {
   password    String
   gamesPlayed Int      @default(0)
   gamesWon    Int      @default(0)
+  cardSkin    CardSkin @default(solid) @map("card_skin")
   players     Player[]
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
@@ -124,6 +125,11 @@ model RoundResult {
   /// The scoreboard query: every player's results for a round, in order.
   @@index([gameId, round])
   @@map("round_results")
+}
+
+enum CardSkin {
+  solid
+  emissive
 }
 
 enum GameStatus {

@@ -8,6 +8,7 @@ import { JwtService } from "@nestjs/jwt";
 import * as bcrypt from "bcryptjs";
 import { PrismaService } from "@prisma";
 import { LoginRequest, RegisterRequest, AuthResponse } from "@types";
+import type { CardSkin } from "@blurtz/shared";
 
 @Injectable()
 export class AuthService {
@@ -80,16 +81,32 @@ export class AuthService {
     return null;
   }
 
+  /**
+   * The columns a profile is allowed to carry. Shared by every read and write
+   * of a profile so the two cannot drift - a route that returns `cardSkin` and
+   * another that does not would leave the client defaulting to solid forever.
+   */
+  private readonly profileSelect = {
+    id: true,
+    username: true,
+    gamesPlayed: true,
+    gamesWon: true,
+    cardSkin: true,
+    createdAt: true,
+  };
+
   async findById(id: string) {
     return this.prisma.user.findUnique({
       where: { id },
-      select: {
-        id: true,
-        username: true,
-        gamesPlayed: true,
-        gamesWon: true,
-        createdAt: true,
-      },
+      select: this.profileSelect,
+    });
+  }
+
+  async updatePreferences(id: string, preferences: { cardSkin: CardSkin }) {
+    return this.prisma.user.update({
+      where: { id },
+      data: { cardSkin: preferences.cardSkin },
+      select: this.profileSelect,
     });
   }
 }

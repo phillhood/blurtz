@@ -17,6 +17,7 @@ describe("AuthController", () => {
     username: "testuser",
     gamesPlayed: 0,
     gamesWon: 0,
+    cardSkin: "solid" as const,
     createdAt: new Date(),
   };
 

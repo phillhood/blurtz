@@ -1,17 +1,9 @@
-import {
-  Controller,
-  Post,
-  Body,
-  Get,
-  UseGuards,
-  Request,
-  NotFoundException,
-} from "@nestjs/common";
+import { Body, Controller, Get, NotFoundException, Patch, Post, Request, UseGuards } from "@nestjs/common";
 import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth } from "@nestjs/swagger";
 import { Throttle } from "@nestjs/throttler";
 import { AuthService } from "./auth.service";
 import { JwtAuthGuard } from "./guards/jwt-auth.guard";
-import { RegisterDto, LoginDto } from "./dto";
+import { LoginDto, RegisterDto, UpdatePreferencesDto } from "./dto";
 
 @ApiTags("auth")
 @Controller("auth")
@@ -50,6 +42,20 @@ export class AuthController {
       throw new NotFoundException("User not found");
     }
     return user;
+  }
+
+  @Patch("preferences")
+  @UseGuards(JwtAuthGuard)
+  @ApiBearerAuth()
+  @ApiOperation({ summary: "Update display preferences" })
+  @ApiResponse({ status: 200, description: "Preferences updated" })
+  @ApiResponse({ status: 400, description: "Invalid preference value" })
+  @ApiResponse({ status: 401, description: "Unauthorized" })
+  async updatePreferences(
+    @Request() req,
+    @Body() preferences: UpdatePreferencesDto
+  ) {
+    return this.authService.updatePreferences(req.user.sub, preferences);
   }
 
   @Post("logout")
