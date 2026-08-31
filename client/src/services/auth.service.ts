@@ -1,5 +1,5 @@
 import { apiClient, ApiError } from "./api.service";
-import { User } from "@types";
+import { CardSkin, User } from "@types";
 
 export interface LoginRequest {
   username: string;
@@ -56,6 +56,10 @@ export class AuthService {
       }
       throw error;
     }
+  }
+
+  async updatePreferences(cardSkin: CardSkin): Promise<User> {
+    return apiClient.patch<User>("/api/auth/preferences", { cardSkin });
   }
 
   async getProfile(): Promise<User> {

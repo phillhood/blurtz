@@ -53,7 +53,8 @@ describe("authStore", () => {
 
   describe("login", () => {
     it("should login successfully and set user", async () => {
-      const mockUser = { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() };
+      const mockUser = { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0,
+      cardSkin: "solid" as const, createdAt: new Date() };
       const mockResponse = { user: mockUser, token: "mock-token" };
 
       vi.mocked(authService.login).mockResolvedValue(mockResponse);
@@ -76,7 +77,8 @@ describe("authStore", () => {
     // the error it was about to show.
     it("should NOT touch the store-wide loading flag during login", async () => {
       const mockResponse = {
-        user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
+        user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0,
+      cardSkin: "solid" as const, createdAt: new Date() },
         token: "mock-token",
       };
       vi.mocked(authService.login).mockImplementation(
@@ -122,7 +124,8 @@ describe("authStore", () => {
 
   describe("register", () => {
     it("should register successfully and set user", async () => {
-      const mockUser = { id: "1", username: "newuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() };
+      const mockUser = { id: "1", username: "newuser", gamesPlayed: 0, gamesWon: 0,
+      cardSkin: "solid" as const, createdAt: new Date() };
       const mockResponse = { user: mockUser, token: "mock-token" };
 
       vi.mocked(authService.register).mockResolvedValue(mockResponse);
@@ -157,7 +160,8 @@ describe("authStore", () => {
   describe("logout", () => {
     it("should clear user and remove token", () => {
       useAuthStore.setState({
-        user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() },
+        user: { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0,
+      cardSkin: "solid" as const, createdAt: new Date() },
         loading: false,
         error: null,
       });
@@ -174,7 +178,8 @@ describe("authStore", () => {
 
   describe("fetchUserProfile", () => {
     it("should fetch profile when token exists", async () => {
-      const mockUser = { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0, createdAt: new Date() };
+      const mockUser = { id: "1", username: "testuser", gamesPlayed: 0, gamesWon: 0,
+      cardSkin: "solid" as const, createdAt: new Date() };
       localStorageMock.getItem.mockReturnValue("mock-token");
       vi.mocked(authService.getProfile).mockResolvedValue(mockUser);
 

@@ -8,10 +8,12 @@ import {
 import { useAuthContext } from "@hooks";
 import { Login, Register, Dashboard, Game } from "@views";
 import { Header } from "@components/layout";
+import { useAuthStore } from "@stores/authStore";
 import { AppContainer } from "@styles";
 
 const App: React.FC = () => {
   const { user, loading } = useAuthContext();
+  const cardSkin = useAuthStore((state) => state.user?.cardSkin ?? "solid");
 
   // Returning something other than <Router> UNMOUNTS the whole tree, so this is
   // only allowed to be true while there is genuinely nothing to route: at boot,
@@ -24,7 +26,9 @@ const App: React.FC = () => {
 
   return (
     <Router>
-      <AppContainer>
+      {/* The skin sits at the root, not the board, so the toggle previews in
+          the treatment it selects wherever it is shown. */}
+      <AppContainer className={cardSkin === "emissive" ? "skin-emissive" : undefined}>
         {user && <Header />}
         <Routes>
           <Route

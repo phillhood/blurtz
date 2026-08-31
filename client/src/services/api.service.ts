@@ -93,6 +93,20 @@ export class ApiClient {
 
     return response.json();
   }
+
+  async patch<T>(endpoint: string, data?: unknown): Promise<T> {
+    const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+      method: "PATCH",
+      headers: this.getAuthHeaders(),
+      ...(data ? { body: JSON.stringify(data) } : {}),
+    });
+
+    if (!response.ok) {
+      await throwApiError(response);
+    }
+
+    return response.json();
+  }
 }
 
 export const apiClient = new ApiClient();

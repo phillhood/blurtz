@@ -16,6 +16,7 @@ export type {
   // discriminated on `faceUp`, so reading `.value` off a card that has not
   // been narrowed is a compile error rather than a leak.
   CardColor,
+  CardSkin,
   ClientCard,
   HiddenCard,
   VisibleCard,

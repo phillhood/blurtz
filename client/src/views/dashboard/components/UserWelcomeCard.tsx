@@ -2,6 +2,7 @@ import React from "react";
 import { User } from "@types";
 import { Card } from "@styles";
 import { useUserStats } from "@hooks";
+import { CardSkinToggle } from "@components/ui/CardSkinToggle";
 
 interface UserWelcomeCardProps {
   user: User;
@@ -41,6 +42,21 @@ const UserWelcomeCard: React.FC<UserWelcomeCardProps> = ({ user }) => {
             <span>Win Rate: {winRate}%</span>
           </>
         )}
+      </div>
+          <div style={{ marginTop: "16px" }}>
+        <div
+          style={{
+            fontFamily: "var(--font-body)",
+            fontSize: "10px",
+            letterSpacing: "0.18em",
+            textTransform: "uppercase",
+            color: "var(--color-text-muted)",
+            marginBottom: "6px",
+          }}
+        >
+          Card skin
+        </div>
+        <CardSkinToggle />
       </div>
     </Card>
   );

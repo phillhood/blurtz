@@ -1,6 +1,6 @@
 import { create } from "zustand";
 import { devtools, persist } from "zustand/middleware";
-import { User } from "@types";
+import { CardSkin, User } from "@types";
 import { authService } from "@services/auth.service";
 import { ApiError } from "@services/api.service";
 
@@ -27,6 +27,7 @@ interface AuthActions {
   register: (username: string, password: string) => Promise<void>;
   logout: () => void;
   fetchUserProfile: () => Promise<void>;
+  setCardSkin: (skin: CardSkin) => Promise<void>;
   clearError: () => void;
   setLoading: (loading: boolean) => void;
 }
@@ -36,7 +37,7 @@ type AuthStore = AuthState & AuthActions;
 export const useAuthStore = create<AuthStore>()(
   devtools(
     persist(
-      (set) => ({
+      (set, get) => ({
         // State
         user: null,
         loading: true,
@@ -70,6 +71,26 @@ export const useAuthStore = create<AuthStore>()(
         logout: () => {
           localStorage.removeItem("token");
           set({ user: null, loading: false, error: null });
+        },
+
+        /**
+         * Optimistic, and the only optimistic write in this app.
+         *
+         * A skin is a local display choice, not game state - showing it at
+         * once and reverting on failure can never disagree with the server
+         * about the board, which is why the no-optimistic-updates rule does
+         * not reach here.
+         */
+        setCardSkin: async (skin: CardSkin) => {
+          const previous = get().user;
+          if (!previous) return;
+
+          set({ user: { ...previous, cardSkin: skin } });
+          try {
+            await authService.updatePreferences(skin);
+          } catch {
+            set({ user: previous });
+          }
         },
 
         fetchUserProfile: async () => {
