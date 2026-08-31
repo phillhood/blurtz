@@ -1,0 +1,172 @@
+/* match history */
+
+.blurtz-historyrow {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  width: 100%;
+  padding: 14px 16px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: left;
+  font-family: inherit;
+  color: inherit;
+  cursor: pointer;
+  transition: background 0.18s var(--ease-spring), border-color 0.18s var(--ease-spring);
+}
+
+.blurtz-historyrow:hover {
+  background: rgba(255, 255, 255, 0.04);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.blurtz-historyrow__main {
+  min-width: 0;
+  flex: 1;
+}
+
+.blurtz-historyrow__name {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blurtz-historyrow__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 3px;
+  font-size: 10.5px;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.blurtz-historyrow__outcome {
+  font-weight: 700;
+  color: var(--color-text-secondary);
+}
+
+.blurtz-historyrow__outcome--won {
+  color: color-mix(in srgb, var(--color-purple-bright) 25%, white);
+}
+
+.blurtz-standings {
+  display: flex;
+  gap: 4px;
+  align-items: stretch;
+}
+
+.blurtz-seatscore {
+  min-width: 52px;
+  padding: 5px 8px;
+  border-radius: var(--radius-xs);
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  text-align: center;
+  line-height: 1.25;
+}
+
+.blurtz-seatscore__who {
+  display: block;
+  font-size: 9px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.blurtz-seatscore__value {
+  display: block;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 15px;
+  font-variant-numeric: tabular-nums;
+  color: var(--color-text-secondary);
+}
+
+.blurtz-seatscore--first .blurtz-seatscore__value {
+  color: var(--color-text-primary);
+}
+
+.blurtz-seatscore--me {
+  background: color-mix(in srgb, var(--color-purple-bright) 14%, transparent);
+  border-color: color-mix(in srgb, var(--color-purple-bright) 35%, transparent);
+}
+
+.blurtz-seatscore--me .blurtz-seatscore__who {
+  color: color-mix(in srgb, var(--color-purple-bright) 25%, white);
+}
+
+@media (max-width: 640px) {
+  .blurtz-historyrow {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
+
+  .blurtz-standings {
+    width: 100%;
+  }
+
+  .blurtz-seatscore {
+    flex: 1;
+    min-width: 0;
+  }
+}
+
+.blurtz-tabs {
+  display: flex;
+  gap: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+  margin-bottom: 20px;
+}
+
+.blurtz-tabs__tab {
+  font-family: var(--font-body);
+  font-size: 11px;
+  letter-spacing: 0.13em;
+  text-transform: uppercase;
+  padding: 10px 14px;
+  color: var(--color-text-muted);
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+  transition: color 0.18s var(--ease-spring);
+}
+
+.blurtz-tabs__tab:hover {
+  color: var(--color-text-secondary);
+}
+
+.blurtz-tabs__tab--active {
+  color: color-mix(in srgb, var(--color-purple-bright) 45%, white);
+  border-bottom-color: var(--color-purple-bright);
+}
+
+.blurtz-historylist {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.blurtz-results {
+  display: grid;
+  gap: 20px;
+  grid-template-columns: 1fr;
+  margin-top: 18px;
+}
+
+@media (min-width: 960px) {
+  .blurtz-results {
+    grid-template-columns: 1.25fr 0.75fr;
+    align-items: start;
+  }
+}

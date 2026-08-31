@@ -4,6 +4,7 @@ import { useAuthContext, useUserStats } from "@hooks";
 import { PageContainer, Card, Button, GameCard, CardNumber } from "@styles";
 import { CARD_HUES } from "@styles/tokens";
 import { CardSkinToggle } from "@components/ui/CardSkinToggle";
+import { ProfileTabs } from "@views/history/components";
 
 const PREVIEW: Array<{ color: string; type: "a" | "b"; value: number }> = [
   { color: "red", type: "a", value: 7 },
@@ -28,6 +29,8 @@ const Profile: React.FC = () => {
           Back to tables
         </Button>
       </div>
+
+      <ProfileTabs active="profile" />
 
       <Card>
         <div className="blurtz-stats">

@@ -31,6 +31,11 @@ export type {
   ClientPile as Pile,
   ClientPlayer as Player,
   ClientPlayerDeck as PlayerDeck,
+  // The read-only match-history contracts. No card state, so redaction does
+  // not apply and these need no client-side rename.
+  MatchHistoryItem,
+  GameResultsDetail,
+  GameRoundResult,
 } from "@blurtz/shared";
 
 /**
