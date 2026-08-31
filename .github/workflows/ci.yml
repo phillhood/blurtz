@@ -1,9 +1,13 @@
 name: CI
 
+# Disabled 2026-08-31, deliberately: the client depends on
+# @shychedelic/voidglass-react from a registry that resolves only on the LAN,
+# so a GitHub-hosted runner cannot install it and every run fails at `npm ci`.
+# The workflow itself is unchanged and still correct - restore the `push` and
+# `pull_request` triggers below once CI can reach the registry (a tailnet step,
+# a Forgejo runner, or a publicly reachable mirror).
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ci-${{ github.ref }}
