@@ -30,6 +30,11 @@ container then dies on an import the host resolves fine. Same after pulling a br
 `client/node_modules/.vite` isn't keyed on a linked workspace package's `dist`, so after changing
 `shared` the client can serve a stale copy — a blank page and a new export reading `undefined`, on a
 clean tree. `rm -rf client/node_modules/.vite` fixes it. CI is unaffected (it never has a warm cache).
+**Under Compose the host cache is not the one being served** — `node_modules` is not mounted, so clear
+it *inside* the container and restart:
+`docker compose exec client sh -c 'rm -rf /app/client/node_modules/.vite /app/node_modules/.vite' && docker compose restart client`.
+The symptom of getting this wrong is a blank page and `TypeError: <newExport> is not a function` for a
+symbol that plainly exists in `shared/dist`.
 
 ⚠️ **VoidGlass must load into Tailwind's `components` layer, and does — don't "tidy" it into
 `main.tsx`.** The import lives in `client/src/styles/index.css` as
