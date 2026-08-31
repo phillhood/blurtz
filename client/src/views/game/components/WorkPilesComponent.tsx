@@ -12,6 +12,8 @@ interface WorkPilesComponentProps {
   selectedCardId?: string;
   rejectedCardIds?: Set<string>;
   onCardTap?: (card: ClientCard, pileId: string) => void;
+  /** Tapping an empty pile, which holds no card to tap. */
+  onEmptyPileTap?: (pileId: string) => void;
   workPiles: Pile[];
   canDropOnPile: (index: number, card: ClientCard) => boolean;
   isDraggable: boolean;
@@ -30,6 +32,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
   selectedCardId,
   rejectedCardIds,
   onCardTap,
+  onEmptyPileTap,
 }) => {
   const { active } = useDndContext();
   const dragData = active?.data.current as DragData | undefined;
@@ -71,6 +74,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
                   pileIndex={index}
                   canDrop={(card) => canDropOnPile(index, card)}
                   visible={showPlaceholder}
+                  onTap={onEmptyPileTap}
                 />
               )}
               {/* Render cards on top */}
@@ -108,7 +112,8 @@ const EmptyWorkPileDropZone: React.FC<{
   pileIndex: number;
   canDrop: (card: ClientCard) => boolean;
   visible: boolean;
-}> = ({ pileId, pileIndex, canDrop, visible }) => {
+  onTap?: (pileId: string) => void;
+}> = ({ pileId, pileIndex, canDrop, visible, onTap }) => {
   const { setNodeRef, isOver, active } = useDroppable({
     id: `work-pile-empty-${pileId}`,
     data: { pileId, pileIndex, isEmpty: true },
@@ -117,12 +122,24 @@ const EmptyWorkPileDropZone: React.FC<{
   const canDropHere =
     isOver && active ? canDrop((active.data.current as DragData)?.card) : false;
 
+  const tappable = visible && Boolean(onTap);
+
   return (
-    <div
+    <button
+      type="button"
       ref={setNodeRef}
+      // A faded placeholder sits behind every work pile, empty or not. Only the
+      // one for a genuinely empty pile is a control; the rest must not be
+      // findable or clickable.
+      aria-label={visible ? "Empty work pile" : undefined}
+      aria-hidden={visible ? undefined : true}
+      tabIndex={visible ? undefined : -1}
+      onClick={tappable ? () => onTap?.(pileId) : undefined}
       style={{
         width: "var(--card-w)",
         height: "var(--card-h)",
+        cursor: onTap ? "pointer" : "default",
+        font: "inherit",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -136,6 +153,7 @@ const EmptyWorkPileDropZone: React.FC<{
         border: canDropHere ? "2px dashed #10b981" : "2px dashed #475569",
         borderRadius: "6px",
         opacity: visible ? 1 : 0,
+        pointerEvents: visible ? undefined : "none",
         transition: "opacity 0.15s ease-out",
       }}
     />

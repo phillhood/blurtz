@@ -57,10 +57,21 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
 
   const required = tutorial.step.requires?.(tutorial.deck, tutorial.bankPiles) ?? null;
 
+  // Scroll the card this step is about into view. On a short viewport the
+  // pinned coach sits over the lower board, so the step's own subject would
+  // otherwise be behind it.
+  const requiredCardId = required?.cardId;
   useEffect(() => {
-    const target = boardRef.current?.querySelector("[data-legal-target='true']");
-    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
-  }, [tutorial.stepIndex]);
+    if (!requiredCardId) {
+      return;
+    }
+    const target = boardRef.current?.querySelector(
+      `[data-card-id="${requiredCardId}"]`
+    );
+    if (target instanceof HTMLElement && typeof target.scrollIntoView === "function") {
+      target.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [requiredCardId]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -86,6 +97,13 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
       return;
     }
     selection.toggle(card, pileId);
+  };
+
+  const handleEmptyPileTap = (pileId: string) => {
+    const picked = selection.selected;
+    if (picked) {
+      commit(picked.card.id, picked.fromPileId, pileId);
+    }
   };
 
   const handleDragStart = (event: DragStartEvent) => {
@@ -138,6 +156,7 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
               canDropOnPile={canDropOnBank}
               legalTargetIds={legalTargetIds}
               onCardTap={handleCardTap}
+              onEmptyPileTap={handleEmptyPileTap}
             />
           </BankPiles>
         </CenterArea>
@@ -161,6 +180,7 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
                 legalTargetIds={legalTargetIds}
                 selectedCardId={selection.selected?.card.id}
                 onCardTap={handleCardTap}
+                onEmptyPileTap={handleEmptyPileTap}
               />
             </WorkPiles>
             <BlurtzPile

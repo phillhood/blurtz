@@ -125,6 +125,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
       {...(canBeDragged ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
+        data-card-id={card.id}
         hue={cardHue(card.color)}
         cardType={card.color.type}
         size={size}

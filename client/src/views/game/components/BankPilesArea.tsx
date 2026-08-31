@@ -10,6 +10,8 @@ interface BankPilesAreaProps {
   canDropOnPile: (pileIndex: number, card: ClientCard) => boolean;
   legalTargetIds?: string[];
   onCardTap?: (card: ClientCard, pileId: string) => void;
+  /** Tapping the empty slot, which holds no card to tap. */
+  onEmptyPileTap?: (pileId: string) => void;
 }
 
 /**
@@ -26,6 +28,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
   bankPiles,
   legalTargetIds = [],
   onCardTap,
+  onEmptyPileTap,
   canDropOnPile,
 }) => {
   const activePiles = bankPiles
@@ -65,6 +68,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
                 pileId={firstEmptyPile.id}
                 pileIndex={firstEmptyIndex}
                 canDrop={(card) => canDropOnPile(firstEmptyIndex, card)}
+                onTap={onEmptyPileTap}
               />
             </div>
           )}
@@ -78,7 +82,8 @@ const EmptyPileDropZone: React.FC<{
   pileId: string;
   pileIndex: number;
   canDrop: (card: ClientCard) => boolean;
-}> = ({ pileId, pileIndex, canDrop }) => {
+  onTap?: (pileId: string) => void;
+}> = ({ pileId, pileIndex, canDrop, onTap }) => {
   const { setNodeRef, isOver, active } = useDroppable({
     id: `bank-pile-empty-${pileId}`,
     data: { pileId, pileIndex, isEmpty: true },
@@ -89,11 +94,16 @@ const EmptyPileDropZone: React.FC<{
     : false;
 
   return (
-    <div
+    <button
+      type="button"
       ref={setNodeRef}
+      aria-label="Empty bank pile"
+      onClick={onTap ? () => onTap(pileId) : undefined}
       style={{
         width: "100%",
         height: "100%",
+        cursor: onTap ? "pointer" : "default",
+        font: "inherit",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",
@@ -112,7 +122,7 @@ const EmptyPileDropZone: React.FC<{
       }}
     >
       1
-    </div>
+    </button>
   );
 };
 

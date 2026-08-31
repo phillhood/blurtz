@@ -90,6 +90,25 @@ const Game: React.FC = () => {
     selection.toggle(card, pileId);
   };
 
+  /**
+   * An empty pile has no card to tap, so it carries its own handler. Without
+   * it the tap path cannot reach an empty bank or work pile at all - the drag
+   * path could, which made taps silently less capable than drags.
+   */
+  const handleEmptyPileTap = (pileId: string) => {
+    const picked = selection.selected;
+    if (!picked || !legalTargetIds.includes(pileId)) {
+      return;
+    }
+    const resolved = moveResolver.resolve(picked.card, picked.fromPileId, pileId);
+    if (resolved) {
+      markPending(resolved.movingCardIds);
+      rememberAttempt(resolved.movingCardIds);
+      makeMove(picked.card.id, picked.fromPileId, resolved.toPileId);
+    }
+    selection.clear();
+  };
+
   // Configure sensors for @dnd-kit
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -304,6 +323,7 @@ const Game: React.FC = () => {
                 canDropOnPile={canDropOnBankPile}
                 legalTargetIds={legalTargetIds}
                 onCardTap={handleCardTap}
+                onEmptyPileTap={handleEmptyPileTap}
               />
             </CenterArea>
 
@@ -317,6 +337,7 @@ const Game: React.FC = () => {
                 selectedCardId={selection.selected?.card.id}
                 rejectedCardIds={rejectedIds}
                 onCardTap={handleCardTap}
+                onEmptyPileTap={handleEmptyPileTap}
                 // Own socket state, first-hand: a dropped client's presence set
                 // is whatever the server last managed to tell it.
                 isConnected={connected}

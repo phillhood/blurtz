@@ -73,6 +73,70 @@ test.describe("Tutorial", () => {
     await expect(page.getByRole("button", { name: /Sign in and play/ })).toBeVisible();
   });
 
+  /**
+   * The whole script by tap alone - no drag, no "Show me". Three of the eight
+   * steps target an EMPTY pile (the first bank pile, and two empty work piles),
+   * which has no card to tap and so needs its own handler. Without this test the
+   * tap path silently could not finish the tutorial.
+   */
+  test("the whole script can be completed by tapping, including onto empty piles", async ({
+    page,
+  }) => {
+    await page.goto("/tutorial");
+    await page.getByRole("button", { name: "Got it" }).click();
+
+    // Cards carry their own id, so no step can pick up the wrong 2 or 7.
+    const card = (id: string) => page.locator(`[data-card-id="${id}"]`);
+    // Near the top edge, which is the strip a fanned card actually exposes -
+    // the centre of a covered card belongs to the card sitting on it.
+    const tap = async (id: string) => {
+      const target = card(id);
+      await target.scrollIntoViewIfNeeded();
+      await target.click({ position: { x: 20, y: 8 } });
+    };
+    const emptyBank = page.getByRole("button", { name: "Empty bank pile" });
+    const emptyWork = () => page.getByRole("button", { name: "Empty work pile" }).first();
+
+    // 2: the red 1 from the Blurtz pile onto the empty bank slot.
+    await tap("tut-red-1");
+    await emptyBank.scrollIntoViewIfNeeded();
+    await emptyBank.click();
+    await expect(page.getByText("Step 3 of 8")).toBeVisible();
+
+    // 3: the red 2 onto the red 1.
+    await tap("tut-red-2");
+    await tap("tut-red-1");
+    await expect(page.getByText("Step 4 of 8")).toBeVisible();
+
+    // 4: the green 5 onto the red 6.
+    await tap("tut-green-5");
+    await tap("tut-red-6");
+    await expect(page.getByText("Step 5 of 8")).toBeVisible();
+
+    // 5: the red 6, carrying the green 5, onto the green 7.
+    await tap("tut-red-6");
+    await tap("tut-green-7");
+    await expect(page.getByText("Step 6 of 8")).toBeVisible();
+
+    // 6: the yellow 7 onto an empty work pile.
+    await tap("tut-yellow-7");
+    await emptyWork().scrollIntoViewIfNeeded();
+    await emptyWork().click();
+    await expect(page.getByText("Step 7 of 8")).toBeVisible();
+
+    // 7: flip the draw pile.
+    await page.getByRole("button", { name: "Show me" }).click();
+    await expect(page.getByText("Step 8 of 8")).toBeVisible();
+
+    // 8: the last Blurtz card onto an empty work pile, then call it.
+    await tap("tut-green-4");
+    await emptyWork().scrollIntoViewIfNeeded();
+    await emptyWork().click();
+    await page.getByRole("button", { name: /BLURTZ/ }).click();
+
+    await expect(page.getByText(/That is the whole game/i)).toBeVisible();
+  });
+
   test("skip leaves immediately, without a confirm", async ({ page }) => {
     await page.goto("/tutorial");
 

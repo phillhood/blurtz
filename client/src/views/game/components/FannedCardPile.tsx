@@ -303,6 +303,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
       {...(isDraggable ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
+        data-card-id={card.id}
         hue={cardHue(card.color)}
         cardType={card.color.type}
         size={size}
