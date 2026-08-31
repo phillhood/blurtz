@@ -5,7 +5,6 @@ import App from "./App";
 import { AuthProvider } from "@contexts";
 import { queryClient } from "./lib/queryClient";
 import "@styles/index.css";
-import "@styles/fonts.css";
 
 // Side-effect import: this is what activates gameStore's auth subscription,
 // which connects and disconnects the socket on login/logout. Nothing here
