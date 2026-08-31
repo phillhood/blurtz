@@ -22,6 +22,9 @@ interface PlayerAreaProps {
    * that knows nothing about presence must not paint everyone as dropped.
    */
   isConnected?: boolean;
+  legalTargetIds?: string[];
+  selectedCardId?: string;
+  onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
 const PlayerArea: React.FC<PlayerAreaProps> = ({
@@ -30,6 +33,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
   opponentCount,
   pendingMoveCardIds,
   isConnected = true,
+  legalTargetIds,
+  selectedCardId,
+  onCardTap,
 }) => {
   const { flipDrawPile, callBlitz, gameState } = useGameContext();
   const [showBlurtzButton, setShowBlurtzButton] = useState(false);
@@ -150,6 +156,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             isCurrentPlayer={isCurrentPlayer}
             pendingMoveCardIds={pendingMoveCardIds}
             size={cardSize}
+            onCardTap={onCardTap}
           />
           <WorkPile
             workPiles={player.deck.workPiles}
@@ -158,6 +165,9 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             isCurrentPlayer={isCurrentPlayer}
             pendingMoveCardIds={pendingMoveCardIds}
             size={cardSize}
+            legalTargetIds={legalTargetIds}
+            selectedCardId={selectedCardId}
+            onCardTap={onCardTap}
           />
           <BlurtzPile
             pile={player.deck.blurtzPile}
@@ -165,6 +175,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             isDraggable={isDraggable}
             pendingMoveCardIds={pendingMoveCardIds}
             size={cardSize}
+            onCardTap={onCardTap}
           />
         </CardArea>
       {showBlurtzButton && (

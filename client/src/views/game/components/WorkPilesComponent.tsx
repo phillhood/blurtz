@@ -8,6 +8,9 @@ import { DragData } from "./Card";
 
 interface WorkPilesComponentProps {
   size?: CardSize;
+  legalTargetIds?: string[];
+  selectedCardId?: string;
+  onCardTap?: (card: ClientCard, pileId: string) => void;
   workPiles: Pile[];
   canDropOnPile: (index: number, card: ClientCard) => boolean;
   isDraggable: boolean;
@@ -22,6 +25,9 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
   isCurrentPlayer,
   pendingMoveCardIds,
   size = "play",
+  legalTargetIds = [],
+  selectedCardId,
+  onCardTap,
 }) => {
   const { active } = useDndContext();
   const dragData = active?.data.current as DragData | undefined;
@@ -70,6 +76,9 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
                 <div style={{ position: "absolute", top: 0, left: 0 }}>
                   <FannedCardPile
                     size={size}
+                    isLegalTarget={legalTargetIds.includes(pile.id)}
+                    selectedCardId={selectedCardId}
+                    onCardTap={onCardTap}
                     cards={cards}
                     pileId={pile.id}
                     isDraggable={isDraggable}

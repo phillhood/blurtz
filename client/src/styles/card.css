@@ -418,3 +418,53 @@
     align-items: stretch;
   }
 }
+
+/* ── interaction states ──────────────────────────────────────
+   Purple carries all of them; it is the one hue that can never
+   be mistaken for a card colour. */
+.blurtz-card[data-selected="true"] {
+  transform: translateY(-10px) scale(1.04);
+  z-index: 20;
+  box-shadow: 0 0 0 3px var(--color-purple-bright),
+    0 0 26px -2px var(--color-purple-bright),
+    0 14px 30px -8px rgba(0, 0, 0, 0.9);
+}
+
+.blurtz-card[data-legal-target="true"] {
+  box-shadow: 0 0 0 2px var(--color-purple-bright),
+    0 0 20px -4px var(--color-purple-bright);
+  animation: blurtz-breathe 1.9s ease-in-out infinite;
+}
+
+@keyframes blurtz-breathe {
+  0%,
+  100% {
+    box-shadow: 0 0 0 2px rgba(168, 85, 247, 0.55),
+      0 0 20px -6px rgba(168, 85, 247, 0.55);
+  }
+  50% {
+    box-shadow: 0 0 0 2px var(--color-purple-bright),
+      0 0 22px -2px var(--color-purple-bright);
+  }
+}
+
+/* Everything that is not in play recedes, but stays readable - opponents are
+   still racing you while you decide. */
+.blurtz-board[data-picking="true"]
+  .blurtz-card:not([data-selected="true"]):not([data-legal-target="true"]) {
+  opacity: 0.32;
+  filter: saturate(0.5);
+}
+
+.blurtz-card[data-in-flight="true"] {
+  opacity: 0.42;
+  box-shadow: none;
+  outline: 2px dashed rgba(168, 85, 247, 0.6);
+  outline-offset: -4px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurtz-card[data-legal-target="true"] {
+    animation: none;
+  }
+}

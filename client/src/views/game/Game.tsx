@@ -25,6 +25,7 @@ import { DragData } from "./components/Card";
 import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
 import { cardHue } from "@utils/card.utils";
 import { useMoveResolver } from "./hooks/useMoveResolver";
+import { useCardSelection } from "./hooks/useCardSelection";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -57,6 +58,32 @@ const Game: React.FC = () => {
     gameState?.bankPiles,
     currentPlayer?.deck?.workPiles
   );
+  const selection = useCardSelection(gameState);
+  const legalTargetIds = selection.selected
+    ? moveResolver.legalTargetIds(
+        selection.selected.card,
+        selection.selected.fromPileId
+      )
+    : [];
+
+  /**
+   * The tap path. A tap on a legal target commits the selected card; any other
+   * tap moves the selection. Both this and the drag handler go through
+   * `moveResolver`, so the two inputs cannot disagree about what is legal.
+   */
+  const handleCardTap = (card: ClientCard, pileId: string) => {
+    const picked = selection.selected;
+    if (picked && legalTargetIds.includes(pileId)) {
+      const resolved = moveResolver.resolve(picked.card, picked.fromPileId, pileId);
+      if (resolved) {
+        markPending(resolved.movingCardIds);
+        makeMove(picked.card.id, picked.fromPileId, resolved.toPileId);
+      }
+      selection.clear();
+      return;
+    }
+    selection.toggle(card, pileId);
+  };
 
   // Configure sensors for @dnd-kit
   const sensors = useSensors(
@@ -243,7 +270,7 @@ const Game: React.FC = () => {
         <GameStatusDisplay />
 
         {gameState.status === "playing" && (
-          <GameBoard>
+          <GameBoard isPicking={!!selection.selected}>
             <OpponentsRow
               opponentCount={opponentCount}
               className="opponents-row"
@@ -269,6 +296,8 @@ const Game: React.FC = () => {
               <BankPilesArea
                 bankPiles={gameState.bankPiles}
                 canDropOnPile={canDropOnBankPile}
+                legalTargetIds={legalTargetIds}
+                onCardTap={handleCardTap}
               />
             </CenterArea>
 
@@ -278,6 +307,9 @@ const Game: React.FC = () => {
                 isCurrentPlayer={true}
                 opponentCount={0}
                 pendingMoveCardIds={pendingMoveCardIds}
+                legalTargetIds={legalTargetIds}
+                selectedCardId={selection.selected?.card.id}
+                onCardTap={handleCardTap}
                 // Own socket state, first-hand: a dropped client's presence set
                 // is whatever the server last managed to tell it.
                 isConnected={connected}

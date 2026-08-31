@@ -15,9 +15,23 @@ export const GameContainer: React.FC<LayoutProps> = ({ className, children, ...p
   );
 };
 
-export const GameBoard: React.FC<LayoutProps> = ({ className, children, ...props }) => {
+interface GameBoardProps extends LayoutProps {
+  isPicking?: boolean;
+}
+
+export const GameBoard: React.FC<GameBoardProps> = ({
+  isPicking = false,
+  className,
+  children,
+  ...props
+}) => {
   return (
-    <div className={clsx("blurtz-board", className)} data-testid="game-board" {...props}>
+    <div
+      className={clsx("blurtz-board", className)}
+      data-picking={isPicking ? "true" : undefined}
+      data-testid="game-board"
+      {...props}
+    >
       {children}
     </div>
   );

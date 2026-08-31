@@ -27,6 +27,9 @@ interface FannedCardPileProps {
   stackOffset?: number;
   pendingMoveCardIds?: Set<string>;
   size?: CardSize;
+  isLegalTarget?: boolean;
+  selectedCardId?: string;
+  onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
 const FannedCardPile: React.FC<FannedCardPileProps> = ({
@@ -37,6 +40,9 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
   canDrop,
   stackOffset = DEFAULT_STACK_OFFSET,
   size = "play",
+  isLegalTarget = false,
+  selectedCardId,
+  onCardTap,
   pendingMoveCardIds,
 }) => {
   const [hoveredIndex, setHoveredIndex] = useState<number>(-1); // Sticky - controls expansion
@@ -173,6 +179,9 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
         return (
           <FannedCard
             size={size}
+            isLegalTarget={isLegalTarget && index === cards.length - 1}
+            isSelected={selectedCardId === card.id}
+            onCardTap={onCardTap}
             key={card.id}
             card={card}
             pileId={pileId}
@@ -194,6 +203,9 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
 
 interface FannedCardProps {
   size?: CardSize;
+  isLegalTarget?: boolean;
+  isSelected?: boolean;
+  onCardTap?: (card: ClientCard, pileId: string) => void;
   card: VisibleCard;
   pileId: string;
   index: number;
@@ -220,6 +232,9 @@ const FannedCard: React.FC<FannedCardProps> = ({
   isHiddenInDrag,
   isPendingMove,
   size = "play",
+  isLegalTarget = false,
+  isSelected = false,
+  onCardTap,
 }) => {
   const dragId = `card-${card.id}`;
   const dropId = `drop-${pileId}-${card.id}`;
@@ -260,7 +275,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
 
   const dragStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    opacity: isHiddenInDrag || isPendingMove ? 0 : 1,
+    opacity: isHiddenInDrag ? 0 : 1,
     cursor: isDraggable ? "grab" : "default",
     touchAction: "none",
   };
@@ -286,6 +301,10 @@ const FannedCard: React.FC<FannedCardProps> = ({
         hue={cardHue(card.color)}
         cardType={card.color.type}
         size={size}
+        inFlight={isPendingMove}
+        isSelected={isSelected}
+        isLegalTarget={isLegalTarget}
+        onClick={onCardTap ? () => onCardTap(card, pileId) : undefined}
         isDragging={isDragging}
         canDrop={canDropHere}
         disableHoverEffect={!isTopCard}

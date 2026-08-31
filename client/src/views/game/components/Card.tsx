@@ -14,6 +14,8 @@ interface CardComponentProps {
   isDraggable?: boolean;
   isPendingMove?: boolean;
   size?: CardSize;
+  isSelected?: boolean;
+  isLegalTarget?: boolean;
 }
 
 export interface DragData {
@@ -31,6 +33,8 @@ const CardComponent: React.FC<CardComponentProps> = ({
   isDraggable: canBeDragged = true,
   isPendingMove = false,
   size = "play",
+  isSelected = false,
+  isLegalTarget = false,
 }) => {
   const dragId = `card-${card.id}`;
   const dropId = `drop-${pileId}-${card.id}`;
@@ -72,7 +76,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
 
   const dragStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
-    opacity: isDragging || isPendingMove ? 0 : 1,
+    opacity: isDragging ? 0 : 1,
     cursor: canBeDragged ? "grab" : "default",
     touchAction: "none",
   };
@@ -122,6 +126,9 @@ const CardComponent: React.FC<CardComponentProps> = ({
         size={size}
         isDragging={isDragging}
         canDrop={canDropHere}
+        isSelected={isSelected}
+        isLegalTarget={isLegalTarget}
+        inFlight={isPendingMove}
         onClick={handleClick}
       >
         <CardNumber>{card.value}</CardNumber>

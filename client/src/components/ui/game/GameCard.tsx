@@ -18,6 +18,9 @@ interface GameCardProps extends HTMLAttributes<HTMLDivElement> {
   cardType: "a" | "b";
   size?: CardSize;
   faceDown?: boolean;
+  isSelected?: boolean;
+  isLegalTarget?: boolean;
+  inFlight?: boolean;
   isDragging?: boolean;
   canDrop?: boolean;
   disableHoverEffect?: boolean;
@@ -30,6 +33,9 @@ export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
       cardType,
       size = "play",
       faceDown = false,
+      isSelected = false,
+      isLegalTarget = false,
+      inFlight = false,
       isDragging = false,
       canDrop = false,
       disableHoverEffect = false,
@@ -53,6 +59,9 @@ export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
         data-card-type={cardType}
         data-card-size={size}
         data-face-down={faceDown ? "true" : undefined}
+        data-selected={isSelected ? "true" : undefined}
+        data-legal-target={isLegalTarget ? "true" : undefined}
+        data-in-flight={inFlight ? "true" : undefined}
         data-can-drop={canDrop ? "true" : undefined}
         className={clsx(
           "blurtz-card",

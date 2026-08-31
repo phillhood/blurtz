@@ -8,10 +8,14 @@ import { DragData } from "./Card";
 interface BankPilesAreaProps {
   bankPiles: Pile[];
   canDropOnPile: (pileIndex: number, card: ClientCard) => boolean;
+  legalTargetIds?: string[];
+  onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
 const BankPilesArea: React.FC<BankPilesAreaProps> = ({
   bankPiles,
+  legalTargetIds = [],
+  onCardTap,
   canDropOnPile,
 }) => {
   const activePiles = bankPiles
@@ -38,6 +42,8 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
                 stackOffset={3}
                 hideCountBadge
                 size="foundation"
+                isLegalTarget={legalTargetIds.includes(pile.id)}
+                onCardTap={onCardTap}
               />
             </div>
           ))}

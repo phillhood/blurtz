@@ -26,6 +26,12 @@ interface CardPileProps {
   pendingMoveCardIds?: Set<string>;
   /** How large the cards render. Foundations and opponents are not play-sized. */
   size?: CardSize;
+  /** The tapped card, lifted and ringed. Only ever the top card. */
+  isSelected?: boolean;
+  /** A pile the selected card may legally reach. */
+  isLegalTarget?: boolean;
+  /** Tap handler for the top card, for the click-to-move path. */
+  onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
 /**
@@ -45,6 +51,9 @@ const CardPile: React.FC<CardPileProps> = ({
   hideCountBadge = false,
   pendingMoveCardIds,
   size = "play",
+  isSelected = false,
+  isLegalTarget = false,
+  onCardTap,
 }) => {
   if (cards.length === 0) {
     return null;
@@ -92,11 +101,15 @@ const CardPile: React.FC<CardPileProps> = ({
           card={topCard}
           pileId={pileId}
           isDraggable={isDraggable && topCard.faceUp}
-          onClick={onClick}
           onDrop={onDrop}
           canDrop={canDrop}
           isPendingMove={pendingMoveCardIds?.has(topCard.id) ?? false}
           size={size}
+          isSelected={isSelected}
+          isLegalTarget={isLegalTarget}
+          onClick={
+            onCardTap ? () => onCardTap(topCard, pileId) : onClick
+          }
         />
         {/* Card count badge - positioned on top card */}
         {!hideCountBadge && cards.length > 1 && (

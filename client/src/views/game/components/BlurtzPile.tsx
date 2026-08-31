@@ -1,10 +1,11 @@
 import React from "react";
 import { BlurtzPile as BlurtzPileStyled, PileLabel, type CardSize } from "@styles";
-import { Pile } from "@types";
+import { ClientCard, Pile } from "@types";
 import { Card, EmptyPile } from ".";
 
 interface BlurtzPileComponentProps {
   size?: CardSize;
+  onCardTap?: (card: ClientCard, pileId: string) => void;
   pile: Pile;
   onCardClick: () => void;
   isDraggable: boolean;
@@ -23,6 +24,7 @@ const BlurtzPileComponent: React.FC<BlurtzPileComponentProps> = ({
   isDraggable,
   pendingMoveCardIds,
   size = "play",
+  onCardTap,
 }) => {
   // Guard against undefined pile (can happen during game state transitions)
   if (!pile) {
@@ -80,9 +82,11 @@ const BlurtzPileComponent: React.FC<BlurtzPileComponentProps> = ({
                   card={topCard}
                   pileId={pile.id}
                   isDraggable={isDraggable && topCard.faceUp}
-                  onClick={onCardClick}
                   isPendingMove={pendingMoveCardIds?.has(topCard.id) ?? false}
                   size={size}
+                  onClick={
+                    onCardTap ? () => onCardTap(topCard, pile.id) : onCardClick
+                  }
                 />
               </div>
             </div>

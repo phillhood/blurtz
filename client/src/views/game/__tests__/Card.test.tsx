@@ -120,12 +120,16 @@ describe("Card", () => {
     expect(screen.getByText("7")).toBeInTheDocument();
   });
 
-  it("hides a card whose move is still in flight", () => {
-    // The card is mid-move: it is drawn at the destination optimistically by
-    // the pending-move machinery, so the original must not also be on screen.
-    const { container } = renderCard({ card: visible(7), isPendingMove: true });
+  it("marks a card whose move is still in flight", () => {
+    // The card used to vanish for a round trip - hidden at source with nothing
+    // at the destination, so it existed nowhere. It now stays on screen in a
+    // committed-but-unconfirmed state until the server answers.
+    renderCard({ card: visible(7), isPendingMove: true });
 
-    expect(container.querySelector("[style*='opacity: 0']")).not.toBeNull();
+    expect(screen.getByTestId("game-card")).toHaveAttribute(
+      "data-in-flight",
+      "true"
+    );
   });
 
   it("shows a card that is not moving", () => {

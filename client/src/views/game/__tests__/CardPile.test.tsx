@@ -145,7 +145,7 @@ describe("CardPile", () => {
     expect(container.querySelector("[style*='cursor: grab']")).not.toBeNull();
   });
 
-  it("hides the top card while its move is in flight", () => {
+  it("marks the top card while its move is in flight", () => {
     const { container } = renderIn(
       <CardPile
         cards={[visible(9)]}
@@ -154,7 +154,9 @@ describe("CardPile", () => {
       />
     );
 
-    expect(container.querySelector("[style*='opacity: 0']")).not.toBeNull();
+    expect(
+      container.querySelector("[data-in-flight='true']")
+    ).not.toBeNull();
   });
 
   it("leaves a card alone when some OTHER card's move is in flight", () => {
@@ -227,7 +229,7 @@ describe("FannedCards", () => {
     expect(container.querySelectorAll("[style*='cursor: grab']")).toHaveLength(0);
   });
 
-  it("hides only the card whose move is in flight", () => {
+  it("marks only the card whose move is in flight", () => {
     const { container } = renderIn(
       <FannedCards
         cards={[visible(1), visible(2), visible(3)]}
@@ -236,7 +238,7 @@ describe("FannedCards", () => {
       />
     );
 
-    // The two behind it must stay put - only the dragged card resolves.
-    expect(container.querySelectorAll("[style*='opacity: 0;']")).toHaveLength(1);
+    // The two behind it must stay put - only the moving card is in flight.
+    expect(container.querySelectorAll("[data-in-flight='true']")).toHaveLength(1);
   });
 });
