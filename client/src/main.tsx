@@ -7,6 +7,9 @@ import { queryClient } from "./lib/queryClient";
 import "@shychedelic/voidglass-react/style.css";
 import "@styles/index.css";
 import "@styles/card.css";
+import "@styles/forms.css";
+import "@styles/tables.css";
+import "@styles/auth.css";
 
 // Side-effect import: this is what activates gameStore's auth subscription,
 // which connects and disconnects the socket on login/logout. Nothing here

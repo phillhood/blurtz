@@ -1,0 +1,37 @@
+/* forms */
+
+.blurtz-input {
+  width: 100%;
+  padding: 11px 13px;
+  border: 1px solid var(--color-glass-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-glass-bg);
+  color: var(--color-text-primary);
+  font-family: var(--font-body);
+  font-size: 15px;
+  transition: border-color 0.18s var(--ease-spring), background 0.18s var(--ease-spring);
+}
+
+.blurtz-input::placeholder {
+  color: var(--color-text-muted);
+}
+
+.blurtz-input:focus {
+  outline: none;
+  border-color: color-mix(in srgb, var(--color-purple-bright) 40%, transparent);
+  background: color-mix(in srgb, var(--color-purple-bright) 10%, transparent);
+}
+
+.blurtz-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.blurtz-modal__title {
+  margin: 0 0 18px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 20px;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}

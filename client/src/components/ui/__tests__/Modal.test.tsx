@@ -41,7 +41,7 @@ describe("Modal", () => {
     expect(
       screen.getByRole("heading", { name: "Create New Game" })
     ).toBeInTheDocument();
-    await userEvent.setup().click(screen.getByRole("button", { name: "×" }));
+    await userEvent.setup().click(screen.getByRole("button", { name: "Close" }));
     expect(onClose).toHaveBeenCalledTimes(1);
     unmount();
 
@@ -50,8 +50,8 @@ describe("Modal", () => {
         <p>Contents</p>
       </Modal>
     );
-    // No title means no header bar, so the × goes with it.
-    expect(screen.queryByRole("button", { name: "×" })).not.toBeInTheDocument();
+    // No title means no header bar, so the close button goes with it.
+    expect(screen.queryByRole("button", { name: "Close" })).not.toBeInTheDocument();
   });
 
   it("closes when the backdrop is clicked", async () => {
@@ -84,5 +84,18 @@ describe("Modal", () => {
     await user.click(screen.getByRole("heading", { name: "Create New Game" }));
 
     expect(onClose).not.toHaveBeenCalled();
+  });
+
+  it("titles the dialog with the heading it renders", () => {
+    render(
+      <Modal isOpen onClose={() => {}} title="New table">
+        <p>body</p>
+      </Modal>
+    );
+
+    const dialog = screen.getByRole("dialog");
+    const heading = screen.getByRole("heading", { name: "New table" });
+
+    expect(dialog).toHaveAttribute("aria-labelledby", heading.id);
   });
 });

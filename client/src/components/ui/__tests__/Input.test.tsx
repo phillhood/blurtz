@@ -57,13 +57,17 @@ describe("Input", () => {
     expect(screen.getByTestId("custom-input")).toHaveClass("custom-class");
   });
 
-  it("has correct base styles", () => {
-    render(<Input data-testid="styled-input" />);
-    const input = screen.getByTestId("styled-input");
-    expect(input).toHaveClass("w-full");
-    expect(input).toHaveClass("p-3");
-    expect(input).toHaveClass("border");
-    expect(input).toHaveClass("rounded-md");
+  it("paints itself from the app token layer, not a light-theme literal", () => {
+    const { container } = render(<Input value="" onChange={() => {}} />);
+    const input = container.querySelector("input") as HTMLInputElement;
+
+    expect(input.className).not.toMatch(/gray-\d|blue-\d|white/);
+  });
+
+  it("takes a password type through to the element", () => {
+    const { container } = render(<Input type="password" value="" onChange={() => {}} />);
+
+    expect(container.querySelector("input")).toHaveAttribute("type", "password");
   });
 
   it("forwards additional props", () => {

@@ -189,7 +189,9 @@ describe("Dashboard", () => {
 
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
-    expect(screen.queryByText("Create New Game")).not.toBeInTheDocument();
+    await waitFor(() =>
+      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+    );
     expect(mockCreateAndJoinGame).not.toHaveBeenCalled();
   });
 
