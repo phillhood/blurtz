@@ -71,8 +71,8 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
             style={{
               position: "relative",
               cursor: canFlip ? "pointer" : "default",
-              width: "88px",
-              height: "118px",
+              width: "var(--card-w)",
+              height: "var(--card-h)",
               display: "flex",
               alignItems: "center",
               justifyContent: "center",
@@ -109,8 +109,8 @@ const DrawPileComponent: React.FC<DrawPileComponentProps> = ({
           <div
             style={{
               position: "relative",
-              width: "90px",
-              height: "126px",
+              width: "var(--card-w)",
+              height: "calc(var(--card-h) + 8px)",
             }}
           >
             {hasFlippedCards ? (

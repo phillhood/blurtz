@@ -27,7 +27,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
         <PileLabel style={{ paddingBottom: "8px" }}>Bank</PileLabel>
         <BankPiles>
           {activePiles.map(({ pile, index }) => (
-            <div className="blurtz-slot blurtz-slot--foundation" key={pile.id}>
+            <div className="blurtz-slot" data-card-size="foundation" key={pile.id}>
               <CardPile
                 cards={pile.cards}
                 pileId={pile.id}
@@ -43,7 +43,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
           ))}
           {/* Always show a placeholder for starting new piles */}
           {firstEmptyPile && (
-            <div className="blurtz-slot blurtz-slot--foundation">
+            <div className="blurtz-slot" data-card-size="foundation">
               <EmptyPileDropZone
                 pileId={firstEmptyPile.id}
                 pileIndex={firstEmptyIndex}

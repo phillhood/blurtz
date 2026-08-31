@@ -1,6 +1,4 @@
 .blurtz-card {
-  --card-w: 88px;
-  --card-h: 118px;
   position: relative;
   width: var(--card-w);
   height: var(--card-h);
@@ -19,15 +17,26 @@
   transition: transform 0.12s var(--ease-spring), box-shadow 0.12s ease;
 }
 
-.blurtz-card[data-card-size="foundation"] {
+[data-card-size="play"] {
+  --card-w: 88px;
+  --card-h: 118px;
+}
+
+[data-card-size="foundation"] {
   --card-w: 52px;
   --card-h: 70px;
+}
+
+[data-card-size="token"] {
+  --card-w: 26px;
+  --card-h: 36px;
+}
+
+.blurtz-card[data-card-size="foundation"] {
   font-size: calc(var(--card-h) * 0.44);
 }
 
 .blurtz-card[data-card-size="token"] {
-  --card-w: 26px;
-  --card-h: 36px;
   border-radius: 4px;
   font-size: calc(var(--card-h) * 0.42);
 }
@@ -188,6 +197,8 @@
 }
 
 .blurtz-board {
+  --card-w: 88px;
+  --card-h: 118px;
   container-type: inline-size;
   display: flex;
   flex-direction: column;
@@ -229,9 +240,10 @@
 }
 
 .blurtz-slot {
-  width: var(--card-w, 88px);
-  height: var(--card-h, 118px);
+  width: var(--card-w);
+  height: var(--card-h);
   position: relative;
+  flex: none;
 }
 
 .blurtz-slot--empty {
@@ -267,18 +279,141 @@
     max-width: 248px;
   }
 
-  .blurtz-card[data-card-size="play"] {
+  /* The scope, not the card: the empty slots have to shrink with it. */
+  [data-card-size="play"] {
     --card-w: 72px;
     --card-h: 96px;
   }
 }
 
-.blurtz-slot--foundation {
-  --card-w: 52px;
-  --card-h: 70px;
+
+
+.blurtz-appheader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  height: 80px;
+  padding: 15px 20px;
+  background: var(--color-void-light);
+  border-bottom: 1px solid var(--color-glass-border);
 }
 
-.blurtz-slot--token {
-  --card-w: 26px;
-  --card-h: 36px;
+/* Placeholder mark: the display face at max weight, tightly tracked. A drawn
+   mark replaces this once the board it sits above exists. */
+.blurtz-wordmark {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 800;
+  font-size: 1.5rem;
+  letter-spacing: -0.03em;
+  color: var(--color-text-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.blurtz-appheader__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.blurtz-appheader__user {
+  color: var(--color-text-secondary);
+  font-size: 14px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 22ch;
+}
+
+@media (max-width: 560px) {
+  .blurtz-appheader {
+    padding: 10px 12px;
+  }
+
+  .blurtz-appheader__user {
+    display: none;
+  }
+
+  .blurtz-appheader__actions button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+.blurtz-gameheader {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 20px;
+  margin-bottom: 16px;
+  background: var(--color-panel-recessed);
+  border-bottom: 1px solid var(--color-glass-border);
+}
+
+.blurtz-gameheader__meta {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  min-width: 0;
+}
+
+.blurtz-gameheader__label {
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.blurtz-gameheader__value {
+  font-family: var(--font-body);
+  font-size: 14px;
+  color: var(--color-text-primary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 24ch;
+}
+
+.blurtz-gameheader__code {
+  font-family: ui-monospace, monospace;
+  font-size: 14px;
+  color: var(--color-text-primary);
+}
+
+@media (max-width: 560px) {
+  .blurtz-gameheader {
+    padding: 8px 12px;
+  }
+
+  .blurtz-gameheader button {
+    padding: 8px 12px;
+    font-size: 13px;
+  }
+}
+
+/* A phone has no vertical slack to distribute. Let the page scroll down
+   rather than crushing the opponent row, which is the failure this whole
+   layout exists to prevent. */
+@media (max-width: 560px) {
+  .blurtz-container {
+    height: auto;
+    min-height: calc(100vh - 80px);
+  }
+
+  .blurtz-board {
+    flex: none;
+    width: 96%;
+  }
+
+  .blurtz-opponents {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }

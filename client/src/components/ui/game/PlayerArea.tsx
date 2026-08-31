@@ -8,32 +8,6 @@ interface PlayerAreaProps extends HTMLAttributes<HTMLDivElement> {
   isExpanding?: boolean;
 }
 
-const getOpponentScale = (count: number): number => {
-  switch (count) {
-    case 1:
-      return 0.85;
-    case 2:
-      return 0.75;
-    case 3:
-      return 0.65;
-    default:
-      return 0.6;
-  }
-};
-
-const getOpponentMaxWidth = (count: number): string => {
-  switch (count) {
-    case 1:
-      return "800px";
-    case 2:
-      return "700px";
-    case 3:
-      return "600px";
-    default:
-      return "560px";
-  }
-};
-
 export const PlayerArea: React.FC<PlayerAreaProps> = ({
   isOpponent = false,
   // Named out of `props` on purpose and then not used: this component spreads
@@ -74,27 +48,21 @@ interface CardAreaProps extends HTMLAttributes<HTMLDivElement> {
 
 export const CardArea: React.FC<CardAreaProps> = ({
   isOpponent = false,
-  opponentCount = 1,
+  opponentCount: _cardAreaOpponentCount = 1,
   className,
   children,
   style,
   ...props
 }) => {
-  const scale = isOpponent ? getOpponentScale(opponentCount) : 1;
-  const maxWidth = isOpponent ? getOpponentMaxWidth(opponentCount) : "1000px";
-
   return (
     <div
       className={clsx(
-        "flex flex-row justify-center items-start relative w-full h-full",
-        isOpponent ? "gap-5" : "gap-12 mx-auto",
+        "flex flex-row flex-wrap justify-center items-start relative",
+        isOpponent ? "gap-2" : "gap-4 sm:gap-8 mx-auto",
         className
       )}
-      style={{
-        transform: `scale(${scale})`,
-        maxWidth,
-        ...style,
-      }}
+      data-card-size={isOpponent ? "token" : "play"}
+      style={style}
       {...props}
     >
       {children}
@@ -115,8 +83,8 @@ export const PlayerName: React.FC<PlayerNameProps> = ({
   return (
     <h3
       className={clsx(
-        "text-center m-0 text-amber-400 font-['Germania_One']",
-        isOpponent ? "text-xl" : "text-3xl",
+        "text-center m-0 text-amber-400 font-[family-name:var(--font-display)] font-bold",
+        isOpponent ? "text-sm" : "text-2xl",
         className
       )}
       {...props}
@@ -139,8 +107,8 @@ export const ScoreDisplay: React.FC<ScoreDisplayProps> = ({
   return (
     <div
       className={clsx(
-        "text-center font-['Germania_One']",
-        isOpponent ? "text-sm" : "text-lg",
+        "text-center font-[family-name:var(--font-body)]",
+        isOpponent ? "text-xs" : "text-base",
         className
       )}
       {...props}

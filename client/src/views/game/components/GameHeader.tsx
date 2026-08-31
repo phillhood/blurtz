@@ -37,31 +37,12 @@ const GameHeader: React.FC<GameHeaderProps> = ({ onLeave, onCopyCode }) => {
   };
 
   return (
-    <div
-      style={{
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        padding: "10px 20px",
-        background: "linear-gradient(rgb(35, 59, 99), #0f172a)",
-        marginBottom: "20px",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-        <h3 style={{ margin: 0, color: "#ffffff", fontFamily: "Germania One" }}>
-          Game:{" "}
-        </h3>
-        <span style={{ fontFamily: "sans-serif " }}>{gameName}</span>
-        <h3
-          style={{
-            marginLeft: 20,
-            color: "#ffffff",
-            fontFamily: "Germania One",
-          }}
-        >
-          Code:{" "}
-        </h3>
-        <span style={{ fontFamily: "monospace" }}>{gameCode}</span>
+    <div className="blurtz-gameheader">
+      <div className="blurtz-gameheader__meta">
+        <span className="blurtz-gameheader__label">Game</span>
+        <span className="blurtz-gameheader__value">{gameName}</span>
+        <span className="blurtz-gameheader__label">Code</span>
+        <span className="blurtz-gameheader__code">{gameCode}</span>
         <div style={{ position: "relative", display: "inline-block" }}>
           <button
             onClick={handleCopyCode}

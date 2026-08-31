@@ -109,8 +109,8 @@ const EmptyWorkPileDropZone: React.FC<{
     <div
       ref={setNodeRef}
       style={{
-        width: "88px",
-        height: "118px",
+        width: "var(--card-w)",
+        height: "var(--card-h)",
         display: "flex",
         alignItems: "center",
         justifyContent: "center",

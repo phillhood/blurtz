@@ -49,9 +49,12 @@ test.describe("Gameplay", () => {
     ).toBeVisible();
     await expect(hostPage.getByText("Score: 0")).toHaveCount(2);
 
-    // `NB` is the back of a face-down card. Face-up cards render their value,
-    // so a non-zero count is the deal having really happened.
-    await expect(hostPage.getByText("NB").first()).toBeVisible();
+    // A card back carries no text, so it is found by state. Face-up cards
+    // render their value, so a non-zero count is the deal having really
+    // happened.
+    await expect(
+      hostPage.locator("[data-face-down='true']").first()
+    ).toBeVisible();
     const values = await hostPage
       .locator("div")
       .filter({ hasText: /^([1-9]|10)$/ })

@@ -261,7 +261,9 @@ test.describe("Four players", () => {
 
     const layout = await page.evaluate(() => ({
       pageOverflow: document.documentElement.scrollWidth - window.innerWidth,
-      pilesRendered: document.querySelectorAll(".center-area .w-\\[88px\\]").length,
+      pilesRendered: document.querySelectorAll(
+        "[data-testid='bank-piles'] .blurtz-slot"
+      ).length,
     }));
 
     // All sixteen really are on screen, or the assertion below passes on a

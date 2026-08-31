@@ -23,39 +23,13 @@ const Header: React.FC = () => {
   const isDashboard = location.pathname === "/dashboard";
 
   return (
-    <header
-      style={{
-        background: "rgb(35, 59, 99)",
-        padding: "15px 20px",
-        display: "flex",
-        justifyContent: "space-between",
-        alignItems: "center",
-        height: "80px",
-        // borderBottom: "1px solid rgba(255, 255, 255, 0.1)",
-      }}
-    >
-      <div style={{ display: "flex", alignItems: "center", gap: "20px" }}>
-        <h1
-          style={{
-            margin: 0,
-            fontSize: "1.5rem",
-            fontFamily: "Germania One, sans-serif",
-            background: "white",
-            WebkitBackgroundClip: "text",
-            WebkitTextFillColor: "transparent",
-            backgroundClip: "text",
-            cursor: "pointer",
-          }}
-          onClick={handleDashboard}
-        >
-          Blurtz!
-        </h1>
-      </div>
+    <header className="blurtz-appheader">
+      <h1 className="blurtz-wordmark" onClick={handleDashboard}>
+        Blurtz!
+      </h1>
 
-      <div style={{ display: "flex", alignItems: "center", gap: "15px" }}>
-        <span style={{ color: "#e5e7eb", marginRight: "20px" }}>
-          {user?.username}
-        </span>
+      <div className="blurtz-appheader__actions">
+        <span className="blurtz-appheader__user">{user?.username}</span>
         {!isDashboard && (
           <Button
             variant="tertiary"
