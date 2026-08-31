@@ -1,8 +1,9 @@
 # Contributing to Blurtz
 
 The committed, canonical home for the repo's conventions. Two things live elsewhere on purpose:
-codebase architecture and agent-specific navigation are in `CLAUDE.md` (committed), and active
-planning — phase plans, specs, handoffs — is in `.dev/` (local, gitignored).
+codebase architecture and agent-specific navigation are in `CLAUDE.md` (committed), and the
+documentation that isn't committed sits in two local trees — `.docs/` (durable) and `.dev/`
+(workflow output) — described under [Documentation](#documentation).
 
 ## Branches
 
@@ -86,9 +87,14 @@ cannot fail is not a test. The existing gates stay green.
 | `README.md` | yes | what Blurtz is + how to run it | the stack or run steps change |
 | `CONTRIBUTING.md` | yes | these conventions | a convention changes |
 | `CLAUDE.md` | yes | architecture deep-dive, codebase facts, agent traps | you change architecture it describes |
-| `.dev/` | no (gitignored) | ephemeral planning: phase plans, specs, handoffs | per phase; not committed by design |
+| `.docs/` | no (gitignored) | durable local docs — the roadmap, the board design system, design decisions | the thing it describes changes |
+| `.dev/` | no (gitignored) | workflow output — `spec/`, `plan/`, `implementation/`, `handoff/` | per unit of work; deleted once it lands |
 
+- **`.docs/` is durable, `.dev/` is disposable.** A spec or plan is deleted once the work lands;
+  anything worth keeping is folded into the `.docs/` file that owns the topic first. Both trees are
+  gitignored, so `.docs/` is load-bearing local state — back it up.
 - **Keep `README` and `CONTRIBUTING` free of ephemeral state** (status, phase progress) — that lives
   in `.dev/`.
 - **The v1 plan's four work areas are "phases"** (1–4). The remediation pass's Phases 0–7 are a
-  separate, completed body of work — "phase" is scoped to a plan. Planning and status live in `.dev/`.
+  separate, completed body of work — "phase" is scoped to a plan. The roadmap is `.docs/roadmap.md`;
+  in-flight status lives in `.dev/`.

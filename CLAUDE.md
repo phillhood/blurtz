@@ -72,6 +72,12 @@ make lint                                          # eslint across all workspace
 
 REST handles auth and the lobby (create/join/list games, profile, stats). Everything in-game goes over Socket.IO. Each mutating gateway handler in `server/src/game/game.gateway.ts` validates the payload, calls `GameService` (which does its own read-modify-write inside a transaction and **returns the new state**), redacts it, and broadcasts to the room. The client never computes game state: `client/src/stores/gameStore.ts` registers callbacks with `socketService` and replaces `gameState` wholesale on every event. There are no optimistic updates — a rejected move produces a `MOVE_REJECTED` event **carrying the current state and a reason** (not a bare error), so the board resolves and the pending card un-hides.
 
+### Match history is a separate read-only module
+
+`server/src/history/` (`HistoryModule`) is the only place outside `game/` that reads game data. It injects `PrismaService` directly, owns no writes, takes no lock, and mounts on the **same `game` controller prefix** — `GET /api/game/history` (the caller's finished games, newest first, capped at 50) and `GET /api/game/:id/results` (round-by-round, from `RoundResult`). It never touches `gameState` or a deck, so redaction doesn't apply.
+
+`:id/results` is members-only and answers **403 for a missing game and a non-member alike** — the same no-id-probing convention as `GET /api/game/:id/state`. A 404 there would confirm which game ids exist. Response shapes are contract types in `shared` (`MatchHistoryItem`, `GameResultsDetail`, `GameRoundResult`); **no client UI consumes them yet** — the surface is deliberately design-independent and waits on the frontend redesign.
+
 ### Socket authentication IS enforced
 
 The client sends its JWT in the Socket.IO handshake (`auth: { token }`). `GameGateway.handleConnection` verifies it (`JwtService.verifyAsync`), sets `client.data.userId`, and disconnects on failure. **Identity never arrives from the wire**: the socket DTOs in `server/src/game/dto/socket-events.dto.ts` contain no `userId`/`playerId` — handlers derive `userId` from `client.data` and resolve the `playerId` via `GameService.getPlayerIdForUser(gameId, userId)`, rejecting non-members. Every handler re-checks membership against the DB before acting. REST routes are protected by `JwtAuthGuard` (`req.user.sub` is the user id).
@@ -117,6 +123,8 @@ Real Nertz to a target score. `Game.targetScore` is **set at creation** — `Cre
 A `round_over` game nobody readies up **does not freeze the table.** `ROUND_OVER_TIMEOUT_MS` (90s, in `shared`) after entering the state — persisted as the `Game.roundOverAt` column, not an in-memory timer, so it survives a server restart — a gateway `@Interval` sweep (`sweepRoundOverTimeouts`, ~10s resolution) **auto-forfeits every player who never readied** and advances through the *same* `withGameLock`/`advanceRound` path as a normal ready-up. It resolves on **readiness, not presence** — a watcher who never clicked ready is forfeited exactly like a closed tab.
 
 The initial lobby start (`startGame`, `waiting → playing`) still requires the host and all-players-ready. `winnerId` is now `winnerPlayerId` (a real FK to `Player`, `onDelete: SET NULL`). `updateGameStats` fires on `→ finished` (ordered by `userId` ASC to avoid deadlocks), so `gamesPlayed`/`gamesWon` actually move.
+
+**`GAME_ENDED` has one canonical payload across all three emit sites: `{ gameState, reason, winnerId }`,** where `winnerId: string | null` is the winning *player* id. Never emit a `winner` player object — that ships an unredacted row, and the three sites used to disagree on the field entirely (two objects, one string), which went unnoticed because the client derives the winner from `gameState.winner`. The blitz path's extra `scores`/`calledBy`/`timestamp` fields are fine on top.
 
 ### Redis
 

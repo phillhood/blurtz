@@ -22,5 +22,5 @@
 
 client/playwright-report
 client/test-results
+.docs
 .dev
-.superpowers

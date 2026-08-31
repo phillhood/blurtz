@@ -3,6 +3,11 @@ node_modules
 
 .env
 
+# Local-only doc trees (also in ~/.gitignore_global; no trailing slash - in a
+# worktree these are symlinks, and a trailing slash matches directories only)
+.docs
+.dev
+
 # Playwright e2e artifacts
 client/test-results
 client/playwright-report
