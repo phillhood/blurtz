@@ -1,6 +1,7 @@
 import React, { useState } from "react";
+import { SegmentedControl, Toggle } from "@shychedelic/voidglass-react";
 import { Button, Input } from "@styles";
-import { Modal } from "@components/ui";
+import { Modal, SeatIndicator } from "@components/ui";
 import { GAME_CONSTANTS } from "@blurtz/shared";
 
 interface CreateGameModalProps {
@@ -115,19 +116,11 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
   };
 
   return (
-    <Modal isOpen={isOpen} onClose={handleClose} title="Create New Game">
+    <Modal isOpen={isOpen} onClose={handleClose} title="New table">
       <form onSubmit={handleSubmit}>
-        <div>
-          <label
-            htmlFor="gameName"
-            style={{
-              display: "block",
-              marginBottom: "8px",
-              fontWeight: "500",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            Game Name
+        <div className="blurtz-field">
+          <label className="blurtz-field__label" htmlFor="gameName">
+            Name
           </label>
           <Input
             id="gameName"
@@ -135,280 +128,89 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
             value={gameName}
             onChange={(e) => setGameName(e.target.value)}
             placeholder="Enter game name..."
-            style={{
-              width: "100%",
-              borderColor: errors.gameName ? "#ef4444" : undefined,
-            }}
           />
           {errors.gameName && (
-            <p
-              style={{
-                color: "#ef4444",
-                fontSize: "14px",
-                marginTop: "4px",
-                margin: "4px 0 0 0",
-              }}
-            >
-              {errors.gameName}
-            </p>
+            <p className="blurtz-field__error">{errors.gameName}</p>
           )}
         </div>
 
-        <div>
-          {/* Heads the +/- buttons, which are not a labellable control. */}
-          <div
-            style={{
-              display: "block",
-              marginBottom: "8px",
-              fontWeight: "500",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            Game Size
-          </div>
-
-          <div
-            style={{
-              display: "flex",
-              alignItems: "center",
-              border: "1px solid var(--color-glass-border)",
-              borderRadius: "8px",
-              backgroundColor: "var(--color-panel-elevated)",
-              overflow: "hidden",
-              marginBottom: "10px",
-            }}
-          >
-            {/* TODO - move to styles */}
+        <div className="blurtz-field">
+          <div className="blurtz-field__label">Seats</div>
+          <div className="blurtz-stepper">
             <button
               type="button"
+              className="blurtz-stepper__button"
               onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
               disabled={maxPlayers <= 2}
-              style={{
-                backgroundColor: maxPlayers === 2
-                    ? "var(--color-panel-recessed)"
-                    : "var(--color-panel-elevated)",
-                border: "none",
-                borderRight: "1px solid var(--color-glass-border)",
-                fontSize: "20px",
-                fontWeight: "bold",
-                cursor: maxPlayers <= 2 ? "not-allowed" : "pointer",
-                color: maxPlayers <= 2 ? "#9ca3af" : "#374151",
-                padding: "12px 16px",
-                transition: "background-color 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#b0ceff";
-              }}
-              onMouseLeave={(e) => {
-                if (maxPlayers > 2) {
-                  e.currentTarget.style.backgroundColor = "var(--color-panel-elevated)";
-                }
-              }}
             >
-              −
+              &#8722;
             </button>
-
-            <div
-              style={{
-                flex: 1,
-                textAlign: "center",
-                fontSize: "16px",
-                fontWeight: "600",
-                color: "var(--color-text-primary)",
-                padding: "12px 16px",
-                backgroundColor: "var(--color-panel-elevated)",
-              }}
-            >
-              {maxPlayers} players
-            </div>
-
+            <div className="blurtz-stepper__value">{maxPlayers} players</div>
             <button
               type="button"
+              className="blurtz-stepper__button"
               onClick={() => setMaxPlayers(Math.min(4, maxPlayers + 1))}
               disabled={maxPlayers >= 4}
-              style={{
-                backgroundColor: maxPlayers === 4
-                    ? "var(--color-panel-recessed)"
-                    : "var(--color-panel-elevated)",
-                border: "none",
-                borderLeft: "1px solid var(--color-glass-border)",
-                fontSize: "20px",
-                fontWeight: "bold",
-                cursor: maxPlayers >= 4 ? "not-allowed" : "pointer",
-                color: maxPlayers >= 4 ? "#9ca3af" : "#374151",
-                padding: "12px 16px",
-                transition: "background-color 0.2s",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#b0ceff";
-              }}
-              onMouseLeave={(e) => {
-                if (maxPlayers < 4) {
-                  e.currentTarget.style.backgroundColor = "var(--color-panel-elevated)";
-                }
-              }}
             >
               +
             </button>
-          </div>
-          <div style={{ marginBottom: "10px" }}>
-            <label
-              htmlFor="targetScore"
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "500",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Target Score
-            </label>
-
-            <select
-              id="targetScore"
-              value={String(targetScoreChoice)}
-              onChange={(e) =>
-                setTargetScoreChoice(
-                  e.target.value === "custom" ? "custom" : Number(e.target.value)
-                )
-              }
-              style={{
-                width: "100%",
-                padding: "12px 16px",
-                border: "1px solid var(--color-glass-border)",
-                borderRadius: "8px",
-                backgroundColor: "var(--color-panel-elevated)",
-                fontSize: "16px",
-                fontWeight: "600",
-                color: "var(--color-text-primary)",
-                cursor: "pointer",
-              }}
-            >
-              {TARGET_SCORE_PRESETS.map(({ label, value }) => (
-                <option key={label} value={value}>
-                  {label} — first to {value}
-                </option>
-              ))}
-              <option value="custom">Custom</option>
-            </select>
-
-            {targetScoreChoice === "custom" && (
-              <div style={{ marginTop: "10px" }}>
-                <label
-                  htmlFor="customTargetScore"
-                  style={{
-                    display: "block",
-                    marginBottom: "8px",
-                    fontWeight: "500",
-                    color: "var(--color-text-primary)",
-                  }}
-                >
-                  Custom Target Score
-                </label>
-                <Input
-                  id="customTargetScore"
-                  type="number"
-                  inputMode="numeric"
-                  value={customTargetScore}
-                  onChange={(e) => setCustomTargetScore(e.target.value)}
-                  placeholder={`${GAME_CONSTANTS.MIN_TARGET_SCORE}-${GAME_CONSTANTS.MAX_TARGET_SCORE}`}
-                  style={{
-                    width: "100%",
-                    marginBottom: 0,
-                    borderColor: errors.targetScore ? "#ef4444" : undefined,
-                  }}
-                />
-              </div>
-            )}
-
-            {errors.targetScore && (
-              <p
-                style={{
-                  color: "#ef4444",
-                  fontSize: "14px",
-                  margin: "4px 0 0 0",
-                }}
-              >
-                {errors.targetScore}
-              </p>
-            )}
-          </div>
-
-          <div style={{ marginBottom: "24px" }}>
-            {/* Heads the checkbox group. The checkbox below is labelled by the
-                <label> wrapping it, so this must not claim a control of its own. */}
-            <div
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                fontWeight: "500",
-                color: "var(--color-text-primary)",
-              }}
-            >
-              Private Game
-            </div>
-            <label
-              style={{
-                display: "flex",
-                alignItems: "center",
-                cursor: "pointer",
-                gap: "12px",
-                padding: "12px 16px",
-                border: "1px solid var(--color-glass-border)",
-                borderRadius: "8px",
-                backgroundColor: "var(--color-panel-recessed)",
-                transition: "all 0.2s ease",
-              }}
-              onMouseEnter={(e) => {
-                e.currentTarget.style.backgroundColor = "#f1f5f9";
-                e.currentTarget.style.borderColor = "#cbd5e1";
-              }}
-              onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "var(--color-panel-recessed)";
-                e.currentTarget.style.borderColor = "var(--color-glass-border)";
-              }}
-            >
-              <input
-                type="checkbox"
-                checked={isPrivate}
-                onChange={(e) => setIsPrivate(e.target.checked)}
-                style={{
-                  width: "18px",
-                  height: "18px",
-                  cursor: "pointer",
-                  accentColor: "#3b82f6",
-                }}
-              />
-              <div style={{ flex: 1 }}>
-                <div
-                  style={{
-                    fontSize: "12px",
-                    color: "var(--color-text-secondary)",
-                  }}
-                >
-                  Only players with the game code can join
-                </div>
-              </div>
-            </label>
+            <SeatIndicator filled={maxPlayers} total={4} yoursSeated />
           </div>
         </div>
 
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "flex-end",
-            gap: "12px",
-          }}
-        >
-          <Button type="button" variant="default" onClick={handleClose}>
+        <div className="blurtz-field">
+          <div className="blurtz-field__label">Target score</div>
+          <SegmentedControl
+            options={[
+              ...TARGET_SCORE_PRESETS.map(({ label, value }) => ({
+                label: `${label} \u00b7 ${value}`,
+                value: String(value),
+              })),
+              { label: "Custom", value: "custom" },
+            ]}
+            value={String(targetScoreChoice)}
+            onChange={(value) =>
+              setTargetScoreChoice(value === "custom" ? "custom" : Number(value))
+            }
+            aria-label="Target score"
+          />
+
+          {targetScoreChoice === "custom" && (
+            <div className="blurtz-field">
+              <label className="blurtz-field__label" htmlFor="customTargetScore">
+                Custom target score
+              </label>
+              <Input
+                id="customTargetScore"
+                type="number"
+                inputMode="numeric"
+                value={customTargetScore}
+                onChange={(e) => setCustomTargetScore(e.target.value)}
+                placeholder={`${GAME_CONSTANTS.MIN_TARGET_SCORE}-${GAME_CONSTANTS.MAX_TARGET_SCORE}`}
+              />
+            </div>
+          )}
+
+          {errors.targetScore && (
+            <p className="blurtz-field__error">{errors.targetScore}</p>
+          )}
+        </div>
+
+        <div className="blurtz-field">
+          <div className="blurtz-field__label">Private table</div>
+          <Toggle
+            checked={isPrivate}
+            onChange={setIsPrivate}
+            label="Joinable by code only"
+          />
+        </div>
+
+        <div className="blurtz-dialog__actions">
+          <Button type="button" variant="tertiary" onClick={handleClose}>
             Cancel
           </Button>
-          <Button
-            type="submit"
-            variant="secondary"
-            disabled={!gameName.trim()}
-          >
-            Create Game
+          <Button type="submit" variant="primary" disabled={!gameName.trim()}>
+            Create and deal
           </Button>
         </div>
       </form>

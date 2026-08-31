@@ -328,6 +328,24 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   max-width: 22ch;
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-body);
+}
+
+.blurtz-appheader__initial {
+  display: none;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  border: 1px solid var(--color-glass-border);
+  background: var(--color-glass-bg);
+  color: var(--color-text-secondary);
+  font-family: var(--font-display);
+  font-weight: 600;
+  font-size: 13px;
 }
 
 @media (max-width: 560px) {
@@ -335,8 +353,12 @@
     padding: 10px 12px;
   }
 
-  .blurtz-appheader__user {
+  .blurtz-appheader__name {
     display: none;
+  }
+
+  .blurtz-appheader__initial {
+    display: grid;
   }
 
   .blurtz-appheader__actions button {

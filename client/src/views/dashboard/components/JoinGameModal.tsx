@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { Button } from "@styles";
+import { Button, Input } from "@styles";
+import { Modal } from "@components/ui";
 import { JoinGameRequest } from "@/types";
 
 interface JoinGameModalProps {
@@ -14,10 +15,8 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
   onClose,
 }) => {
   const [gameCode, setGameCode] = useState("");
-  const [isLoading, setIsLoading] = useState(false);
 
-  const handleJoin = async (e: React.FormEvent) => {
-    setIsLoading(true);
+  const handleJoin = (e: React.FormEvent) => {
     e.preventDefault();
     onJoinGame({ alias: gameCode } as JoinGameRequest);
   };
@@ -27,131 +26,33 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
     onClose();
   };
 
-  const handleBackdropClick = (e: React.MouseEvent) => {
-    if (e.target === e.currentTarget) {
-      handleClose();
-    }
-  };
-
-  if (!isOpen) return null;
-
   return (
-    <div
-      style={{
-        position: "fixed",
-        top: 0,
-        left: 0,
-        right: 0,
-        bottom: 0,
-        backgroundColor: "rgba(0, 0, 0, 0.5)",
-        display: "flex",
-        alignItems: "center",
-        justifyContent: "center",
-        zIndex: 1000,
-      }}
-      onClick={handleBackdropClick}
-    >
-      <div
-        style={{
-          backgroundColor: "var(--color-panel-elevated)",
-          borderRadius: "8px",
-          padding: "24px",
-          minWidth: "400px",
-          maxWidth: "500px",
-          boxShadow: "0 20px 25px -5px rgba(0, 0, 0, 0.1)",
-        }}
-      >
-        {/* Header */}
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            marginBottom: "20px",
-          }}
-        >
-          <h2 style={{ margin: 0, color: "var(--color-text-primary)", fontSize: "1.5rem" }}>
-            Join Game by Code
-          </h2>
-          <button
-            onClick={handleClose}
-            style={{
-              background: "none",
-              border: "none",
-              fontSize: "24px",
-              cursor: "pointer",
-              color: "var(--color-text-secondary)",
-              padding: "4px",
-            }}
-          >
-            ×
-          </button>
+    <Modal isOpen={isOpen} onClose={handleClose} title="Join by code">
+      <form onSubmit={handleJoin}>
+        <div className="blurtz-field">
+          <label className="blurtz-field__label" htmlFor="gameCode">
+            Table code
+          </label>
+          <Input
+            id="gameCode"
+            type="text"
+            placeholder="e.g., happy-blue-lemur"
+            value={gameCode}
+            onChange={(e) => setGameCode(e.target.value)}
+            autoFocus
+          />
         </div>
 
-        {/* Form */}
-        <form onSubmit={handleJoin}>
-          <div style={{ marginBottom: "20px" }}>
-            <label
-              style={{
-                display: "block",
-                marginBottom: "8px",
-                color: "var(--color-text-primary)",
-                fontWeight: "500",
-              }}
-            >
-              Game Code
-            </label>
-            <input
-              type="text"
-              placeholder="e.g., happy-blue-lemur"
-              value={gameCode}
-              onChange={(e) => setGameCode(e.target.value)}
-              style={{
-                width: "100%",
-                padding: "12px",
-                border: "1px solid var(--color-glass-border)",
-                borderRadius: "6px",
-                fontSize: "16px",
-                fontFamily: "monospace",
-                boxSizing: "border-box",
-              }}
-              autoFocus
-              disabled={isLoading}
-            />
-            <small
-              style={{ color: "var(--color-text-secondary)", marginTop: "4px", display: "block" }}
-            >
-              Enter the game code shared by your friend
-            </small>
-          </div>
-
-          {/* Buttons */}
-          <div
-            style={{
-              display: "flex",
-              gap: "12px",
-              justifyContent: "flex-end",
-            }}
-          >
-            <Button
-              type="button"
-              variant="default"
-              onClick={handleClose}
-              disabled={isLoading}
-            >
-              Cancel
-            </Button>
-            <Button
-              type="submit"
-              variant="primary"
-              disabled={!gameCode.trim() || isLoading}
-            >
-              {isLoading ? "Joining..." : "Join Game"}
-            </Button>
-          </div>
-        </form>
-      </div>
-    </div>
+        <div className="blurtz-dialog__actions">
+          <Button type="button" variant="tertiary" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button type="submit" variant="primary" disabled={!gameCode.trim()}>
+            Join
+          </Button>
+        </div>
+      </form>
+    </Modal>
   );
 };
 

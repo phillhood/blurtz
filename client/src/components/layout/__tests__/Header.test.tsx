@@ -102,4 +102,20 @@ describe("Header", () => {
 
     expect(screen.getByRole("button", { name: "Logout" })).toBeInTheDocument();
   });
+
+  it("offers the way to the profile", async () => {
+    const user = await renderHeader("/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "ada — profile" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/profile");
+  });
+
+  it("keeps an initial to fall back to where the name will not fit", async () => {
+    await renderHeader("/dashboard");
+
+    const trigger = screen.getByRole("button", { name: "ada — profile" });
+
+    expect(trigger.querySelector(".blurtz-appheader__initial")).toHaveTextContent("A");
+  });
 });

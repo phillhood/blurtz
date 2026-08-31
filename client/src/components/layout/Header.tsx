@@ -29,7 +29,17 @@ const Header: React.FC = () => {
       </h1>
 
       <div className="blurtz-appheader__actions">
-        <span className="blurtz-appheader__user">{user?.username}</span>
+        <button
+          type="button"
+          className="blurtz-appheader__user"
+          onClick={() => navigate("/profile")}
+          aria-label={user ? `${user.username} — profile` : "Profile"}
+        >
+          <span className="blurtz-appheader__name">{user?.username}</span>
+          <span className="blurtz-appheader__initial" aria-hidden="true">
+            {user?.username?.charAt(0).toUpperCase()}
+          </span>
+        </button>
         {!isDashboard && (
           <Button
             variant="tertiary"

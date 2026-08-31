@@ -6,7 +6,7 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useAuthContext } from "@hooks";
-import { Login, Register, Dashboard, Game } from "@views";
+import { Login, Register, Dashboard, Game, Profile } from "@views";
 import { Header } from "@components/layout";
 import { useAuthStore } from "@stores/authStore";
 import { AppContainer } from "@styles";
@@ -42,6 +42,10 @@ const App: React.FC = () => {
           <Route
             path="/dashboard"
             element={user ? <Dashboard /> : <Navigate to="/login" />}
+          />
+          <Route
+            path="/profile"
+            element={user ? <Profile /> : <Navigate to="/login" />}
           />
           <Route
             path="/game/:gameId"

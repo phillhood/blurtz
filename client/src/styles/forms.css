@@ -55,6 +55,44 @@
   color: var(--color-purple-bright);
 }
 
+.blurtz-stepper {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.blurtz-stepper__button {
+  width: 36px;
+  height: 36px;
+  border-radius: var(--radius-sm);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--color-text-primary);
+  font-size: 18px;
+  cursor: pointer;
+  display: grid;
+  place-items: center;
+  transition: background 0.18s var(--ease-spring);
+}
+
+.blurtz-stepper__button:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.blurtz-stepper__button:disabled {
+  opacity: 0.35;
+  cursor: not-allowed;
+}
+
+.blurtz-stepper__value {
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 17px;
+  min-width: 96px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
 .blurtz-dialog__actions {
   display: flex;
   gap: 10px;

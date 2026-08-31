@@ -32,14 +32,14 @@ describe("CreateGameModal", () => {
       <CreateGameModal isOpen={false} onClose={vi.fn()} onCreateGame={onCreateGame} />
     );
 
-    expect(screen.queryByText("Create New Game")).not.toBeInTheDocument();
+    expect(screen.queryByText("New table")).not.toBeInTheDocument();
   });
 
   it("creates a game with the name and the defaults", async () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday Night");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     // 2 players, public, first to 100 - what a player who touches nothing else
     // gets. The 100 must match Game.targetScore's schema default.
@@ -53,7 +53,7 @@ describe("CreateGameModal", () => {
       screen.getByPlaceholderText("Enter game name..."),
       "  Friday Night  "
     );
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(onCreateGame).toHaveBeenCalledWith("Friday Night", 2, false, 100);
   });
@@ -62,7 +62,7 @@ describe("CreateGameModal", () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "   ");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
     // Enter in the field is the other way to submit a form; a disabled submit
     // button blocks implicit submission too, but assert it rather than assume.
     await user.type(screen.getByPlaceholderText("Enter game name..."), "{Enter}");
@@ -90,18 +90,18 @@ describe("CreateGameModal", () => {
   it("disables the submit until there is a name to submit", async () => {
     const { user } = setup();
 
-    expect(screen.getByRole("button", { name: "Create Game" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "Create and deal" })).toBeDisabled();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "OK");
 
-    expect(screen.getByRole("button", { name: "Create Game" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "Create and deal" })).toBeEnabled();
   });
 
   it("refuses a one-character name and says why", async () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "x");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(
       screen.getByText("Game name must be at least 2 characters")
@@ -113,7 +113,7 @@ describe("CreateGameModal", () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "x".repeat(51));
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(
       screen.getByText("Game name must be less than 50 characters")
@@ -128,7 +128,7 @@ describe("CreateGameModal", () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "x".repeat(50));
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(onCreateGame).toHaveBeenCalledWith("x".repeat(50), 2, false, 100);
   });
@@ -147,7 +147,7 @@ describe("CreateGameModal", () => {
     expect(screen.getByText("3 players")).toBeInTheDocument();
 
     await user.click(screen.getByRole("button", { name: "+" }));
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(onCreateGame).toHaveBeenCalledWith("Big Game", 4, false, 100);
   });
@@ -172,8 +172,8 @@ describe("CreateGameModal", () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Quick One");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "25");
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("radio", { name: /Quick/ }));
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(onCreateGame).toHaveBeenCalledWith("Quick One", 2, false, 25);
     });
@@ -181,20 +181,20 @@ describe("CreateGameModal", () => {
     it("hides the custom field until Custom is chosen", async () => {
       const { user } = setup();
 
-      expect(screen.queryByLabelText("Custom Target Score")).toBeNull();
+      expect(screen.queryByLabelText("Custom target score")).toBeNull();
 
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
 
-      expect(screen.getByLabelText("Custom Target Score")).toBeInTheDocument();
+      expect(screen.getByLabelText("Custom target score")).toBeInTheDocument();
     });
 
     it("sends a valid custom score", async () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Odd One");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      await user.type(screen.getByLabelText("Custom Target Score"), "75");
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      await user.type(screen.getByLabelText("Custom target score"), "75");
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(onCreateGame).toHaveBeenCalledWith("Odd One", 2, false, 75);
     });
@@ -210,9 +210,9 @@ describe("CreateGameModal", () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Bad Target");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      await user.type(screen.getByLabelText("Custom Target Score"), typed);
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      await user.type(screen.getByLabelText("Custom target score"), typed);
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(screen.getByText(message)).toBeInTheDocument();
       // The DTO would refuse this too; the point is that it never gets asked.
@@ -223,8 +223,8 @@ describe("CreateGameModal", () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Empty Target");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(screen.getByText("Target score is required")).toBeInTheDocument();
       expect(onCreateGame).not.toHaveBeenCalled();
@@ -239,9 +239,9 @@ describe("CreateGameModal", () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Edge");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      await user.type(screen.getByLabelText("Custom Target Score"), typed);
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      await user.type(screen.getByLabelText("Custom target score"), typed);
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(onCreateGame).toHaveBeenCalledWith("Edge", 2, false, expected);
     });
@@ -250,17 +250,17 @@ describe("CreateGameModal", () => {
       const { onCreateGame, user } = setup();
 
       await user.type(screen.getByPlaceholderText("Enter game name..."), "Fixable");
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      const custom = screen.getByLabelText("Custom Target Score");
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      const custom = screen.getByLabelText("Custom target score");
       await user.type(custom, "5");
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
       expect(
         screen.getByText("Target score must be between 10 and 500")
       ).toBeInTheDocument();
 
       await user.clear(custom);
       await user.type(custom, "50");
-      await user.click(screen.getByRole("button", { name: "Create Game" }));
+      await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
       expect(
         screen.queryByText("Target score must be between 10 and 500")
@@ -271,14 +271,17 @@ describe("CreateGameModal", () => {
     it("forgets a custom score when cancelled", async () => {
       const { user } = setup();
 
-      await user.selectOptions(screen.getByLabelText("Target Score"), "custom");
-      await user.type(screen.getByLabelText("Custom Target Score"), "42");
+      await user.click(screen.getByRole("radio", { name: "Custom" }));
+      await user.type(screen.getByLabelText("Custom target score"), "42");
       await user.click(screen.getByRole("button", { name: "Cancel" }));
 
       // Back to the Standard preset, with the custom field gone rather than
       // sitting there pre-filled from a game that was never created.
-      expect(screen.getByLabelText("Target Score")).toHaveValue("100");
-      expect(screen.queryByLabelText("Custom Target Score")).toBeNull();
+      expect(screen.getByRole("radio", { name: /Standard/ })).toHaveAttribute(
+        "aria-checked",
+        "true"
+      );
+      expect(screen.queryByLabelText("Custom target score")).toBeNull();
     });
   });
 
@@ -286,8 +289,8 @@ describe("CreateGameModal", () => {
     const { onCreateGame, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Secret");
-    await user.click(screen.getByRole("checkbox"));
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("switch"));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     // A private game that arrives public is an invitation to strangers.
     expect(onCreateGame).toHaveBeenCalledWith("Secret", 2, true, 100);
@@ -297,7 +300,7 @@ describe("CreateGameModal", () => {
     const { onClose, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Friday Night");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     expect(onClose).toHaveBeenCalled();
   });
@@ -306,7 +309,7 @@ describe("CreateGameModal", () => {
     const { onClose, user } = setup();
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "x");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     // Closing here would throw away the error it just rendered.
     expect(onClose).not.toHaveBeenCalled();
@@ -319,13 +322,13 @@ describe("CreateGameModal", () => {
 
     await user.type(screen.getByPlaceholderText("Enter game name..."), "Abandoned");
     await user.click(screen.getByRole("button", { name: "+" }));
-    await user.click(screen.getByRole("checkbox"));
+    await user.click(screen.getByRole("switch"));
     await user.click(screen.getByRole("button", { name: "Cancel" }));
 
     expect(onClose).toHaveBeenCalled();
     expect(screen.getByPlaceholderText("Enter game name...")).toHaveValue("");
     expect(screen.getByText("2 players")).toBeInTheDocument();
-    expect(screen.getByRole("checkbox")).not.toBeChecked();
+    expect(screen.getByRole("switch")).toHaveAttribute("aria-checked", "false");
   });
 
   it("clears a validation error once the name is fixed and resubmitted", async () => {
@@ -333,13 +336,13 @@ describe("CreateGameModal", () => {
     const input = screen.getByPlaceholderText("Enter game name...");
 
     await user.type(input, "x");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
     expect(
       screen.getByText("Game name must be at least 2 characters")
     ).toBeInTheDocument();
 
     await user.type(input, "yz");
-    await user.click(screen.getByRole("button", { name: "Create Game" }));
+    await user.click(screen.getByRole("button", { name: "Create and deal" }));
 
     // A stale error next to a name that is now fine would be a lie.
     expect(
@@ -351,22 +354,38 @@ describe("CreateGameModal", () => {
   it("labels the game name field with its own label and nothing else", () => {
     setup();
 
-    // "Game Name" and "Private Game" are distinct controls. A second
+    // "Name" and "Private table" are distinct controls. A second
     // htmlFor="gameName" would make the heading resolve to this input and
     // append itself to the input's accessible name.
-    expect(screen.getByLabelText("Game Name")).toHaveAttribute("id", "gameName");
-    expect(screen.queryByLabelText("Private Game")).toBeNull();
-    expect(screen.queryByLabelText("Game Size")).toBeNull();
+    expect(screen.getByLabelText("Name")).toHaveAttribute("id", "gameName");
+    expect(screen.queryByLabelText("Private table")).toBeNull();
+    expect(screen.queryByLabelText("Seats")).toBeNull();
   });
 
-  it("toggles the private checkbox through its own label", async () => {
+  it("toggles the private switch through its own label", async () => {
     const { user } = setup();
 
-    const checkbox = screen.getByRole("checkbox");
-    expect(checkbox).not.toBeChecked();
+    const toggle = screen.getByRole("switch");
+    expect(toggle).toHaveAttribute("aria-checked", "false");
 
-    await user.click(screen.getByText("Only players with the game code can join"));
+    await user.click(screen.getByText("Joinable by code only"));
 
-    expect(checkbox).toBeChecked();
+    expect(toggle).toHaveAttribute("aria-checked", "true");
+  });
+  it("paints every control from the token layer", () => {
+    setup();
+
+    const inline = [...document.body.querySelectorAll<HTMLElement>("[style]")]
+      .map((el) => el.getAttribute("style") ?? "")
+      .join(" ");
+
+    expect(inline).not.toMatch(/#[0-9a-fA-F]{3,6}/);
+  });
+
+  it("picks a target score without opening a select", () => {
+    setup();
+
+    expect(screen.getByRole("radio", { name: /Quick/ })).toBeInTheDocument();
+    expect(screen.queryByRole("combobox")).not.toBeInTheDocument();
   });
 });
