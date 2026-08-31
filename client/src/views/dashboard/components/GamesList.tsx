@@ -49,7 +49,7 @@ const GamesList: React.FC<GamesListProps> = ({
             <h2
               style={{
                 margin: 0,
-                color: "#1f2937",
+                color: "var(--color-text-primary)",
               }}
             >
               My Games
@@ -65,7 +65,7 @@ const GamesList: React.FC<GamesListProps> = ({
               }}
             >
               <LoadingSpinner size="medium" />
-              <p style={{ color: "#6b7280", marginTop: "16px" }}>
+              <p style={{ color: "var(--color-text-secondary)", marginTop: "16px" }}>
                 Loading games...
               </p>
             </div>
@@ -97,7 +97,7 @@ const GamesList: React.FC<GamesListProps> = ({
           <h2
             style={{
               margin: 0,
-              color: "#1f2937",
+              color: "var(--color-text-primary)",
             }}
           >
             Available Games
@@ -150,13 +150,13 @@ const GamesList: React.FC<GamesListProps> = ({
         {loading ? (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
             <LoadingSpinner size="medium" />
-            <p style={{ color: "#6b7280", marginTop: "16px" }}>
+            <p style={{ color: "var(--color-text-secondary)", marginTop: "16px" }}>
               Loading games...
             </p>
           </div>
         ) : availableGames.length === 0 ? (
           <div style={{ textAlign: "center", padding: "40px 0" }}>
-            <p style={{ color: "#6b7280", marginBottom: "20px" }}>
+            <p style={{ color: "var(--color-text-secondary)", marginBottom: "20px" }}>
               No games available. Create a new game to get started!
             </p>
           </div>

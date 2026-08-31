@@ -53,7 +53,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
     >
       <div
         style={{
-          backgroundColor: "white",
+          backgroundColor: "var(--color-panel-elevated)",
           borderRadius: "8px",
           padding: "24px",
           minWidth: "400px",
@@ -70,7 +70,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
             marginBottom: "20px",
           }}
         >
-          <h2 style={{ margin: 0, color: "#1f2937", fontSize: "1.5rem" }}>
+          <h2 style={{ margin: 0, color: "var(--color-text-primary)", fontSize: "1.5rem" }}>
             Join Game by Code
           </h2>
           <button
@@ -80,7 +80,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
               border: "none",
               fontSize: "24px",
               cursor: "pointer",
-              color: "#6b7280",
+              color: "var(--color-text-secondary)",
               padding: "4px",
             }}
           >
@@ -95,7 +95,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
               style={{
                 display: "block",
                 marginBottom: "8px",
-                color: "#374151",
+                color: "var(--color-text-primary)",
                 fontWeight: "500",
               }}
             >
@@ -109,7 +109,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
               style={{
                 width: "100%",
                 padding: "12px",
-                border: "1px solid #d1d5db",
+                border: "1px solid var(--color-glass-border)",
                 borderRadius: "6px",
                 fontSize: "16px",
                 fontFamily: "monospace",
@@ -119,7 +119,7 @@ const JoinGameModal: React.FC<JoinGameModalProps> = ({
               disabled={isLoading}
             />
             <small
-              style={{ color: "#6b7280", marginTop: "4px", display: "block" }}
+              style={{ color: "var(--color-text-secondary)", marginTop: "4px", display: "block" }}
             >
               Enter the game code shared by your friend
             </small>

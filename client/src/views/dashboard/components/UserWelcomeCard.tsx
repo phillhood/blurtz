@@ -26,13 +26,13 @@ const UserWelcomeCard: React.FC<UserWelcomeCardProps> = ({ user }) => {
       <h1
         style={{
           margin: "0 0 10px 0",
-          color: "#1f2937",
+          color: "var(--color-text-primary)",
           fontFamily: "var(--font-body)",
         }}
       >
         Welcome back, {user.username}!
       </h1>
-      <div style={{ fontSize: "14px", color: "#6b7280" }}>
+      <div style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
         <span>Games Played: {gamesPlayed}</span>
         <span style={{ margin: "0 16px" }}>•</span>
         <span>Games Won: {gamesWon}</span>

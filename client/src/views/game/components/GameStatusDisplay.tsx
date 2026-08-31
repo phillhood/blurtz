@@ -37,7 +37,7 @@ const GameStatusDisplay: React.FC = () => {
 
   return (
     <GameStatus>
-      <h2 style={{ fontFamily: "var(--font-display)", color: "#ffffff" }}>
+      <h2 style={{ fontFamily: "var(--font-display)", color: "var(--color-text-primary)" }}>
         {getGameStatusTitle(
           status || "waiting",
           playerCount,
@@ -63,7 +63,7 @@ const GameStatusDisplay: React.FC = () => {
       {showShareCode && (
         <div style={{ marginTop: "12px", marginBottom: "8px" }}>
           <span style={{ color: "#94a3b8", fontSize: "14px" }}>Share this game code with a friend: </span>
-          <span style={{ fontFamily: "monospace", fontSize: "16px", color: "#ffffff", marginLeft: "8px" }}>
+          <span style={{ fontFamily: "monospace", fontSize: "16px", color: "var(--color-text-primary)", marginLeft: "8px" }}>
             {gameState?.alias || ""}
           </span>
           <div style={{ position: "relative", display: "inline-block", marginLeft: "8px" }}>

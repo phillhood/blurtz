@@ -7,7 +7,7 @@ export const AppContainer: React.FC<LayoutProps> = ({ className, children, ...pr
   return (
     <div
       className={clsx(
-        "min-h-screen bg-gradient-to-br from-[#1e3c72] to-[#2a5298] text-white",
+        "min-h-screen bg-[var(--color-void)] text-[var(--color-text-primary)]",
         className
       )}
       {...props}
@@ -29,7 +29,9 @@ export const Card: React.FC<LayoutProps> = ({ className, children, ...props }) =
   return (
     <div
       className={clsx(
-        "bg-white rounded-lg p-6 shadow-md text-gray-800",
+        "rounded-[var(--radius-md)] p-6",
+        "bg-[var(--color-panel)] text-[var(--color-text-primary)]",
+        "border border-[var(--color-glass-border)]",
         className
       )}
       {...props}

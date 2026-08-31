@@ -1,40 +1,71 @@
-import React, { ButtonHTMLAttributes } from "react";
-import clsx from "clsx";
+import React from "react";
+import { AppButton } from "@shychedelic/voidglass-react";
 
-type ButtonVariant = "primary" | "secondary" | "tertiary" | "warning" | "danger" | "default";
+type ButtonVariant =
+  | "primary"
+  | "secondary"
+  | "tertiary"
+  | "warning"
+  | "danger"
+  | "default";
 
-interface ButtonProps extends ButtonHTMLAttributes<HTMLButtonElement> {
+/** The subset VoidGlass forwards onto the element it renders. Anything wider
+ *  would be silently dropped, so it is not offered. */
+interface ButtonProps {
   variant?: ButtonVariant;
+  className?: string;
+  id?: string;
+  title?: string;
+  style?: React.CSSProperties;
+  disabled?: boolean;
+  type?: "button" | "submit" | "reset";
+  onClick?: () => void;
+  children?: React.ReactNode;
 }
 
-const variantStyles: Record<ButtonVariant, string> = {
-  primary: "bg-[#1C92A9] hover:bg-[rgb(86,183,202)] disabled:hover:bg-[#1C92A9]",
-  secondary: "bg-[rgb(32,158,127)] hover:bg-[rgb(101,177,158)] disabled:hover:bg-[rgb(32,158,127)]",
-  tertiary: "bg-[rgb(26,104,168)] hover:bg-[rgb(48,134,204)] disabled:hover:bg-[rgb(26,104,168)]",
-  warning: "bg-[rgb(199,155,36)] hover:bg-[rgb(219,183,82)] disabled:hover:bg-[rgb(199,155,36)]",
-  danger: "bg-[rgb(199,77,77)] hover:bg-[rgb(218,113,113)] disabled:hover:bg-[rgb(199,77,77)]",
-  default: "bg-[rgb(132,134,150)] hover:bg-[rgb(152,157,167)] disabled:hover:bg-[rgb(132,134,150)]",
+/**
+ * Blurtz's six variants over VoidGlass's five, so ~17 call sites keep the names
+ * they already use. `warning` has no variant of its own in the library and is
+ * expressed as an amber-coloured primary instead.
+ */
+const MAPPED: Record<
+  ButtonVariant,
+  { variant: "primary" | "secondary" | "ghost" | "outline" | "danger"; color?: "amber" }
+> = {
+  primary: { variant: "primary" },
+  secondary: { variant: "secondary" },
+  tertiary: { variant: "outline" },
+  warning: { variant: "primary", color: "amber" },
+  danger: { variant: "danger" },
+  default: { variant: "ghost" },
 };
 
 export const Button: React.FC<ButtonProps> = ({
   variant = "default",
   className,
   children,
-  ...props
+  disabled,
+  onClick,
+  type,
+  id,
+  title,
+  style,
 }) => {
+  const mapped = MAPPED[variant];
+
   return (
-    <button
-      className={clsx(
-        "px-6 py-3 border-none rounded-md text-base font-semibold text-white cursor-pointer",
-        "transition-all duration-100 ease-in-out",
-        "active:scale-[0.98] active:shadow-sm",
-        "disabled:opacity-50 disabled:cursor-not-allowed disabled:active:scale-100",
-        variantStyles[variant],
-        className
-      )}
-      {...props}
+    <AppButton
+      variant={mapped.variant}
+      color={mapped.color}
+      disabled={disabled}
+      onClick={onClick}
+      className={className}
+      id={id}
+      title={title}
+      style={style}
+      type={type}
     >
       {children}
-    </button>
+    </AppButton>
   );
 };

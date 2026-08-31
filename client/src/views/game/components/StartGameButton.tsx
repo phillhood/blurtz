@@ -37,7 +37,7 @@ const StartGameButton: React.FC<StartGameButtonProps> = ({
   if (!isHost && playerCount >= 2 && readyCount === playerCount) {
     return (
       <div style={{ textAlign: "center", marginTop: "20px" }}>
-        <p style={{ fontSize: "16px", color: "#6b7280", fontStyle: "italic" }}>
+        <p style={{ fontSize: "16px", color: "var(--color-text-secondary)", fontStyle: "italic" }}>
           {waitingLabel}
         </p>
       </div>
@@ -69,7 +69,7 @@ const StartGameButton: React.FC<StartGameButtonProps> = ({
       </button>
 
       {playerCount < 2 && (
-        <p style={{ fontSize: "14px", color: "#6b7280", marginTop: "10px" }}>
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)", marginTop: "10px" }}>
           Need at least 2 players to start
         </p>
       )}

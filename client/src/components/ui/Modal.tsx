@@ -35,7 +35,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
     >
       <div
         style={{
-          backgroundColor: "white",
+          backgroundColor: "var(--color-panel-elevated)",
           borderRadius: "8px",
           padding: "24px",
           minWidth: "400px",
@@ -55,10 +55,10 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
               alignItems: "center",
               marginBottom: "20px",
               paddingBottom: "12px",
-              borderBottom: "1px solid #e5e7eb",
+              borderBottom: "1px solid var(--color-glass-border)",
             }}
           >
-            <h2 style={{ margin: 0, color: "#1f2937", fontSize: "18px" }}>
+            <h2 style={{ margin: 0, color: "var(--color-text-primary)", fontSize: "18px" }}>
               {title}
             </h2>
             <button
@@ -68,7 +68,7 @@ const Modal: React.FC<ModalProps> = ({ isOpen, onClose, children, title }) => {
                 border: "none",
                 fontSize: "24px",
                 cursor: "pointer",
-                color: "#6b7280",
+                color: "var(--color-text-secondary)",
                 padding: "0",
                 width: "32px",
                 height: "32px",

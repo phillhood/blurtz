@@ -41,7 +41,7 @@ const Login: React.FC = () => {
             style={{
               textAlign: "center",
               marginBottom: "24px",
-              color: "#1f2937",
+              color: "var(--color-text-primary)",
             }}
           >
             Welcome Back
@@ -70,7 +70,7 @@ const Login: React.FC = () => {
           </Form>
 
           <p
-            style={{ textAlign: "center", marginTop: "24px", color: "#6b7280" }}
+            style={{ textAlign: "center", marginTop: "24px", color: "var(--color-text-secondary)" }}
           >
             Don't have an account?{" "}
             <Link

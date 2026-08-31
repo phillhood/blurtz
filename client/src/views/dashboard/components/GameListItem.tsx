@@ -44,19 +44,19 @@ const GameListItem: React.FC<GameListItemProps> = ({
         justifyContent: "space-between",
         alignItems: "center",
         padding: "16px",
-        border: "1px solid #e5e7eb",
+        border: "1px solid var(--color-glass-border)",
         borderRadius: "8px",
-        backgroundColor: "#f9fafb",
+        backgroundColor: "var(--color-panel-recessed)",
       }}
     >
       <div>
-        <h2 style={{ margin: "0 0 10px 0", color: "#1f2937" }}>{game.name}</h2>
+        <h2 style={{ margin: "0 0 10px 0", color: "var(--color-text-primary)" }}>{game.name}</h2>
         <div
           style={{
             display: "flex",
             gap: "16px",
             fontSize: "14px",
-            color: "#6b7280",
+            color: "var(--color-text-secondary)",
             justifyContent: "space-between",
             alignItems: "center",
           }}
@@ -87,7 +87,7 @@ const GameListItem: React.FC<GameListItemProps> = ({
           <span
             style={{
               fontSize: "10px",
-              color: "#6b7280",
+              color: "var(--color-text-secondary)",
             }}
           >
             Created:{" "}

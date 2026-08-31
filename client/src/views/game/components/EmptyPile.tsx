@@ -21,7 +21,7 @@ const EmptyPile: React.FC<EmptyPileProps> = ({ label, size = "medium" }) => {
         alignItems: "center",
         justifyContent: "center",
         color: "#94a3b8",
-        border: "2px dashed #e5e7eb",
+        border: "1.5px dashed var(--color-glass-border)",
         borderRadius: "6px",
         ...sizeStyles[size],
       }}

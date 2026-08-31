@@ -21,7 +21,7 @@ const PlayerCard: React.FC<PlayerCardProps> = ({
       fontWeight: "600",
     }}
   >
-    <div style={{ color: "#1f2937", display: "flex", alignItems: "center", gap: "6px" }}>
+    <div style={{ color: "var(--color-text-primary)", display: "flex", alignItems: "center", gap: "6px" }}>
       {isCurrentPlayer && <span style={{ fontSize: "12px" }}>👤</span>}
       {username}
     </div>

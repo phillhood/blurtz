@@ -72,7 +72,7 @@ const ReadySection: React.FC<ReadySectionProps> = ({
           <p
             style={{
               fontSize: "16px",
-              color: "#6b7280",
+              color: "var(--color-text-secondary)",
               fontStyle: "italic",
               marginTop: "20px",
             }}
@@ -92,7 +92,7 @@ const ReadySection: React.FC<ReadySectionProps> = ({
         ))}
 
       {!allPlayersReady && (
-        <p style={{ fontSize: "14px", color: "#6b7280" }}>
+        <p style={{ fontSize: "14px", color: "var(--color-text-secondary)" }}>
           Waiting for all players to be ready ({readyCount}/{players.length})
         </p>
       )}

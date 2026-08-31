@@ -124,7 +124,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               display: "block",
               marginBottom: "8px",
               fontWeight: "500",
-              color: "#374151",
+              color: "var(--color-text-primary)",
             }}
           >
             Game Name
@@ -161,7 +161,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               display: "block",
               marginBottom: "8px",
               fontWeight: "500",
-              color: "#374151",
+              color: "var(--color-text-primary)",
             }}
           >
             Game Size
@@ -171,9 +171,9 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
             style={{
               display: "flex",
               alignItems: "center",
-              border: "2px solid #e5e7eb",
+              border: "1px solid var(--color-glass-border)",
               borderRadius: "8px",
-              backgroundColor: "white",
+              backgroundColor: "var(--color-panel-elevated)",
               overflow: "hidden",
               marginBottom: "10px",
             }}
@@ -184,9 +184,11 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               onClick={() => setMaxPlayers(Math.max(2, maxPlayers - 1))}
               disabled={maxPlayers <= 2}
               style={{
-                backgroundColor: maxPlayers === 2 ? "#f9fafb" : "#ffffff",
+                backgroundColor: maxPlayers === 2
+                    ? "var(--color-panel-recessed)"
+                    : "var(--color-panel-elevated)",
                 border: "none",
-                borderRight: "1px solid #e5e7eb",
+                borderRight: "1px solid var(--color-glass-border)",
                 fontSize: "20px",
                 fontWeight: "bold",
                 cursor: maxPlayers <= 2 ? "not-allowed" : "pointer",
@@ -199,7 +201,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               }}
               onMouseLeave={(e) => {
                 if (maxPlayers > 2) {
-                  e.currentTarget.style.backgroundColor = "#ffffff";
+                  e.currentTarget.style.backgroundColor = "var(--color-panel-elevated)";
                 }
               }}
             >
@@ -212,9 +214,9 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 textAlign: "center",
                 fontSize: "16px",
                 fontWeight: "600",
-                color: "#374151",
+                color: "var(--color-text-primary)",
                 padding: "12px 16px",
-                backgroundColor: "#ffffff",
+                backgroundColor: "var(--color-panel-elevated)",
               }}
             >
               {maxPlayers} players
@@ -225,9 +227,11 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               onClick={() => setMaxPlayers(Math.min(4, maxPlayers + 1))}
               disabled={maxPlayers >= 4}
               style={{
-                backgroundColor: maxPlayers === 4 ? "#f9fafb" : "#ffffff",
+                backgroundColor: maxPlayers === 4
+                    ? "var(--color-panel-recessed)"
+                    : "var(--color-panel-elevated)",
                 border: "none",
-                borderLeft: "1px solid #e5e7eb",
+                borderLeft: "1px solid var(--color-glass-border)",
                 fontSize: "20px",
                 fontWeight: "bold",
                 cursor: maxPlayers >= 4 ? "not-allowed" : "pointer",
@@ -240,7 +244,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               }}
               onMouseLeave={(e) => {
                 if (maxPlayers < 4) {
-                  e.currentTarget.style.backgroundColor = "#ffffff";
+                  e.currentTarget.style.backgroundColor = "var(--color-panel-elevated)";
                 }
               }}
             >
@@ -254,7 +258,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 display: "block",
                 marginBottom: "8px",
                 fontWeight: "500",
-                color: "#374151",
+                color: "var(--color-text-primary)",
               }}
             >
               Target Score
@@ -271,12 +275,12 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
               style={{
                 width: "100%",
                 padding: "12px 16px",
-                border: "2px solid #e5e7eb",
+                border: "1px solid var(--color-glass-border)",
                 borderRadius: "8px",
-                backgroundColor: "#ffffff",
+                backgroundColor: "var(--color-panel-elevated)",
                 fontSize: "16px",
                 fontWeight: "600",
-                color: "#374151",
+                color: "var(--color-text-primary)",
                 cursor: "pointer",
               }}
             >
@@ -296,7 +300,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                     display: "block",
                     marginBottom: "8px",
                     fontWeight: "500",
-                    color: "#374151",
+                    color: "var(--color-text-primary)",
                   }}
                 >
                   Custom Target Score
@@ -338,7 +342,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 display: "block",
                 marginBottom: "8px",
                 fontWeight: "500",
-                color: "#374151",
+                color: "var(--color-text-primary)",
               }}
             >
               Private Game
@@ -350,9 +354,9 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 cursor: "pointer",
                 gap: "12px",
                 padding: "12px 16px",
-                border: "2px solid #e5e7eb",
+                border: "1px solid var(--color-glass-border)",
                 borderRadius: "8px",
-                backgroundColor: "#f9fafb",
+                backgroundColor: "var(--color-panel-recessed)",
                 transition: "all 0.2s ease",
               }}
               onMouseEnter={(e) => {
@@ -360,8 +364,8 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 e.currentTarget.style.borderColor = "#cbd5e1";
               }}
               onMouseLeave={(e) => {
-                e.currentTarget.style.backgroundColor = "#f9fafb";
-                e.currentTarget.style.borderColor = "#e5e7eb";
+                e.currentTarget.style.backgroundColor = "var(--color-panel-recessed)";
+                e.currentTarget.style.borderColor = "var(--color-glass-border)";
               }}
             >
               <input
@@ -379,7 +383,7 @@ const CreateGameModal: React.FC<CreateGameModalProps> = ({
                 <div
                   style={{
                     fontSize: "12px",
-                    color: "#6b7280",
+                    color: "var(--color-text-secondary)",
                   }}
                 >
                   Only players with the game code can join
