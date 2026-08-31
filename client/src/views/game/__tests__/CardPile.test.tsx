@@ -28,6 +28,12 @@ const renderIn = (node: React.ReactNode) =>
     </Board>
   );
 
+/** The card backs on screen. A back carries no text, so it is found by state. */
+const faceDownCards = () =>
+  screen.queryAllByTestId("game-card").filter(
+    (card) => card.getAttribute("data-face-down") === "true"
+  );
+
 describe("CardPile", () => {
   it("renders nothing for an empty pile", () => {
     renderIn(<CardPile cards={[]} pileId="pile-1" />);
@@ -59,7 +65,7 @@ describe("CardPile", () => {
     expect(screen.getByText("9")).toBeInTheDocument();
     expect(screen.queryByText("5")).not.toBeInTheDocument();
     expect(screen.queryByText("2")).not.toBeInTheDocument();
-    expect(screen.getAllByText("NB")).toHaveLength(2);
+    expect(faceDownCards()).toHaveLength(2);
   });
 
   it("caps how many backs are drawn behind the top card", () => {
@@ -71,7 +77,7 @@ describe("CardPile", () => {
 
     // Default maxStackDisplay is 2 - a 10-card blurtz pile must not render 10
     // DOM nodes deep on every state swap.
-    expect(screen.getAllByText("NB")).toHaveLength(2);
+    expect(faceDownCards()).toHaveLength(2);
     expect(screen.getByText("9")).toBeInTheDocument();
   });
 
@@ -80,13 +86,13 @@ describe("CardPile", () => {
 
     renderIn(<CardPile cards={cards} pileId="pile-1" maxStackDisplay={4} />);
 
-    expect(screen.getAllByText("NB")).toHaveLength(4);
+    expect(faceDownCards()).toHaveLength(4);
   });
 
   it("draws no backs behind a single card", () => {
     renderIn(<CardPile cards={[visible(9)]} pileId="pile-1" />);
 
-    expect(screen.queryByText("NB")).not.toBeInTheDocument();
+    expect(faceDownCards()).toHaveLength(0);
   });
 
   it("counts the pile only when there is more than one card in it", () => {

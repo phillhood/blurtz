@@ -2,7 +2,7 @@ import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
 import { ClientCard } from "@types";
-import { GameCard, CardNumber } from "@styles";
+import { GameCard, CardNumber, type CardSize } from "@styles";
 import { cardHue } from "@utils/card.utils";
 
 interface CardComponentProps {
@@ -13,6 +13,7 @@ interface CardComponentProps {
   canDrop?: (draggedCard: ClientCard) => boolean;
   isDraggable?: boolean;
   isPendingMove?: boolean;
+  size?: CardSize;
 }
 
 export interface DragData {
@@ -29,6 +30,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
   canDrop,
   isDraggable: canBeDragged = true,
   isPendingMove = false,
+  size = "play",
 }) => {
   const dragId = `card-${card.id}`;
   const dropId = `drop-${pileId}-${card.id}`;
@@ -96,35 +98,13 @@ const CardComponent: React.FC<CardComponentProps> = ({
         {...(canBeDragged ? { ...listeners, ...attributes } : {})}
       >
         <GameCard
-          color="#1e3a5f"
-          background={`repeating-linear-gradient(
-            45deg,
-            #1e3a5f,
-            #1e3a5f 10px,
-            #2d4a6f 10px,
-            #2d4a6f 20px
-          )`}
+          hue="var(--color-card-unknown)"
+          cardType="a"
+          size={size}
+          faceDown
           isDragging={isDragging}
-          canDrop={false}
           onClick={handleClick}
-        >
-          <div
-            style={{
-              width: "60px",
-              height: "80px",
-              border: "2px solid #4a6a8f",
-              borderRadius: "4px",
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              fontFamily: "Germania One, sans-serif",
-              fontSize: "14px",
-              color: "#8aa3bf",
-            }}
-          >
-            NB
-          </div>
-        </GameCard>
+        />
       </div>
     );
   }
@@ -137,11 +117,12 @@ const CardComponent: React.FC<CardComponentProps> = ({
       {...(canBeDragged ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
-        color={cardHue(card.color)}
+        hue={cardHue(card.color)}
+        cardType={card.color.type}
+        size={size}
         isDragging={isDragging}
         canDrop={canDropHere}
         onClick={handleClick}
-        borderStyle={card.color.type === "a" ? "solid" : "dashed"}
       >
         <CardNumber>{card.value}</CardNumber>
       </GameCard>

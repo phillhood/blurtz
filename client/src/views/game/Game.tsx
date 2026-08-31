@@ -398,10 +398,8 @@ const Game: React.FC = () => {
                   }}
                 >
                   <GameCard
-                    color={cardHue(card.color)}
-                    isDragging={false}
-                    canDrop={false}
-                    borderStyle={card.color.type === "a" ? "solid" : "dashed"}
+                    hue={cardHue(card.color)}
+                    cardType={card.color.type}
                     style={{ cursor: "grabbing" }}
                   >
                     <CardNumber

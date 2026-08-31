@@ -65,10 +65,13 @@ describe("Card", () => {
   it("renders the back of a face-down card and no value at all", () => {
     renderCard({ card: hidden() });
 
-    expect(screen.getByText("NB")).toBeInTheDocument();
+    expect(screen.getByTestId("game-card")).toHaveAttribute(
+      "data-face-down",
+      "true"
+    );
     // Nothing but the back, anywhere in the card. A regression that dropped
     // the early return would render `undefined` here rather than throw.
-    expect(screen.getByTestId("card-root").textContent).toBe("NB");
+    expect(screen.getByTestId("card-root").textContent).toBe("");
     expect(screen.getByTestId("card-root").textContent).not.toMatch(/\d/);
   });
 
@@ -78,15 +81,15 @@ describe("Card", () => {
     expect(screen.queryByText("NB")).not.toBeInTheDocument();
   });
 
-  it("tells the two colour types apart by border style, not by colour name", () => {
-    // `color.type` is what work-pile alternation is judged on ("a" = red/blue,
-    // "b" = yellow/green), and colour alone does not survive a colourblind
-    // player. The border style is the second channel.
-    const { container: solid } = renderCard({ card: visible(5, red) });
-    expect(solid.querySelector("[style*='border-style: solid']")).not.toBeNull();
+  it("tells the two colour types apart by card type, not by colour name", () => {
+    // Red/blue and yellow/green share a type, and hue alone is not enough for a
+    // colourblind player. The type is the second channel, and the skin decides
+    // whether it renders as a rail or as a bracketed numeral.
+    const { container: typeA } = renderCard({ card: visible(5, red) });
+    expect(typeA.querySelector("[data-card-type='a']")).not.toBeNull();
 
-    const { container: dashed } = renderCard({ card: visible(5, yellow) });
-    expect(dashed.querySelector("[style*='border-style: dashed']")).not.toBeNull();
+    const { container: typeB } = renderCard({ card: visible(5, yellow) });
+    expect(typeB.querySelector("[data-card-type='b']")).not.toBeNull();
   });
 
   it("calls back when a face-up card is clicked", async () => {
@@ -104,7 +107,7 @@ describe("Card", () => {
     const onClick = vi.fn();
     renderCard({ card: hidden(), onClick });
 
-    await userEvent.setup().click(screen.getByText("NB"));
+    await userEvent.setup().click(screen.getByTestId("game-card"));
 
     expect(onClick).toHaveBeenCalledTimes(1);
   });

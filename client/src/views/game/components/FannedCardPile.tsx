@@ -278,10 +278,10 @@ const FannedCard: React.FC<FannedCardProps> = ({
       {...(isDraggable ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
-        color={cardHue(card.color)}
+        hue={cardHue(card.color)}
+        cardType={card.color.type}
         isDragging={isDragging}
         canDrop={canDropHere}
-        borderStyle={card.color.type === "a" ? "solid" : "dashed"}
         disableHoverEffect={!isTopCard}
       >
         <CardNumber

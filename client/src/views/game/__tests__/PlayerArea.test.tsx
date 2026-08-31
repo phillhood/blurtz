@@ -57,7 +57,10 @@ const player = (over: {
   }) as unknown as Player;
 
 /** The stock's clickable face-down top card. */
-const stockTop = () => screen.getByText("NB");
+const stockTop = () =>
+  screen
+    .getAllByTestId("game-card")
+    .filter((card) => card.getAttribute("data-face-down") === "true")[0];
 
 const Board = ({ children }: { children: React.ReactNode }) => {
   const sensors = useSensors(
