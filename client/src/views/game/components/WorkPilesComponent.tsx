@@ -10,6 +10,7 @@ interface WorkPilesComponentProps {
   size?: CardSize;
   legalTargetIds?: string[];
   selectedCardId?: string;
+  rejectedCardIds?: Set<string>;
   onCardTap?: (card: ClientCard, pileId: string) => void;
   workPiles: Pile[];
   canDropOnPile: (index: number, card: ClientCard) => boolean;
@@ -27,6 +28,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
   size = "play",
   legalTargetIds = [],
   selectedCardId,
+  rejectedCardIds,
   onCardTap,
 }) => {
   const { active } = useDndContext();
@@ -78,6 +80,7 @@ const WorkPilesComponent: React.FC<WorkPilesComponentProps> = ({
                     size={size}
                     isLegalTarget={legalTargetIds.includes(pile.id)}
                     selectedCardId={selectedCardId}
+                    rejectedCardIds={rejectedCardIds}
                     onCardTap={onCardTap}
                     cards={cards}
                     pileId={pile.id}

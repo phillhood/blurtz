@@ -30,6 +30,8 @@ interface CardPileProps {
   isSelected?: boolean;
   /** A pile the selected card may legally reach. */
   isLegalTarget?: boolean;
+  /** A finished 1-10 foundation, which can accept nothing further. */
+  isComplete?: boolean;
   /** Tap handler for the top card, for the click-to-move path. */
   onCardTap?: (card: ClientCard, pileId: string) => void;
 }
@@ -53,6 +55,7 @@ const CardPile: React.FC<CardPileProps> = ({
   size = "play",
   isSelected = false,
   isLegalTarget = false,
+  isComplete = false,
   onCardTap,
 }) => {
   if (cards.length === 0) {
@@ -107,6 +110,7 @@ const CardPile: React.FC<CardPileProps> = ({
           size={size}
           isSelected={isSelected}
           isLegalTarget={isLegalTarget}
+          isComplete={isComplete}
           onClick={
             onCardTap ? () => onCardTap(topCard, pileId) : onClick
           }

@@ -14,7 +14,8 @@
   background: var(--hue);
   box-shadow: 0 5px 14px -4px rgba(0, 0, 0, 0.75);
   overflow: hidden;
-  transition: transform 0.12s var(--ease-spring), box-shadow 0.12s ease;
+  transition: transform 0.12s var(--ease-spring), box-shadow 0.12s ease,
+    opacity 0.14s ease;
 }
 
 [data-card-size="play"] {
@@ -466,5 +467,53 @@
 @media (prefers-reduced-motion: reduce) {
   .blurtz-card[data-legal-target="true"] {
     animation: none;
+  }
+}
+
+/* ── motion ──────────────────────────────────────────────────
+   Blurtz is a speed game: nothing here sits between a player and
+   their next move, and no handler waits on an animation. */
+@keyframes blurtz-reject {
+  0%,
+  100% {
+    transform: translateX(0);
+  }
+  25% {
+    transform: translateX(-5px);
+  }
+  75% {
+    transform: translateX(5px);
+  }
+}
+
+/* The one non-card red on the board, and it is never static. */
+.blurtz-card[data-rejected="true"] {
+  animation: blurtz-reject 0.22s ease-in-out 2;
+  box-shadow: 0 0 0 3px #ef4444, 0 0 22px -4px #ef4444;
+}
+
+@keyframes blurtz-bloom {
+  0% {
+    box-shadow: 0 0 0 0 var(--color-purple-bright);
+  }
+  60% {
+    box-shadow: 0 0 0 10px rgba(168, 85, 247, 0);
+  }
+  100% {
+    box-shadow: 0 0 0 0 rgba(168, 85, 247, 0);
+  }
+}
+
+.blurtz-card[data-complete="true"] {
+  animation: blurtz-bloom 0.5s var(--ease-spring);
+  filter: saturate(0.14) brightness(0.48);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurtz-card,
+  .blurtz-card[data-rejected="true"],
+  .blurtz-card[data-complete="true"] {
+    animation: none;
+    transition: none;
   }
 }

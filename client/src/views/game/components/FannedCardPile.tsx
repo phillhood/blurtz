@@ -29,6 +29,7 @@ interface FannedCardPileProps {
   size?: CardSize;
   isLegalTarget?: boolean;
   selectedCardId?: string;
+  rejectedCardIds?: Set<string>;
   onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
@@ -42,6 +43,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
   size = "play",
   isLegalTarget = false,
   selectedCardId,
+  rejectedCardIds,
   onCardTap,
   pendingMoveCardIds,
 }) => {
@@ -181,6 +183,7 @@ const FannedCardPile: React.FC<FannedCardPileProps> = ({
             size={size}
             isLegalTarget={isLegalTarget && index === cards.length - 1}
             isSelected={selectedCardId === card.id}
+            isRejected={rejectedCardIds?.has(card.id) ?? false}
             onCardTap={onCardTap}
             key={card.id}
             card={card}
@@ -205,6 +208,7 @@ interface FannedCardProps {
   size?: CardSize;
   isLegalTarget?: boolean;
   isSelected?: boolean;
+  isRejected?: boolean;
   onCardTap?: (card: ClientCard, pileId: string) => void;
   card: VisibleCard;
   pileId: string;
@@ -234,6 +238,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
   size = "play",
   isLegalTarget = false,
   isSelected = false,
+  isRejected = false,
   onCardTap,
 }) => {
   const dragId = `card-${card.id}`;
@@ -303,6 +308,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
         size={size}
         inFlight={isPendingMove}
         isSelected={isSelected}
+        isRejected={isRejected}
         isLegalTarget={isLegalTarget}
         onClick={onCardTap ? () => onCardTap(card, pileId) : undefined}
         isDragging={isDragging}

@@ -12,6 +12,16 @@ interface BankPilesAreaProps {
   onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
+/**
+ * A finished 1-10 foundation is inert: the only card it could accept is an 11,
+ * and the deck has none. Nothing clears or recycles it, so it stays on the
+ * board doing nothing - and should look like it.
+ */
+const isPileComplete = (pile: Pile): boolean => {
+  const top = pile.cards[pile.cards.length - 1];
+  return !!top && top.faceUp && top.value === 10;
+};
+
 const BankPilesArea: React.FC<BankPilesAreaProps> = ({
   bankPiles,
   legalTargetIds = [],
@@ -43,6 +53,7 @@ const BankPilesArea: React.FC<BankPilesAreaProps> = ({
                 hideCountBadge
                 size="foundation"
                 isLegalTarget={legalTargetIds.includes(pile.id)}
+                isComplete={isPileComplete(pile)}
                 onCardTap={onCardTap}
               />
             </div>

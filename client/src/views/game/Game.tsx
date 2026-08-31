@@ -26,6 +26,7 @@ import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
 import { cardHue } from "@utils/card.utils";
 import { useMoveResolver } from "./hooks/useMoveResolver";
 import { useCardSelection } from "./hooks/useCardSelection";
+import { useRejectedCards } from "./hooks/useRejectedCards";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -59,6 +60,7 @@ const Game: React.FC = () => {
     currentPlayer?.deck?.workPiles
   );
   const selection = useCardSelection(gameState);
+  const { rejectedIds, rememberAttempt } = useRejectedCards(moveRejection);
   const legalTargetIds = selection.selected
     ? moveResolver.legalTargetIds(
         selection.selected.card,
@@ -77,6 +79,7 @@ const Game: React.FC = () => {
       const resolved = moveResolver.resolve(picked.card, picked.fromPileId, pileId);
       if (resolved) {
         markPending(resolved.movingCardIds);
+        rememberAttempt(resolved.movingCardIds);
         makeMove(picked.card.id, picked.fromPileId, resolved.toPileId);
       }
       selection.clear();
@@ -194,6 +197,7 @@ const Game: React.FC = () => {
     if (!resolved) return;
 
     markPending(resolved.movingCardIds);
+    rememberAttempt(resolved.movingCardIds);
     makeMove(dragData.card.id, dragData.fromPileId, resolved.toPileId);
   };
 
@@ -309,6 +313,7 @@ const Game: React.FC = () => {
                 pendingMoveCardIds={pendingMoveCardIds}
                 legalTargetIds={legalTargetIds}
                 selectedCardId={selection.selected?.card.id}
+                rejectedCardIds={rejectedIds}
                 onCardTap={handleCardTap}
                 // Own socket state, first-hand: a dropped client's presence set
                 // is whatever the server last managed to tell it.

@@ -24,6 +24,7 @@ interface PlayerAreaProps {
   isConnected?: boolean;
   legalTargetIds?: string[];
   selectedCardId?: string;
+  rejectedCardIds?: Set<string>;
   onCardTap?: (card: ClientCard, pileId: string) => void;
 }
 
@@ -35,6 +36,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
   isConnected = true,
   legalTargetIds,
   selectedCardId,
+  rejectedCardIds,
   onCardTap,
 }) => {
   const { flipDrawPile, callBlitz, gameState } = useGameContext();
@@ -167,6 +169,7 @@ const PlayerArea: React.FC<PlayerAreaProps> = ({
             size={cardSize}
             legalTargetIds={legalTargetIds}
             selectedCardId={selectedCardId}
+            rejectedCardIds={rejectedCardIds}
             onCardTap={onCardTap}
           />
           <BlurtzPile
