@@ -1,24 +1,37 @@
 import React, { HTMLAttributes, CSSProperties, forwardRef } from "react";
 import clsx from "clsx";
 
+/**
+ * The emissive skin's overline must land inside the strip a fanned card still
+ * shows, so `overlineRatio` has to stay below `fanOffsetRatio`. Lower the fan
+ * and the type cue is covered with nothing failing at runtime.
+ */
+export const CARD_GEOMETRY = {
+  fanOffsetRatio: 0.2,
+  overlineRatio: 0.13,
+} as const;
+
+export type CardSize = "play" | "foundation" | "token";
+
 interface GameCardProps extends HTMLAttributes<HTMLDivElement> {
-  color: string;
-  /** The card face. Defaults to the flat fill; the card back passes a pattern. */
-  background?: string;
+  hue: string;
+  cardType: "a" | "b";
+  size?: CardSize;
+  faceDown?: boolean;
   isDragging?: boolean;
   canDrop?: boolean;
-  borderStyle?: "solid" | "dashed";
   disableHoverEffect?: boolean;
 }
 
 export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
   (
     {
-      color,
-      background = "var(--color-card-face)",
+      hue,
+      cardType,
+      size = "play",
+      faceDown = false,
       isDragging = false,
       canDrop = false,
-      borderStyle = "solid",
       disableHoverEffect = false,
       className,
       children,
@@ -27,28 +40,23 @@ export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
     },
     ref
   ) => {
-    const borderWidth = 4;
-
-    const cardStyle: CSSProperties = {
-      background,
-      backgroundPosition: "center center",
-      borderColor: canDrop ? undefined : color,
-      borderStyle: borderStyle,
-      borderWidth: canDrop ? undefined : borderWidth,
+    const cardStyle = {
+      "--hue": hue,
       opacity: isDragging ? 0.5 : 1,
       ...style,
-    };
+    } as CSSProperties;
 
     return (
       <div
         ref={ref}
+        data-testid="game-card"
+        data-card-type={cardType}
+        data-card-size={size}
+        data-face-down={faceDown ? "true" : undefined}
+        data-can-drop={canDrop ? "true" : undefined}
         className={clsx(
-          "w-[90px] h-[120px] rounded-lg cursor-pointer flex items-center justify-center",
-          "transition-all duration-200",
-          !disableHoverEffect && "hover:-translate-y-0.5 hover:shadow-lg",
-          canDrop
-            ? "border-4 border-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.3)]"
-            : "shadow-sm",
+          "blurtz-card",
+          !disableHoverEffect && "blurtz-card--hoverable",
           className
         )}
         style={cardStyle}
@@ -68,13 +76,7 @@ export const CardNumber: React.FC<HTMLAttributes<HTMLSpanElement>> = ({
   ...props
 }) => {
   return (
-    <span
-      className={clsx(
-        "font-['Germania_One'] text-[2.8rem] font-bold text-white",
-        className
-      )}
-      {...props}
-    >
+    <span className={clsx("blurtz-card__numeral", className)} {...props}>
       {children}
     </span>
   );
@@ -85,17 +87,7 @@ interface CardStackProps extends HTMLAttributes<HTMLDivElement> {}
 export const CardStack = forwardRef<HTMLDivElement, CardStackProps>(
   ({ className, children, ...props }, ref) => {
     return (
-      <div
-        ref={ref}
-        className={clsx(
-          "relative",
-          "[&_.card]:absolute [&_.card]:top-0 [&_.card]:left-0",
-          "[&_.card:nth-child(2)]:top-[-4px] [&_.card:nth-child(2)]:left-[-4px]",
-          "[&_.card:nth-child(3)]:top-[-10px] [&_.card:nth-child(3)]:left-[-10px]",
-          className
-        )}
-        {...props}
-      >
+      <div ref={ref} className={clsx("blurtz-stack", className)} {...props}>
         {children}
       </div>
     );
@@ -103,4 +95,3 @@ export const CardStack = forwardRef<HTMLDivElement, CardStackProps>(
 );
 
 CardStack.displayName = "CardStack";
-
