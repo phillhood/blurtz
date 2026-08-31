@@ -75,12 +75,14 @@ describe("GameService", () => {
       player: {
         findUnique: jest.fn(),
         findFirst: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
         create: jest.fn(),
         delete: jest.fn(),
       },
       user: {
         findUnique: jest.fn(),
+        findMany: jest.fn(),
         update: jest.fn(),
       },
       roundResult: {
@@ -1584,6 +1586,7 @@ describe("GameService", () => {
           _count: { players: 2 },
         },
       ]);
+      (prismaService.user.findMany as jest.Mock).mockResolvedValue([]);
 
       const listings = await service.getAvailableGames();
 
@@ -1591,6 +1594,64 @@ describe("GameService", () => {
       expect(arg.select._count).toEqual({ select: { players: true } });
       expect(arg.include).toBeUndefined();
       expect(listings[0]).toMatchObject({ id: "g1", currentPlayers: 2 });
+    });
+
+    it("tells a browsing player what they would be joining", async () => {
+      (prismaService.game.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "g1",
+          name: "Midnight rush",
+          alias: "happy-blue-lemur",
+          maxPlayers: 4,
+          status: "waiting",
+          targetScore: 25,
+          currentRound: 1,
+          hostId: "u-corvid",
+          createdAt: new Date("2026-08-31T10:00:00Z"),
+          _count: { players: 2 },
+        },
+      ]);
+      (prismaService.user.findMany as jest.Mock).mockResolvedValue([
+        { id: "u-corvid", username: "corvid" },
+      ]);
+
+      const [listing] = await service.getAvailableGames();
+
+      expect(listing.targetScore).toBe(25);
+      expect(listing.currentRound).toBe(1);
+      expect(listing.hostUsername).toBe("corvid");
+    });
+
+    it("says where the player stands in a game they are already in", async () => {
+      (prismaService.player.findMany as jest.Mock).mockResolvedValue([
+        { gameId: "g1" },
+      ]);
+      (prismaService.game.findMany as jest.Mock).mockResolvedValue([
+        {
+          id: "g1",
+          name: "Thursday regulars",
+          alias: "happy-blue-lemur",
+          maxPlayers: 4,
+          status: "playing",
+          targetScore: 100,
+          currentRound: 3,
+          hostId: "u-me",
+          createdAt: new Date("2026-08-31T10:00:00Z"),
+          _count: { players: 4 },
+          players: [
+            { userId: "u-me", score: 62 },
+            { userId: "u-other", score: 71 },
+          ],
+        },
+      ]);
+      (prismaService.user.findMany as jest.Mock).mockResolvedValue([
+        { id: "u-me", username: "designpass" },
+      ]);
+
+      const [listing] = await service.getActiveGames("u-me");
+
+      expect(listing.yourScore).toBe(62);
+      expect(listing.leaderScore).toBe(71);
     });
   });
 

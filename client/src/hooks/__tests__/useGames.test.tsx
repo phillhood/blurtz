@@ -57,8 +57,8 @@ describe("useGames", () => {
 
   it("should fetch and return available games", async () => {
     const mockGames = [
-      { id: "1", name: "Game 1", status: "waiting" as const, alias: "abc123", maxPlayers: 4, currentPlayers: 1, createdAt: new Date() },
-      { id: "2", name: "Game 2", status: "waiting" as const, alias: "def456", maxPlayers: 4, currentPlayers: 2, createdAt: new Date() },
+      { id: "1", name: "Game 1", status: "waiting" as const, alias: "abc123", maxPlayers: 4, currentPlayers: 1, targetScore: 100, currentRound: 1, hostUsername: "corvid", createdAt: new Date() },
+      { id: "2", name: "Game 2", status: "waiting" as const, alias: "def456", maxPlayers: 4, currentPlayers: 2, targetScore: 25, currentRound: 1, hostUsername: "dmitri", createdAt: new Date() },
     ];
 
     vi.mocked(gameService.getAvailableGames).mockResolvedValue(mockGames);
@@ -78,7 +78,7 @@ describe("useGames", () => {
 
   it("should fetch and return active games", async () => {
     const mockActiveGames = [
-      { id: "1", name: "Active Game", status: "playing" as const, alias: "ghi789", maxPlayers: 4, currentPlayers: 3, createdAt: new Date() },
+      { id: "1", name: "Active Game", status: "playing" as const, alias: "ghi789", maxPlayers: 4, currentPlayers: 3, targetScore: 100, currentRound: 2, hostUsername: "designpass", createdAt: new Date() },
     ];
 
     vi.mocked(gameService.getAvailableGames).mockResolvedValue([]);

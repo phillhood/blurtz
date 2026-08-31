@@ -42,6 +42,7 @@ function gameState(decks: PlayerDeck[], bankPiles: Pile[] = []): GameState {
     currentPlayers: decks.length,
     status: "playing",
     hostId: "user-1",
+    hostUsername: "player1",
     createdAt: new Date(),
     players: decks.map((deck, index) => ({
       id: `player-${index + 1}`,

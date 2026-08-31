@@ -174,6 +174,19 @@ export class GameService {
     });
   }
 
+  private async hostUsernamesById(
+    hostIds: string[]
+  ): Promise<Record<string, string>> {
+    if (hostIds.length === 0) {
+      return {};
+    }
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: [...new Set(hostIds)] } },
+      select: { id: true, username: true },
+    });
+    return Object.fromEntries(users.map((u) => [u.id, u.username]));
+  }
+
   async getAvailableGames(): Promise<GameListing[]> {
     const games = await this.prisma.game.findMany({
       where: { status: "waiting", isPrivate: false },
@@ -183,10 +196,15 @@ export class GameService {
         alias: true,
         maxPlayers: true,
         status: true,
+        targetScore: true,
+        currentRound: true,
+        hostId: true,
         createdAt: true,
         _count: { select: { players: true } },
       },
     });
+
+    const hosts = await this.hostUsernamesById(games.map((g) => g.hostId));
 
     return games.map((game) => ({
       id: game.id,
@@ -195,6 +213,9 @@ export class GameService {
       maxPlayers: game.maxPlayers,
       currentPlayers: game._count.players,
       status: game.status,
+      targetScore: game.targetScore,
+      currentRound: game.currentRound,
+      hostUsername: hosts[game.hostId] ?? "",
       createdAt: game.createdAt,
     }));
   }
@@ -225,10 +246,16 @@ export class GameService {
         alias: true,
         maxPlayers: true,
         status: true,
+        targetScore: true,
+        currentRound: true,
+        hostId: true,
         createdAt: true,
         _count: { select: { players: true } },
+        players: { select: { userId: true, score: true } },
       },
     });
+
+    const hosts = await this.hostUsernamesById(games.map((g) => g.hostId));
 
     return games.map((game) => ({
       id: game.id,
@@ -237,6 +264,11 @@ export class GameService {
       maxPlayers: game.maxPlayers,
       currentPlayers: game._count.players,
       status: game.status,
+      targetScore: game.targetScore,
+      currentRound: game.currentRound,
+      hostUsername: hosts[game.hostId] ?? "",
+      yourScore: game.players.find((p) => p.userId === userId)?.score ?? 0,
+      leaderScore: game.players.reduce((top, p) => Math.max(top, p.score), 0),
       createdAt: game.createdAt,
     }));
   }
@@ -777,6 +809,8 @@ export class GameService {
       maxPlayers: game.maxPlayers,
       currentPlayers: game.players.length,
       hostId: game.hostId,
+      hostUsername:
+        game.players.find((p) => p.userId === game.hostId)?.user.username ?? "",
       players: game.players.map((p) => ({
         id: p.id,
         username: p.user.username,

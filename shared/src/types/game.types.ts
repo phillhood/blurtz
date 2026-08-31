@@ -75,6 +75,13 @@ export interface GameListing {
   maxPlayers: number;
   currentPlayers: number;
   status: GameStatus;
+  targetScore: number;
+  currentRound: number;
+  hostUsername: string;
+  /** Present only on `getActiveGames` results - a listing the caller is a player in. */
+  yourScore?: number;
+  /** The highest cumulative score at the table, the caller's own included. */
+  leaderScore?: number;
   createdAt: Date;
   updatedAt?: Date;
 }
