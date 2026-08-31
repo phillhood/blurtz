@@ -175,8 +175,10 @@ export const TUTORIAL_STEPS: TutorialStep[] = [
     kind: "do",
     title: "Work piles come down",
     say:
-      "Your five work piles are the staging ground. They descend by one, and the colour family has " +
-      "to alternate: red and blue are one family, yellow and green the other.",
+      "The piles in front of you are your staging ground. They descend by one, and the colour " +
+      "family has to alternate: red and blue are one family, yellow and green the other. You get " +
+      "five of them at a two-player table, four at three, three at four — the fuller the table, the " +
+      "less room you have.",
     instruction: "Put the green 5 on the red 6",
     requires: (deck) => {
       const source = cardInWorkPiles(deck, 5, "Green");

@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import {
   DndContext,
   DragOverlay,
@@ -47,6 +47,7 @@ interface TutorialBoardProps {
  */
 const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
   const [activeCards, setActiveCards] = useState<VisibleCard[]>([]);
+  const boardRef = useRef<HTMLDivElement>(null);
 
   const deck = redactDeck(tutorial.deck);
   const bankPiles = tutorial.bankPiles.map(redactPile) as Pile[];
@@ -55,6 +56,11 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
   const selection = useCardSelection(tutorial.deck);
 
   const required = tutorial.step.requires?.(tutorial.deck, tutorial.bankPiles) ?? null;
+
+  useEffect(() => {
+    const target = boardRef.current?.querySelector("[data-legal-target='true']");
+    target?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+  }, [tutorial.stepIndex]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
@@ -123,6 +129,7 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
       onDragEnd={handleDragEnd}
       onDragCancel={() => setActiveCards([])}
     >
+      <div ref={boardRef}>
       <GameBoard>
         <CenterArea>
           <BankPiles>
@@ -171,6 +178,7 @@ const TutorialBoard: React.FC<TutorialBoardProps> = ({ tutorial }) => {
           )}
         </PlayerArea>
       </GameBoard>
+      </div>
 
       <DragOverlay dropAnimation={null}>
         {activeCards.length > 0 ? (

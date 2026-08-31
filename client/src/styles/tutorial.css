@@ -3,6 +3,7 @@
 .blurtz-coach {
   position: sticky;
   bottom: 0;
+  z-index: 5;
   margin-top: 16px;
   padding: 16px 20px;
   background: var(--color-panel);
@@ -146,7 +147,15 @@
 .blurtz-tutorial {
   display: flex;
   flex-direction: column;
-  min-height: calc(100vh - 80px);
+  min-height: 100dvh;
+}
+
+/* The coach pins to the bottom of the viewport and the board scrolls under it.
+   On a phone the board is taller than the screen, so the step scrolls its own
+   pile into view rather than leaving the player to hunt for it. */
+.blurtz-tutorial__stage {
+  flex: 1;
+  padding-bottom: 8px;
 }
 
 .blurtz-tutorial__head {
@@ -212,4 +221,19 @@
   .blurtz-appheader__howto {
     display: none;
   }
+}
+
+/* Five work piles do not fit 390px even at the small card size, so the row
+   scrolls inside itself rather than pushing the page sideways. */
+@media (max-width: 559px) {
+  .blurtz-tutorial .blurtz-workpiles {
+    max-width: 100%;
+    overflow-x: auto;
+    justify-content: flex-start;
+    padding-bottom: 4px;
+  }
+}
+
+.blurtz-tutorial__stage {
+  overflow-x: hidden;
 }

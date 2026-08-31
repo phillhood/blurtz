@@ -24,14 +24,19 @@ const App: React.FC = () => {
   const { user, loading } = useAuthContext();
   const cardSkin = useAuthStore((state) => state.user?.cardSkin ?? "solid");
 
-  // Returning something other than <Router> UNMOUNTS the whole tree, so this is
-  // only allowed to be true while there is genuinely nothing to route: at boot,
-  // before `fetchUserProfile` has said whether the persisted token is a session.
-  // `authStore.loading` means that and only that - if a form's in-flight state
-  // ever fed this, every submit would remount the form and blank its error.
-  if (loading) {
-    return <div>Loading...</div>;
-  }
+  // Gated per route, not around the Router. `authStore.loading` means one thing
+  // - boot, before `fetchUserProfile` has said whether a persisted token is a
+  // session - and every route that depends on knowing waits for it. `/tutorial`
+  // does not depend on knowing: it needs no account and no server, so gating it
+  // behind a request that can hang would make it unavailable in exactly the
+  // degraded-server case it exists to survive. Returning something other than
+  // <Router> would also UNMOUNT the whole tree and throw away tutorial progress
+  // the moment the profile request resolved.
+  const booting = <div>Loading...</div>;
+  const guarded = (element: React.ReactElement) =>
+    loading ? booting : user ? element : <Navigate to="/login" />;
+  const anonymous = (element: React.ReactElement) =>
+    loading ? booting : user ? <Navigate to="/dashboard" /> : element;
 
   return (
     <Router>
@@ -40,41 +45,25 @@ const App: React.FC = () => {
       <AppContainer className={cardSkin === "emissive" ? "skin-emissive" : undefined}>
         {user && <Header />}
         <Routes>
-          <Route
-            path="/login"
-            element={user ? <Navigate to="/dashboard" /> : <Login />}
-          />
-          <Route
-            path="/register"
-            element={user ? <Navigate to="/dashboard" /> : <Register />}
-          />
-          <Route
-            path="/dashboard"
-            element={user ? <Dashboard /> : <Navigate to="/login" />}
-          />
-          <Route
-            path="/profile"
-            element={user ? <Profile /> : <Navigate to="/login" />}
-          />
+          <Route path="/login" element={anonymous(<Login />)} />
+          <Route path="/register" element={anonymous(<Register />)} />
+          <Route path="/dashboard" element={guarded(<Dashboard />)} />
+          <Route path="/profile" element={guarded(<Profile />)} />
           {/* No auth guard: the tutorial needs no account, no socket and no
               server, and someone deciding whether to sign up is exactly who
               should be able to play it. */}
           <Route path="/tutorial" element={<Tutorial />} />
-          <Route
-            path="/profile/history"
-            element={user ? <History /> : <Navigate to="/login" />}
-          />
+          <Route path="/profile/history" element={guarded(<History />)} />
           <Route
             path="/profile/history/:gameId"
-            element={user ? <GameResults /> : <Navigate to="/login" />}
+            element={guarded(<GameResults />)}
           />
-          <Route
-            path="/game/:gameId"
-            element={user ? <Game /> : <Navigate to="/login" />}
-          />
+          <Route path="/game/:gameId" element={guarded(<Game />)} />
           <Route
             path="/"
-            element={<Navigate to={user ? "/dashboard" : "/login"} />}
+            element={
+              loading ? booting : <Navigate to={user ? "/dashboard" : "/login"} />
+            }
           />
         </Routes>
       </AppContainer>

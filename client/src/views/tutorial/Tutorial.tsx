@@ -30,9 +30,10 @@ const Tutorial: React.FC = () => {
         <div className="blurtz-tutorial__done">
           <h2 className="blurtz-tutorial__donetitle">That is the whole game.</h2>
           <p className="blurtz-tutorial__doneblurb">
-            You banked two cards and emptied your Blurtz pile. In a real game that
-            pile holds ten, three other people are racing you for the same bank
-            piles, and nobody waits for a turn.
+            You banked two cards and emptied your Blurtz pile. A real game deals
+            ten cards to that pile, seats two to four players who are all racing
+            you for the same bank piles, and gives you fewer work piles the
+            fuller the table gets. Nobody waits for a turn.
           </p>
           <div className="blurtz-tutorial__doneacts">
             <Button variant="tertiary" onClick={tutorial.restart}>
@@ -45,7 +46,9 @@ const Tutorial: React.FC = () => {
         </div>
       ) : (
         <>
-          <TutorialBoard tutorial={tutorial} />
+          <div className="blurtz-tutorial__stage">
+            <TutorialBoard tutorial={tutorial} />
+          </div>
           <CoachBar
             step={tutorial.step}
             stepIndex={tutorial.stepIndex}
