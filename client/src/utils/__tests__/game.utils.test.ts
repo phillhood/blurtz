@@ -1,10 +1,5 @@
 import { describe, it, expect } from "vitest";
-import {
-  getGameStatusTitle,
-  getStatusColor,
-  formatDate,
-  formatAge,
-} from "../game.utils";
+import { getGameStatusTitle, formatAge } from "../game.utils";
 
 /**
  * The display helpers behind the one line of text that announces the state of
@@ -72,63 +67,6 @@ describe("getGameStatusTitle", () => {
   });
 });
 
-describe("getStatusColor", () => {
-  it("gives a running game a colour of its own", () => {
-    // The only status the player can act in has to be distinguishable from the
-    // three that they cannot.
-    const playing = getStatusColor("playing");
-    expect(playing).toBe("#10b981");
-    expect(playing).not.toBe(getStatusColor("waiting"));
-    expect(playing).not.toBe(getStatusColor("finished"));
-    expect(playing).not.toBe(getStatusColor("round_over"));
-  });
-
-  it("colours round_over like waiting, because both are a game paused on its players", () => {
-    expect(getStatusColor("round_over")).toBe(getStatusColor("waiting"));
-  });
-
-  it("falls back to the finished grey rather than to undefined", () => {
-    // Callers drop this straight into a `color:` style. A missing return would
-    // not throw, it would silently render the browser default.
-    expect(getStatusColor("banana")).toBe("#6b7280");
-  });
-});
-
-describe("formatDate", () => {
-  it("gives the day an ordinal suffix", () => {
-    expect(formatDate(new Date(2024, 0, 1, 9, 5))).toContain("January 1st, 2024");
-    expect(formatDate(new Date(2024, 0, 2, 9, 5))).toContain("January 2nd, 2024");
-    expect(formatDate(new Date(2024, 0, 3, 9, 5))).toContain("January 3rd, 2024");
-    expect(formatDate(new Date(2024, 0, 4, 9, 5))).toContain("January 4th, 2024");
-  });
-
-  it("says 11th, 12th and 13th rather than 11st, 12nd and 13rd", () => {
-    // The reason `getOrdinalSuffix` special-cases the teens before it looks at
-    // day % 10. Without that branch these read as 11st/12nd/13rd.
-    expect(formatDate(new Date(2024, 0, 11))).toContain("January 11th");
-    expect(formatDate(new Date(2024, 0, 12))).toContain("January 12th");
-    expect(formatDate(new Date(2024, 0, 13))).toContain("January 13th");
-  });
-
-  it("suffixes 21st and 22nd off the last digit, not the teens rule", () => {
-    expect(formatDate(new Date(2024, 0, 21))).toContain("January 21st");
-    expect(formatDate(new Date(2024, 0, 22))).toContain("January 22nd");
-    expect(formatDate(new Date(2024, 0, 23))).toContain("January 23rd");
-  });
-
-  it("accepts the ISO string the API actually sends, not just a Date", () => {
-    // `game.createdAt` arrives over the wire as a string; GameListItem hands it
-    // straight to this.
-    const iso = new Date(2024, 5, 3, 14, 30).toISOString();
-    expect(formatDate(iso)).toContain("June 3rd, 2024");
-  });
-
-  it("includes a 12-hour time", () => {
-    expect(formatDate(new Date(2024, 0, 1, 14, 30))).toMatch(/2:30\s?PM/);
-    expect(formatDate(new Date(2024, 0, 1, 9, 5))).toMatch(/9:05\s?AM/);
-  });
-});
-
 describe("formatAge", () => {
   const now = new Date("2026-08-31T12:00:00Z");
 
@@ -148,5 +86,9 @@ describe("formatAge", () => {
 
   it("never reports a table from the future as negative", () => {
     expect(formatAge(new Date("2026-08-31T12:05:00Z"), now)).toBe("just now");
+  });
+
+  it("accepts the ISO string the API actually sends, not just a Date", () => {
+    expect(formatAge("2026-08-31T09:00:00Z", now)).toBe("3h");
   });
 });

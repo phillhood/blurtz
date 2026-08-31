@@ -46,8 +46,8 @@ const Profile: React.FC = () => {
         </div>
       </Card>
 
-      <Card style={{ marginTop: "16px" }}>
-        <div className="blurtz-tables__label" style={{ marginTop: 0 }}>
+      <Card className="blurtz-profile__skin">
+        <div className="blurtz-profile__label">
           Card skin
         </div>
         <div className="blurtz-skinpreview" aria-hidden="true">

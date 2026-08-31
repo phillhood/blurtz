@@ -57,8 +57,8 @@ describe("useUserStats", () => {
   });
 
   it("keeps the same object while the user is unchanged", () => {
-    // It is memoised on `user`, and UserWelcomeCard destructures it every
-    // render. A new object per render would defeat any memo downstream.
+    // It is memoised on `user`, and Profile destructures it every render.
+    // A new object per render would defeat any memo downstream.
     const same = user({ gamesPlayed: 4, gamesWon: 1 });
     const { result, rerender } = renderHook(() => useUserStats(same));
     const first = result.current;

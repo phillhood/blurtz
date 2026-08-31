@@ -27,43 +27,6 @@ export const getGameStatusTitle = (
   }
 };
 
-export const getStatusColor = (status: string): string => {
-  switch (status) {
-    case "waiting":
-      return "#f59e0b";
-    case "playing":
-      return "#10b981";
-    // Amber like `waiting`, and for the same reason: both are a game paused on
-    // its players rather than a game running or a game done.
-    case "round_over":
-      return "#f59e0b";
-    case "finished":
-      return "#6b7280";
-    default:
-      return "#6b7280";
-  }
-};
-
-export const formatDate = (date: string | Date): string => {
-  const dateObj = new Date(date);
-
-  const options: Intl.DateTimeFormatOptions = {
-    year: "numeric",
-    month: "long",
-    day: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-    hour12: true,
-  };
-
-  const formatted = dateObj.toLocaleDateString("en-US", options);
-
-  const day = dateObj.getDate();
-  const ordinalSuffix = getOrdinalSuffix(day);
-
-  return formatted.replace(/(\d+),/, `$1${ordinalSuffix},`);
-};
-
 /**
  * How long ago, at lobby-row density: `just now`, `4m`, `3h`, `2d`.
  * A table older than a week reads as `7d+` rather than a date - the only
@@ -85,18 +48,3 @@ export const formatAge = (date: string | Date, now: Date = new Date()): string =
   return days > 7 ? "7d+" : `${days}d`;
 };
 
-const getOrdinalSuffix = (day: number): string => {
-  if (day >= 11 && day <= 13) {
-    return "th";
-  }
-  switch (day % 10) {
-    case 1:
-      return "st";
-    case 2:
-      return "nd";
-    case 3:
-      return "rd";
-    default:
-      return "th";
-  }
-};

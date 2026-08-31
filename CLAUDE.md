@@ -31,6 +31,16 @@ container then dies on an import the host resolves fine. Same after pulling a br
 `shared` the client can serve a stale copy — a blank page and a new export reading `undefined`, on a
 clean tree. `rm -rf client/node_modules/.vite` fixes it. CI is unaffected (it never has a warm cache).
 
+⚠️ **VoidGlass must load into Tailwind's `components` layer, and does — don't "tidy" it into
+`main.tsx`.** The import lives in `client/src/styles/index.css` as
+`@import "@shychedelic/voidglass-react/style.css" layer(components);`, immediately after
+`@import "tailwindcss"`. Unlayered, whichever stylesheet loads last wins and one of the two is always
+broken: with VoidGlass first, Tailwind's preflight zeroes every `app-button`'s padding, radius and
+background, so the whole library renders as bare text on a faint ring; with VoidGlass last, every
+Tailwind utility loses and pages lose their layout. The layer ranks above preflight and below
+utilities, which is the only arrangement where both work. The symptom is subtle enough to be mistaken
+for a component-variant problem — it was, for a whole phase.
+
 ### Database
 
 Prisma migrations run inside the server container:
@@ -71,6 +81,22 @@ make lint                                          # eslint across all workspace
 ### Server is authoritative; the client mirrors it
 
 REST handles auth and the lobby (create/join/list games, profile, stats). Everything in-game goes over Socket.IO. Each mutating gateway handler in `server/src/game/game.gateway.ts` validates the payload, calls `GameService` (which does its own read-modify-write inside a transaction and **returns the new state**), redacts it, and broadcasts to the room. The client never computes game state: `client/src/stores/gameStore.ts` registers callbacks with `socketService` and replaces `gameState` wholesale on every event. There are no optimistic updates — a rejected move produces a `MOVE_REJECTED` event **carrying the current state and a reason** (not a bare error), so the board resolves and the pending card un-hides.
+
+### The lobby listing carries what a row shows
+
+`GameListing` is not just id/name/seats: it also carries `targetScore`, `currentRound` and
+`hostUsername`, plus `yourScore?`/`leaderScore?` which **only `getActiveGames` populates** (they are
+meaningless for a table you are not sitting at). `Game.hostId` has no Prisma relation to `User`, so
+the host name comes from a second keyed `user.findMany` in `hostUsernamesById` rather than a join —
+deliberately, to avoid a migration.
+
+Two traps here:
+
+- **`GameState extends GameListing`**, so every field added to the listing becomes required on full
+  game state too. `readGameState` derives `hostUsername` from rows it already loads; don't add a
+  query on that path, and don't make a listing field optional just to dodge this.
+- **`getAvailableGames(userId?)` excludes tables the caller already sits at** (`players: { none: {
+  userId } }`). Without it a player sees their own game twice — once to rejoin, once to "join".
 
 ### Match history is a separate read-only module
 
@@ -137,6 +163,39 @@ Used for the Socket.IO Redis adapter in `main.ts` (multi-instance broadcast; fal
 - React Query owns lobby lists (`hooks/queries/useGamesQuery.ts`, keys under `gameKeys`); `gameStore` invalidates `gameKeys.all` when leaving a game. `useGames` is a convenience wrapper over the two queries.
 - `AuthContext` is a thin provider that just calls `fetchUserProfile()` on mount — the store is the real source of truth.
 
+### The dashboard is one list, and the row is its vocabulary
+
+`/dashboard` is a single list of tables ordered by how close the player is to playing — theirs first,
+then open ones — not a set of panels. One component, `views/dashboard/components/TableRow.tsx`,
+renders every weight: `.blurtz-row`, plus `--mine` and `--live` modifiers. `GamesList`,
+`GameListItem` and `UserWelcomeCard` were deleted; don't reintroduce a per-section component.
+
+Two atoms carry the row and live in `components/ui/`: `SeatIndicator` (one silhouette per seat, the
+player's own in purple, with an `sr-only` "N of M seats taken") and `TableStatus` (a monospace label
+plus one dot; `tableStatusLabel` is exported and unit-tested separately from the component).
+
+Three rules the design turns on, and each is easy to undo by accident:
+
+- **Purple means "you can act on this".** It keys the player's own tables and interaction state, and
+  nothing else. It is also why purple never paints a card.
+- **The four game hues appear off the board in exactly two places** — the `/profile` skin picker
+  (real `GameCard`s, so it previews the actual skin) and the auth brand panel. Nowhere else, and a
+  seat is *not* drawn as a card colour.
+- **Status is never traffic-light.** `getStatusColor` used to return amber/green/grey and was
+  deleted; those hues collide with the game palette. Status is type plus a dot.
+
+`/profile` owns the card skin, and will own sound-mute and match history. It is reached from the
+header username, which below 560&nbsp;px collapses to a circular initial — **not** to nothing, or the
+skin picker becomes unreachable on a phone.
+
+### Stylesheets are owned by area, not appended to one file
+
+`main.tsx` loads `index.css` (tokens, Tailwind, `.sr-only`), then `card.css` (board + app header),
+`forms.css` (inputs, fields, steppers, dialog actions, the button overrides), `tables.css` (seats,
+status, rows, page bar, stat tiles) and `auth.css` (the split, brand panel, card fan). Put a new rule
+in the file that owns its area. This exists so parallel work does not collide in one stylesheet, and
+because `card.css` had become the dump for everything.
+
 ## Conventions
 
 Contribution conventions — comments (with the full rationale and examples), commits, testing, docs,
@@ -145,7 +204,7 @@ is only the codebase-specific facts an agent needs while working in this repo.
 
 ### Other
 
-- **The rules and shared types live in `@blurtz/shared` — import them from there.** `SOCKET_EVENTS`, the card/game types, `GAME_CONSTANTS`, `PILE_RULES`, and the rules engine were previously hand-copied into both packages and had drifted; they are now single-sourced. `client/src/utils/constants.utils.ts` and the client's duplicate placement rules are gone. `client/src/utils/game.utils.ts` keeps only non-rule helpers (`getGameStatusTitle`, `getStatusColor`, `formatDate`). One stale spot remains: `API_ENDPOINTS` should not be trusted for game routes — the real paths are in `game.controller.ts` (`/api/game/listings`, `/api/game/active`, `/api/game/joinById`, `/api/game/joinByCode`) and `client/src/services/game.service.ts` hardcodes them.
+- **The rules and shared types live in `@blurtz/shared` — import them from there.** `SOCKET_EVENTS`, the card/game types, `GAME_CONSTANTS`, `PILE_RULES`, and the rules engine were previously hand-copied into both packages and had drifted; they are now single-sourced. `client/src/utils/constants.utils.ts` and the client's duplicate placement rules are gone. `client/src/utils/game.utils.ts` keeps only non-rule helpers (`getGameStatusTitle`, `formatAge`); `getStatusColor` and `formatDate` were deleted with the dashboard recomposition. One stale spot remains: `API_ENDPOINTS` should not be trusted for game routes — the real paths are in `game.controller.ts` (`/api/game/listings`, `/api/game/active`, `/api/game/joinById`, `/api/game/joinByCode`) and `client/src/services/game.service.ts` hardcodes them.
 - **Path aliases are declared in multiple places.** Client: `client/tsconfig.json`, `client/vite.config.ts`, `client/vitest.config.ts`. Server: `server/tsconfig.json` and the `jest.moduleNameMapper` block in `server/package.json`. Adding or renaming an alias means editing all of them. `@blurtz/shared` is **not** an alias — it resolves through the workspace symlink — so don't add one.
 - **Strictness differs.** The client is `strict: true` with `noUnusedLocals`/`noUnusedParameters`; the server runs `strict: false`, `strictNullChecks: false`, `noImplicitAny: false`. Because the server has `strictNullChecks: false`, TypeScript won't narrow a discriminated union by boolean truthiness — server code uses `result.ok === false`, not `!result.ok`, deliberately.
 - **Terminology.** `blurtz` pile = the Nertz pile (10 cards, only the top playable), `work` piles = tableau, `bank` piles = shared foundations, `draw` pile = stock (flips 3 at a time). Legacy names survive in a few places: socket events still say `call_blitz`/`blitz_called`, and a migration renamed `dutch_pile_count` → `bank_pile_count`. The DB and types use `bank`.

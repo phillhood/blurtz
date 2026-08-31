@@ -270,3 +270,15 @@
   color: var(--color-text-muted);
   margin-top: 5px;
 }
+
+.blurtz-profile__skin {
+  margin-top: 16px;
+}
+
+.blurtz-profile__label {
+  font-size: 10.5px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-secondary);
+  margin-bottom: 10px;
+}
