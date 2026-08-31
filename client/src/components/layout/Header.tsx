@@ -31,6 +31,13 @@ const Header: React.FC = () => {
       <div className="blurtz-appheader__actions">
         <button
           type="button"
+          className="blurtz-appheader__howto"
+          onClick={() => navigate("/tutorial")}
+        >
+          How to play
+        </button>
+        <button
+          type="button"
           className="blurtz-appheader__user"
           onClick={() => navigate("/profile")}
           aria-label={user ? `${user.username} — profile` : "Profile"}

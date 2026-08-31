@@ -6,3 +6,4 @@ export { default as Game } from "./game/Game";
 export { default as Profile } from "./profile/Profile";
 export { default as History } from "./history/History";
 export { default as GameResults } from "./history/GameResults";
+export { default as Tutorial } from "./tutorial/Tutorial";

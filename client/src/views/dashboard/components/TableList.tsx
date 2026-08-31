@@ -1,4 +1,5 @@
 import React from "react";
+import { Link } from "react-router-dom";
 import { EmptyState } from "@shychedelic/voidglass-react";
 import { Game, JoinGameRequest } from "@types";
 import { LoadingSpinner } from "@components/ui";
@@ -39,6 +40,11 @@ const TableList: React.FC<TableListProps> = ({
         <EmptyState
           title="No open tables"
           description="Start one from the top of the page, or join by a code someone sent you."
+          action={
+            <Link className="blurtz-tables__learn" to="/tutorial">
+              New to Nertz? Learn it in a minute
+            </Link>
+          }
         />
       ) : (
         availableGames.map((game) => (

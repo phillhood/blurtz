@@ -96,6 +96,14 @@ describe("Dashboard", () => {
     expect(names[0]).toHaveAccessibleName("Rejoin");
   });
 
+  it("points a stranger at the tutorial when there is nothing to join", () => {
+    renderDashboard({ activeGames: [], availableGames: [] });
+
+    expect(
+      screen.getByRole("link", { name: /Learn it in a minute/ })
+    ).toHaveAttribute("href", "/tutorial");
+  });
+
   it("says so when there is nothing to join", () => {
     renderDashboard({ activeGames: [], availableGames: [] });
 

@@ -115,8 +115,11 @@ function redactCard(card: Card, pileId: string, index: number): ClientCard {
  * Tolerant of a missing pile on purpose: decks come out of a JSON column that
  * `readGameState` casts rather than validates, and a half-written row must not
  * take the broadcast down for everyone else in the game.
+ *
+ * Exported for the offline tutorial, which holds unredacted state and has to
+ * redact at the component boundary like every other caller.
  */
-function redactPile(pile: Pile): ClientPile {
+export function redactPile(pile: Pile): ClientPile {
   if (!pile) return pile as unknown as ClientPile;
 
   return {
@@ -127,7 +130,7 @@ function redactPile(pile: Pile): ClientPile {
   };
 }
 
-function redactDeck(deck: PlayerDeck): ClientPlayerDeck {
+export function redactDeck(deck: PlayerDeck): ClientPlayerDeck {
   if (!deck) return deck as unknown as ClientPlayerDeck;
 
   return {

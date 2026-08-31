@@ -111,6 +111,14 @@ describe("Header", () => {
     expect(mockNavigate).toHaveBeenCalledWith("/profile");
   });
 
+  it("offers the way to the tutorial", async () => {
+    const user = await renderHeader("/dashboard");
+
+    await user.click(screen.getByRole("button", { name: "How to play" }));
+
+    expect(mockNavigate).toHaveBeenCalledWith("/tutorial");
+  });
+
   it("keeps an initial to fall back to where the name will not fit", async () => {
     await renderHeader("/dashboard");
 

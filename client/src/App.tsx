@@ -6,7 +6,16 @@ import {
   Navigate,
 } from "react-router-dom";
 import { useAuthContext } from "@hooks";
-import { Login, Register, Dashboard, Game, Profile, History, GameResults } from "@views";
+import {
+  Login,
+  Register,
+  Dashboard,
+  Game,
+  Profile,
+  History,
+  GameResults,
+  Tutorial,
+} from "@views";
 import { Header } from "@components/layout";
 import { useAuthStore } from "@stores/authStore";
 import { AppContainer } from "@styles";
@@ -47,6 +56,10 @@ const App: React.FC = () => {
             path="/profile"
             element={user ? <Profile /> : <Navigate to="/login" />}
           />
+          {/* No auth guard: the tutorial needs no account, no socket and no
+              server, and someone deciding whether to sign up is exactly who
+              should be able to play it. */}
+          <Route path="/tutorial" element={<Tutorial />} />
           <Route
             path="/profile/history"
             element={user ? <History /> : <Navigate to="/login" />}

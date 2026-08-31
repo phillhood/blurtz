@@ -1,0 +1,1 @@
+export { CoachBar } from "./CoachBar";

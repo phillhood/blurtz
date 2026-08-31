@@ -1,0 +1,215 @@
+/* tutorial: the coach bar */
+
+.blurtz-coach {
+  position: sticky;
+  bottom: 0;
+  margin-top: 16px;
+  padding: 16px 20px;
+  background: var(--color-panel);
+  backdrop-filter: blur(14px);
+  border-top: 1px solid var(--color-glass-border);
+}
+
+.blurtz-coach__top {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.blurtz-coach__step {
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.blurtz-coach__track {
+  flex: 1;
+  height: 3px;
+  min-width: 40px;
+  border-radius: 99px;
+  background: rgba(255, 255, 255, 0.08);
+  overflow: hidden;
+}
+
+.blurtz-coach__track i {
+  display: block;
+  height: 100%;
+  border-radius: 99px;
+  background: linear-gradient(
+    90deg,
+    var(--color-purple-deep),
+    var(--color-purple-bright)
+  );
+  transition: width 400ms var(--ease-spring);
+}
+
+.blurtz-coach__body {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 20px;
+  flex-wrap: wrap;
+}
+
+.blurtz-coach__text {
+  min-width: 0;
+  flex: 1;
+}
+
+.blurtz-coach__title {
+  margin: 0 0 3px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: 19px;
+  letter-spacing: -0.02em;
+  color: var(--color-text-primary);
+}
+
+.blurtz-coach__say {
+  margin: 0;
+  font-size: 14.5px;
+  color: rgba(255, 255, 255, 0.72);
+  max-width: 70ch;
+}
+
+.blurtz-coach__do {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  margin-top: 7px;
+  font-size: 13px;
+  color: color-mix(in srgb, var(--color-purple-bright) 35%, white);
+}
+
+.blurtz-coach__do::before {
+  content: "";
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  flex: none;
+  background: var(--color-purple-bright);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-purple-bright) 20%, transparent);
+}
+
+.blurtz-coach__acts {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
+.blurtz-coach__nudge {
+  margin: 10px 0 0;
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  animation: coachNudge 260ms var(--ease-spring);
+}
+
+@keyframes coachNudge {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blurtz-coach__track i {
+    transition: none;
+  }
+
+  .blurtz-coach__nudge {
+    animation: none;
+  }
+}
+
+@media (max-width: 560px) {
+  .blurtz-coach {
+    padding: 14px 16px;
+  }
+
+  .blurtz-coach__title {
+    font-size: 17px;
+  }
+
+  .blurtz-coach__acts {
+    width: 100%;
+  }
+}
+
+.blurtz-tutorial {
+  display: flex;
+  flex-direction: column;
+  min-height: calc(100vh - 80px);
+}
+
+.blurtz-tutorial__head {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  padding: 20px 20px 0;
+}
+
+.blurtz-tutorial__done {
+  margin: auto;
+  padding: 48px 24px;
+  max-width: 56ch;
+  text-align: center;
+}
+
+.blurtz-tutorial__donetitle {
+  margin: 0 0 10px;
+  font-family: var(--font-display);
+  font-weight: 700;
+  font-size: clamp(24px, 4vw, 32px);
+  letter-spacing: -0.025em;
+  color: var(--color-text-primary);
+}
+
+.blurtz-tutorial__doneblurb {
+  margin: 0 0 24px;
+  color: var(--color-text-secondary);
+}
+
+.blurtz-tutorial__doneacts {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.blurtz-appheader__howto {
+  background: none;
+  border: 0;
+  cursor: pointer;
+  font-family: var(--font-body);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+  white-space: nowrap;
+  transition: color 0.18s var(--ease-spring);
+}
+
+.blurtz-appheader__howto:hover {
+  color: var(--color-text-primary);
+}
+
+.blurtz-tables__learn {
+  color: var(--color-purple-bright);
+  font-size: 13.5px;
+}
+
+/* The header sheds the username for an initial below 560; "How to play" is a
+   whole phrase and goes with it, because Logout must never be pushed off. */
+@media (max-width: 560px) {
+  .blurtz-appheader__howto {
+    display: none;
+  }
+}
