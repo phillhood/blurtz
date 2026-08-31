@@ -26,6 +26,16 @@
 
   --color-green-500: #22c55e;
   --color-green-600: #16a34a;
+
+  /* The four game colours. The domain carries no hex - `CardColor` is
+     `{ name, type }` - so this is the single source for what a card looks
+     like, and a repaint never touches `@blurtz/shared` or a stored deck. */
+  --color-card-red: #dc2626;
+  --color-card-blue: #2563eb;
+  --color-card-yellow: #eab308;
+  --color-card-green: #16a34a;
+  --color-card-unknown: #64748b;
+  --color-card-face: #1a1a1a;
 }
 
 /* Base styles */

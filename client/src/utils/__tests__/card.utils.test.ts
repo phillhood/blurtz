@@ -1,12 +1,8 @@
 import { describe, it, expect } from "vitest";
-import {
-  isVisibleCard,
-  getCardColorString,
-  getCardDisplayColor,
-} from "../card.utils";
+import { isVisibleCard, cardHue } from "../card.utils";
 import { CardColor, ClientCard, VisibleCard } from "@types";
 
-const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
+const red: CardColor = { name: "red", type: "a" };
 
 const visible = (value: number): VisibleCard =>
   ({ id: `c-${value}`, faceUp: true, value, color: red }) as VisibleCard;
@@ -43,47 +39,39 @@ describe("isVisibleCard", () => {
   });
 });
 
-describe("getCardColorString", () => {
-  it("prefers the explicit code over the name", () => {
-    expect(getCardColorString({ name: "red", code: "#dc2626", type: "a" })).toBe(
-      "#dc2626"
-    );
-  });
-
-  it("falls back to the name when there is no code", () => {
-    expect(
-      getCardColorString({ name: "red", type: "a" } as CardColor)
-    ).toBe("red");
-  });
-
-  it("yields a usable colour rather than undefined when it has neither", () => {
-    // The return value goes straight into a `color:` style; undefined would
-    // render as the browser default rather than as anything anyone chose.
-    expect(getCardColorString({ type: "a" } as CardColor)).toBe("#000000");
-  });
-});
-
-describe("getCardDisplayColor", () => {
-  it("maps each of the four suits to a distinct colour", () => {
-    const colours = ["red", "blue", "green", "yellow"].map((name) =>
-      getCardDisplayColor({ name, type: "a" } as CardColor)
+describe("cardHue", () => {
+  it("maps each of the four suits to a distinct token", () => {
+    const hues = ["red", "blue", "green", "yellow"].map((name) =>
+      cardHue({ name, type: "a" } as CardColor)
     );
     // Four suits that render the same colour would make the game unplayable;
-    // that they are distinct matters more than which hex each one is.
-    expect(new Set(colours).size).toBe(4);
-    expect(colours).toEqual(["#dc2626", "#2563eb", "#16a34a", "#ca8a04"]);
+    // that they are distinct matters more than which token each one is.
+    expect(new Set(hues).size).toBe(4);
   });
 
   it("matches the suit name case-insensitively", () => {
-    expect(getCardDisplayColor({ name: "RED", type: "a" } as CardColor)).toBe(
-      getCardDisplayColor({ name: "red", type: "a" } as CardColor)
+    // The engine ships "Red"; fixtures and older decks say "red".
+    expect(cardHue({ name: "Red", type: "a" } as CardColor)).toBe(
+      cardHue({ name: "red", type: "a" } as CardColor)
     );
   });
 
-  it("falls back to black for an unknown or absent name", () => {
-    expect(getCardDisplayColor({ name: "puce", type: "a" } as CardColor)).toBe(
-      "#000000"
+  it("returns a token reference rather than a hex", () => {
+    // The whole point of the indirection: repainting the game is a change to
+    // the stylesheet, never to the domain or to a stored deck.
+    expect(cardHue({ name: "red", type: "a" } as CardColor)).toMatch(
+      /^var\(--color-card-/
     );
-    expect(getCardDisplayColor({ type: "a" } as CardColor)).toBe("#000000");
+  });
+
+  it("yields a usable colour rather than undefined for an unknown suit", () => {
+    // The return value goes straight into a `color:` style; undefined would
+    // render as the browser default rather than as anything anyone chose.
+    expect(cardHue({ name: "puce", type: "a" } as CardColor)).toBe(
+      "var(--color-card-unknown)"
+    );
+    expect(cardHue({ type: "a" } as CardColor)).toBe(
+      "var(--color-card-unknown)"
+    );
   });
 });

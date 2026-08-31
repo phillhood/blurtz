@@ -11,22 +11,23 @@ import { CardColor, ClientCard, VisibleCard } from "@types";
 export const isVisibleCard = (card: ClientCard): card is VisibleCard =>
   card.faceUp;
 
-export const getCardColorString = (color: CardColor): string => {
-  return color.code || color.name || "#000000";
+const CARD_HUE: Record<string, string> = {
+  red: "var(--color-card-red)",
+  blue: "var(--color-card-blue)",
+  yellow: "var(--color-card-yellow)",
+  green: "var(--color-card-green)",
 };
 
-export const getCardDisplayColor = (color: CardColor): string => {
-  const colorName = color.name?.toLowerCase();
-  switch (colorName) {
-    case "red":
-      return "#dc2626";
-    case "blue":
-      return "#2563eb";
-    case "green":
-      return "#16a34a";
-    case "yellow":
-      return "#ca8a04";
-    default:
-      return "#000000";
-  }
-};
+/**
+ * The CSS colour a card is painted in, as a `var()` reference.
+ *
+ * Keyed on `color.name` because that is what the rules engine matches bank
+ * piles on - the domain carries no hex, so the palette lives entirely in the
+ * token layer and a repaint never touches `@blurtz/shared` or the database.
+ *
+ * @returns a `var(--color-card-*)` reference; the unknown-colour token when
+ * `name` is not one of the four, which is a bug rather than a state to design
+ * for.
+ */
+export const cardHue = (color: CardColor): string =>
+  CARD_HUE[color.name?.toLowerCase()] ?? "var(--color-card-unknown)";

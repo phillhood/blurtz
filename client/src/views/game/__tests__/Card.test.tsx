@@ -10,8 +10,8 @@ import {
 import CardComponent from "../components/Card";
 import { CardColor, ClientCard, VisibleCard } from "@types";
 
-const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
-const yellow: CardColor = { name: "yellow", code: "#ca8a04", type: "b" };
+const red: CardColor = { name: "red", type: "a" };
+const yellow: CardColor = { name: "yellow", type: "b" };
 
 const visible = (value: number, color: CardColor = red): VisibleCard =>
   ({ id: `card-${value}`, faceUp: true, value, color }) as VisibleCard;

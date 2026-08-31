@@ -18,7 +18,7 @@ vi.mock("@hooks", () => ({
 
 const PlayerArea = (await import("../components/PlayerArea")).default;
 
-const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
+const red: CardColor = { name: "red", type: "a" };
 const card = (value: number): VisibleCard =>
   ({ id: `card-${value}`, faceUp: true, value, color: red }) as VisibleCard;
 

@@ -4,6 +4,7 @@ import { CSS } from "@dnd-kit/utilities";
 import { ClientCard, VisibleCard } from "@types";
 import { GameCard, CardNumber } from "@styles";
 import { DragData } from "./Card";
+import { cardHue } from "@utils/card.utils";
 
 const CARD_HEIGHT = 118;
 const DEFAULT_STACK_OFFSET = Math.floor(CARD_HEIGHT * 0.1); // 10% visible (90% overlap)
@@ -263,10 +264,6 @@ const FannedCard: React.FC<FannedCardProps> = ({
   // sliver the card above leaves exposed.
   const shouldShiftNumber = !isVisualTopCard;
 
-  const getCardColorString = (color: VisibleCard["color"]): string => {
-    return color.code || color.name || "#000000";
-  };
-
   return (
     <div
       ref={setRefs}
@@ -281,8 +278,7 @@ const FannedCard: React.FC<FannedCardProps> = ({
       {...(isDraggable ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
-        color={getCardColorString(card.color)}
-        pattern={{ background: "#1a1a1a" }}
+        color={cardHue(card.color)}
         isDragging={isDragging}
         canDrop={canDropHere}
         borderStyle={card.color.type === "a" ? "solid" : "dashed"}

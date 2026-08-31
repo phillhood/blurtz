@@ -1,14 +1,10 @@
 import React, { HTMLAttributes, CSSProperties, forwardRef } from "react";
 import clsx from "clsx";
-import { CardColor } from "@types";
 
 interface GameCardProps extends HTMLAttributes<HTMLDivElement> {
   color: string;
-  pattern: {
-    background: string;
-    backgroundSize?: string;
-    backgroundPosition?: string;
-  };
+  /** The card face. Defaults to the flat fill; the card back passes a pattern. */
+  background?: string;
   isDragging?: boolean;
   canDrop?: boolean;
   borderStyle?: "solid" | "dashed";
@@ -19,7 +15,7 @@ export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
   (
     {
       color,
-      pattern,
+      background = "var(--color-card-face)",
       isDragging = false,
       canDrop = false,
       borderStyle = "solid",
@@ -34,8 +30,7 @@ export const GameCard = forwardRef<HTMLDivElement, GameCardProps>(
     const borderWidth = 4;
 
     const cardStyle: CSSProperties = {
-      background: pattern.background,
-      backgroundSize: pattern.backgroundSize,
+      background,
       backgroundPosition: "center center",
       borderColor: canDrop ? undefined : color,
       borderStyle: borderStyle,
@@ -109,13 +104,3 @@ export const CardStack = forwardRef<HTMLDivElement, CardStackProps>(
 
 CardStack.displayName = "CardStack";
 
-// Helper functions for card patterns
-export const getCardColorString = (color: CardColor): string => {
-  return color.code || color.name || "#000000";
-};
-
-export const getCardPattern = () => {
-  return {
-    background: "#1a1a1a", // Dark base for both
-  };
-};

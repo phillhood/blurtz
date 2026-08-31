@@ -24,13 +24,12 @@ import {
 
 export const CardColorSchema: z.ZodType<CardColor> = z.object({
   name: z.string(),
-  code: z.string(),
   type: z.enum(["a", "b"]),
 });
 
-// Decks stored before `number`/`ownerId` left `Card` still carry them. Zod
-// strips unknown keys rather than rejecting, so an old row still parses and the
-// next write drops them.
+// Decks stored before `number`/`ownerId` left `Card`, or `code` left
+// `CardColor`, still carry them. Zod strips unknown keys rather than rejecting,
+// so an old row still parses and the next write drops them.
 export const CardSchema: z.ZodType<Card> = z.object({
   id: z.string().uuid(),
   value: z.number().min(1).max(10),

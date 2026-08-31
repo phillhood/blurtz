@@ -1,8 +1,9 @@
 import React from "react";
 import { useDraggable, useDroppable } from "@dnd-kit/core";
 import { CSS } from "@dnd-kit/utilities";
-import { CardColor, ClientCard } from "@types";
+import { ClientCard } from "@types";
 import { GameCard, CardNumber } from "@styles";
+import { cardHue } from "@utils/card.utils";
 
 interface CardComponentProps {
   card: ClientCard;
@@ -66,19 +67,6 @@ const CardComponent: React.FC<CardComponentProps> = ({
     }
   };
 
-  const getCardColorString = (color: CardColor): string => {
-    return color.code || color.name || "#000000";
-  };
-
-  const getCardPattern = (): {
-    background: string;
-    backgroundSize?: string;
-    backgroundPosition?: string;
-  } => {
-    return {
-      background: "#1a1a1a", // Dark base for both
-    };
-  };
 
   const dragStyle: React.CSSProperties = {
     transform: CSS.Transform.toString(transform),
@@ -109,15 +97,13 @@ const CardComponent: React.FC<CardComponentProps> = ({
       >
         <GameCard
           color="#1e3a5f"
-          pattern={{
-            background: `repeating-linear-gradient(
-              45deg,
-              #1e3a5f,
-              #1e3a5f 10px,
-              #2d4a6f 10px,
-              #2d4a6f 20px
-            )`,
-          }}
+          background={`repeating-linear-gradient(
+            45deg,
+            #1e3a5f,
+            #1e3a5f 10px,
+            #2d4a6f 10px,
+            #2d4a6f 20px
+          )`}
           isDragging={isDragging}
           canDrop={false}
           onClick={handleClick}
@@ -151,8 +137,7 @@ const CardComponent: React.FC<CardComponentProps> = ({
       {...(canBeDragged ? { ...listeners, ...attributes } : {})}
     >
       <GameCard
-        color={getCardColorString(card.color)}
-        pattern={getCardPattern()}
+        color={cardHue(card.color)}
         isDragging={isDragging}
         canDrop={canDropHere}
         onClick={handleClick}

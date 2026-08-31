@@ -20,7 +20,7 @@ const hidden: HiddenCard = { id: "hidden:draw-pile-1:0", faceUp: false };
 const visible: VisibleCard = {
   id: "real-card-id",
   value: 7,
-  color: { name: "Red", code: "#DC2626", type: "a" },
+  color: { name: "Red", type: "a" },
   faceUp: true,
 };
 

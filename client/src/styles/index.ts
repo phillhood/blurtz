@@ -37,12 +37,6 @@ export {
   PileCount,
 } from "@components/ui/game/Piles";
 
-export {
-  GameCard,
-  CardNumber,
-  CardStack,
-  getCardColorString,
-  getCardPattern,
-} from "@components/ui/game/GameCard";
+export { GameCard, CardNumber, CardStack } from "@components/ui/game/GameCard";
 
 export { BlurtzButton } from "@components/ui/game/BlurtzButton";

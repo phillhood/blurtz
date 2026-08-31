@@ -6,7 +6,7 @@ import CardPile from "../components/CardPile";
 import FannedCards from "../components/FannedCards";
 import { CardColor, ClientCard, VisibleCard } from "@types";
 
-const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
+const red: CardColor = { name: "red", type: "a" };
 
 const visible = (value: number): VisibleCard =>
   ({ id: `card-${value}`, faceUp: true, value, color: red }) as VisibleCard;

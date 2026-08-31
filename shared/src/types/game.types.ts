@@ -18,11 +18,8 @@ export interface Card {
 
 export interface CardColor {
   name: string;
-  code: string;
   type: "a" | "b";
 }
-
-export type CardColorString = string;
 
 export interface Pile {
   id: string;

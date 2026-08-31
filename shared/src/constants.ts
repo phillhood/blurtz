@@ -1,10 +1,10 @@
 import { CardColor } from "./types";
 
 export const CARD_COLORS: Record<string, CardColor> = {
-  RED: { name: "Red", code: "#DC2626", type: "a" },
-  BLUE: { name: "Blue", code: "#2563EB", type: "a" },
-  YELLOW: { name: "Yellow", code: "#EAB308", type: "b" },
-  GREEN: { name: "Green", code: "#16A34A", type: "b" },
+  RED: { name: "Red", type: "a" },
+  BLUE: { name: "Blue", type: "a" },
+  YELLOW: { name: "Yellow", type: "b" },
+  GREEN: { name: "Green", type: "b" },
 };
 
 export const CARD_VALUES = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];

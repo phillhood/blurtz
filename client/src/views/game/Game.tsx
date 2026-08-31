@@ -23,6 +23,7 @@ import {
 } from "./components";
 import { DragData } from "./components/Card";
 import { usePendingMoveCards } from "./hooks/usePendingMoveCards";
+import { cardHue } from "@utils/card.utils";
 
 const Game: React.FC = () => {
   const { user } = useAuthContext();
@@ -397,8 +398,7 @@ const Game: React.FC = () => {
                   }}
                 >
                   <GameCard
-                    color={card.color.code || card.color.name || "#000000"}
-                    pattern={{ background: "#1a1a1a" }}
+                    color={cardHue(card.color)}
                     isDragging={false}
                     canDrop={false}
                     borderStyle={card.color.type === "a" ? "solid" : "dashed"}

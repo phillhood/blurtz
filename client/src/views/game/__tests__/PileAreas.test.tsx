@@ -5,7 +5,7 @@ import WorkPilesComponent from "../components/WorkPilesComponent";
 import BankPilesArea from "../components/BankPilesArea";
 import { CardColor, ClientCard, Pile, VisibleCard } from "@types";
 
-const red: CardColor = { name: "red", code: "#dc2626", type: "a" };
+const red: CardColor = { name: "red", type: "a" };
 const card = (value: number): VisibleCard =>
   ({ id: `card-${value}`, faceUp: true, value, color: red }) as VisibleCard;
 const faceDown = (id: string): ClientCard => ({ id, faceUp: false }) as ClientCard;
