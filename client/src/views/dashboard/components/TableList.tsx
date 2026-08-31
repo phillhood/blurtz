@@ -13,6 +13,23 @@ interface TableListProps {
   onRefreshGames: () => void;
 }
 
+/**
+ * How close the player is to playing: a live table before one still waiting,
+ * and a table between rounds before one that has not dealt. This ordering is
+ * the page's whole argument, so it does not depend on the API's row order.
+ */
+const REACH: Record<string, number> = {
+  playing: 0,
+  starting: 0,
+  round_over: 1,
+  paused: 2,
+  waiting: 3,
+  finished: 4,
+};
+
+const byReach = (a: Game, b: Game) =>
+  (REACH[a.status] ?? 5) - (REACH[b.status] ?? 5);
+
 const TableList: React.FC<TableListProps> = ({
   activeGames,
   availableGames,
@@ -30,7 +47,7 @@ const TableList: React.FC<TableListProps> = ({
 
   return (
     <div className="blurtz-tables">
-      {activeGames.map((game) => (
+      {[...activeGames].sort(byReach).map((game) => (
         <TableRow key={game.id} game={game} yours onJoin={onJoinGame} />
       ))}
 

@@ -88,6 +88,20 @@ describe("Dashboard", () => {
     expect(screen.getByText("1 table waiting on you")).toBeInTheDocument();
   });
 
+  it("puts a live table above one that has not dealt yet", () => {
+    games.activeGames = [
+      game("g-wait", "Waiting table"),
+      { ...game("g-live", "Live table"), status: "playing" as const },
+    ];
+    renderDashboard();
+
+    const names = screen
+      .getAllByRole("heading", { level: 3 })
+      .map((heading) => heading.textContent);
+
+    expect(names.indexOf("Live table")).toBeLessThan(names.indexOf("Waiting table"));
+  });
+
   it("puts the player's own tables above the open ones", () => {
     renderDashboard();
 
