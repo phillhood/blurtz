@@ -178,3 +178,97 @@
     transition: none;
   }
 }
+
+.blurtz-container {
+  display: flex;
+  flex-direction: column;
+  height: calc(100vh - 80px);
+  background: var(--color-void);
+  color: var(--color-text-primary);
+}
+
+.blurtz-board {
+  container-type: inline-size;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: 92%;
+  max-width: 1400px;
+  margin-inline: auto;
+  flex: 1;
+  min-height: 0;
+}
+
+.blurtz-opponents {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+  padding: 10px 0;
+}
+
+.blurtz-center {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  justify-content: center;
+}
+
+.blurtz-bank {
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+.blurtz-workpiles {
+  display: flex;
+  gap: 10px;
+  justify-content: center;
+}
+
+.blurtz-slot {
+  width: var(--card-w, 88px);
+  height: var(--card-h, 118px);
+  position: relative;
+}
+
+.blurtz-slot--empty {
+  border: 1.5px dashed rgba(255, 255, 255, 0.15);
+  border-radius: var(--radius-xs);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.blurtz-pile-label {
+  text-align: center;
+  white-space: nowrap;
+  font-family: var(--font-body);
+  font-size: 10px;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--color-text-muted);
+}
+
+.blurtz-pile-label--count {
+  padding-top: 8px;
+}
+
+@container (max-width: 999px) {
+  .blurtz-bank {
+    max-width: 480px;
+  }
+}
+
+@container (max-width: 559px) {
+  .blurtz-bank {
+    max-width: 248px;
+  }
+
+  .blurtz-card[data-card-size="play"] {
+    --card-w: 72px;
+    --card-h: 96px;
+  }
+}

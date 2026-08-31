@@ -11,8 +11,7 @@ export const BlurtzPile: React.FC<PileProps> = ({
   return (
     <div
       className={clsx(
-        "w-[88px] h-[118px] border-2 border-dashed border-slate-500 rounded-lg",
-        "flex items-center justify-center bg-slate-700/50 relative",
+"blurtz-slot blurtz-slot--empty",
         className
       )}
       {...props}
@@ -28,7 +27,7 @@ export const WorkPiles: React.FC<PileProps> = ({
   ...props
 }) => {
   return (
-    <div className={clsx("flex gap-4 justify-center", className)} {...props}>
+    <div className={clsx("blurtz-workpiles", className)} {...props}>
       {children}
     </div>
   );
@@ -42,7 +41,7 @@ export const WorkPile: React.FC<PileProps> = ({
   return (
     <div
       className={clsx(
-        "w-[88px] h-[118px] relative",
+"blurtz-slot",
         className
       )}
       {...props}
@@ -60,10 +59,7 @@ export const DrawPile: React.FC<PileProps> = ({
   return (
     <div
       className={clsx(
-        "w-[88px] h-[118px] border-2 border-slate-400 rounded-lg",
-        "flex items-center justify-center bg-slate-600 relative",
-        "cursor-pointer transition-all duration-200",
-        "hover:bg-slate-500 hover:-translate-y-0.5",
+"blurtz-slot blurtz-slot--empty cursor-pointer",
         className
       )}
       {...props}
@@ -81,7 +77,7 @@ export const PileLabel: React.FC<HTMLAttributes<HTMLDivElement>> = ({
   return (
     <div
       className={clsx(
-        "text-center text-lg font-['Germania_One'] text-slate-400 whitespace-nowrap",
+"blurtz-pile-label",
         className
       )}
       {...props}
@@ -99,7 +95,7 @@ export const PileCount: React.FC<HTMLAttributes<HTMLDivElement>> = ({
   return (
     <div
       className={clsx(
-        "text-center text-lg font-['Germania_One'] text-slate-400 whitespace-nowrap pt-2",
+"blurtz-pile-label blurtz-pile-label--count",
         className
       )}
       {...props}
