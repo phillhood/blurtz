@@ -1,15 +1,8 @@
 import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import { useAuthContext } from "@hooks";
-import {
-  PageContainer,
-  Card,
-  Title,
-  Form,
-  Input,
-  Button,
-  ErrorMessage,
-} from "@styles";
+import { Form, Input, Button, ErrorMessage } from "@styles";
+import AuthLayout from "./AuthLayout";
 
 const Login: React.FC = () => {
   const [username, setUsername] = useState("");
@@ -33,56 +26,47 @@ const Login: React.FC = () => {
   };
 
   return (
-    <PageContainer>
-      <div style={{ maxWidth: "400px", margin: "0 auto", marginTop: "10vh" }}>
-        <Title className="germania-font">Blurtz!</Title>
-        <Card>
-          <h2
-            style={{
-              textAlign: "center",
-              marginBottom: "24px",
-              color: "var(--color-text-primary)",
-            }}
-          >
-            Welcome Back
-          </h2>
+    <AuthLayout title="Welcome back" subtitle="Sign in to pick up your table.">
+      {error && <ErrorMessage>{error}</ErrorMessage>}
 
-          {error && <ErrorMessage>{error}</ErrorMessage>}
+      <Form onSubmit={handleSubmit}>
+        <div className="blurtz-field">
+          <label className="blurtz-field__label" htmlFor="username">
+            Username
+          </label>
+          <Input
+            id="username"
+            type="text"
+            value={username}
+            onChange={(e) => setUsername(e.target.value)}
+            autoComplete="username"
+            required
+          />
+        </div>
 
-          <Form onSubmit={handleSubmit}>
-            <Input
-              type="text"
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              required
-            />
-            <Input
-              type="password"
-              placeholder="Password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-            />
-            <Button type="submit" variant="primary" disabled={loading}>
-              {loading ? "Signing in..." : "Sign In"}
-            </Button>
-          </Form>
+        <div className="blurtz-field">
+          <label className="blurtz-field__label" htmlFor="password">
+            Password
+          </label>
+          <Input
+            id="password"
+            type="password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+            autoComplete="current-password"
+            required
+          />
+        </div>
 
-          <p
-            style={{ textAlign: "center", marginTop: "24px", color: "var(--color-text-secondary)" }}
-          >
-            Don't have an account?{" "}
-            <Link
-              to="/register"
-              style={{ color: "#3b82f6", textDecoration: "none" }}
-            >
-              Sign up
-            </Link>
-          </p>
-        </Card>
-      </div>
-    </PageContainer>
+        <Button type="submit" variant="primary" disabled={loading}>
+          {loading ? "Signing in..." : "Sign In"}
+        </Button>
+      </Form>
+
+      <p className="blurtz-auth__foot">
+        Don't have an account? <Link to="/register">Sign up</Link>
+      </p>
+    </AuthLayout>
   );
 };
 

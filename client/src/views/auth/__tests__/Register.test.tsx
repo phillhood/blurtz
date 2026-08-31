@@ -25,9 +25,9 @@ const setup = () => {
   );
   return {
     user: userEvent.setup(),
-    username: screen.getByPlaceholderText("Username"),
-    password: screen.getByPlaceholderText("Password"),
-    confirm: screen.getByPlaceholderText("Confirm Password"),
+    username: screen.getByLabelText("Username"),
+    password: screen.getByLabelText("Password"),
+    confirm: screen.getByLabelText("Confirm Password"),
     submit: screen.getByRole("button", { name: "Create Account" }),
   };
 };
@@ -130,8 +130,8 @@ describe("Register", () => {
     await user.click(submit);
 
     await screen.findByText("User already exists");
-    expect(screen.getByPlaceholderText("Username")).toHaveValue("taken");
-    expect(screen.getByPlaceholderText("Password")).toHaveValue("password123");
+    expect(screen.getByLabelText("Username")).toHaveValue("taken");
+    expect(screen.getByLabelText("Password")).toHaveValue("password123");
   });
 
   it("re-enables the form after a refusal so the user can try again", async () => {
