@@ -1596,7 +1596,20 @@ describe("GameService", () => {
       expect(listings[0]).toMatchObject({ id: "g1", currentPlayers: 2 });
     });
 
-    it("tells a browsing player what they would be joining", async () => {
+    it("does not offer a player a table they are already sitting at", async () => {
+    (prismaService.game.findMany as jest.Mock).mockResolvedValue([]);
+    (prismaService.user.findMany as jest.Mock).mockResolvedValue([]);
+
+    await service.getAvailableGames("u-me");
+
+    expect((prismaService.game.findMany as jest.Mock).mock.calls[0][0].where).toEqual(
+      expect.objectContaining({
+        players: { none: { userId: "u-me" } },
+      })
+    );
+  });
+
+  it("tells a browsing player what they would be joining", async () => {
       (prismaService.game.findMany as jest.Mock).mockResolvedValue([
         {
           id: "g1",

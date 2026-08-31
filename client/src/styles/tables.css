@@ -99,6 +99,7 @@
 }
 
 .blurtz-row__name {
+  margin: 0;
   font-family: var(--font-display);
   font-weight: 600;
   font-size: 15px;

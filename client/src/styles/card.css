@@ -562,3 +562,9 @@
     animation: none;
   }
 }
+
+.blurtz-skinpreview {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}

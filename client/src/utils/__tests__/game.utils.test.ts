@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { getGameStatusTitle, getStatusColor, formatDate } from "../game.utils";
+import {
+  getGameStatusTitle,
+  getStatusColor,
+  formatDate,
+  formatAge,
+} from "../game.utils";
 
 /**
  * The display helpers behind the one line of text that announces the state of
@@ -121,5 +126,27 @@ describe("formatDate", () => {
   it("includes a 12-hour time", () => {
     expect(formatDate(new Date(2024, 0, 1, 14, 30))).toMatch(/2:30\s?PM/);
     expect(formatDate(new Date(2024, 0, 1, 9, 5))).toMatch(/9:05\s?AM/);
+  });
+});
+
+describe("formatAge", () => {
+  const now = new Date("2026-08-31T12:00:00Z");
+
+  it("reads a fresh table as just now", () => {
+    expect(formatAge(new Date("2026-08-31T11:59:30Z"), now)).toBe("just now");
+  });
+
+  it("counts minutes, then hours, then days", () => {
+    expect(formatAge(new Date("2026-08-31T11:56:00Z"), now)).toBe("4m");
+    expect(formatAge(new Date("2026-08-31T09:00:00Z"), now)).toBe("3h");
+    expect(formatAge(new Date("2026-08-29T12:00:00Z"), now)).toBe("2d");
+  });
+
+  it("stops counting past a week", () => {
+    expect(formatAge(new Date("2026-08-01T12:00:00Z"), now)).toBe("7d+");
+  });
+
+  it("never reports a table from the future as negative", () => {
+    expect(formatAge(new Date("2026-08-31T12:05:00Z"), now)).toBe("just now");
   });
 });

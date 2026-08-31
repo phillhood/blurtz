@@ -15,7 +15,7 @@ test("the chosen card skin is stored on the account and survives a reload", asyn
   // with no stored preference. Seeding once is what a real session looks like.
   await page.goto("/login");
   await page.evaluate((token) => localStorage.setItem("token", token), user.token);
-  await page.goto("/dashboard");
+  await page.goto("/profile");
 
   const written = page.waitForResponse(
     (r) =>
@@ -38,7 +38,7 @@ test("one player's skin never reaches another player's board", async ({
   const seated = await seatPlayers(browser, { playerCount: 2 });
   const page = seated.players[0].page;
 
-  await page.goto("/dashboard");
+  await page.goto("/profile");
   const written = page.waitForResponse(
     (r) =>
       r.url().includes("/api/auth/preferences") && r.request().method() === "PATCH"

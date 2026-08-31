@@ -64,6 +64,27 @@ export const formatDate = (date: string | Date): string => {
   return formatted.replace(/(\d+),/, `$1${ordinalSuffix},`);
 };
 
+/**
+ * How long ago, at lobby-row density: `just now`, `4m`, `3h`, `2d`.
+ * A table older than a week reads as `7d+` rather than a date - the only
+ * question a row answers is whether the table is still warm.
+ */
+export const formatAge = (date: string | Date, now: Date = new Date()): string => {
+  const seconds = Math.max(0, (now.getTime() - new Date(date).getTime()) / 1000);
+
+  if (seconds < 60) {
+    return "just now";
+  }
+  if (seconds < 3600) {
+    return `${Math.floor(seconds / 60)}m`;
+  }
+  if (seconds < 86400) {
+    return `${Math.floor(seconds / 3600)}h`;
+  }
+  const days = Math.floor(seconds / 86400);
+  return days > 7 ? "7d+" : `${days}d`;
+};
+
 const getOrdinalSuffix = (day: number): string => {
   if (day >= 11 && day <= 13) {
     return "th";

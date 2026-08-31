@@ -1,7 +1,6 @@
 import React from "react";
 import { EmptyState } from "@shychedelic/voidglass-react";
 import { Game, JoinGameRequest } from "@types";
-import { Button } from "@styles";
 import { LoadingSpinner } from "@components/ui";
 import TableRow from "./TableRow";
 
@@ -10,8 +9,6 @@ interface TableListProps {
   availableGames: Game[];
   loading: boolean;
   onJoinGame: (payload: JoinGameRequest) => void;
-  onJoinGameByCode: () => void;
-  onCreateGame: () => void;
   onRefreshGames: () => void;
 }
 
@@ -20,8 +17,6 @@ const TableList: React.FC<TableListProps> = ({
   availableGames,
   loading,
   onJoinGame,
-  onJoinGameByCode,
-  onCreateGame,
   onRefreshGames,
 }) => {
   if (loading) {
@@ -43,17 +38,7 @@ const TableList: React.FC<TableListProps> = ({
       {availableGames.length === 0 ? (
         <EmptyState
           title="No open tables"
-          description="Start one and share the code, or join by a code someone sent you."
-          action={
-            <div className="blurtz-tables__emptyactions">
-              <Button variant="tertiary" onClick={onJoinGameByCode}>
-                Join by code
-              </Button>
-              <Button variant="primary" onClick={onCreateGame}>
-                New table
-              </Button>
-            </div>
-          }
+          description="Start one from the top of the page, or join by a code someone sent you."
         />
       ) : (
         availableGames.map((game) => (

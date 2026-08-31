@@ -111,8 +111,6 @@ const Dashboard: React.FC = () => {
         availableGames={availableGames}
         loading={loading}
         onJoinGame={handleJoinGame}
-        onJoinGameByCode={handleOpenJoinModal}
-        onCreateGame={handleOpenCreateModal}
         onRefreshGames={handleRefreshGames}
       />
 

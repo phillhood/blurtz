@@ -3,7 +3,7 @@ import clsx from "clsx";
 import { Game, JoinGameRequest } from "@types";
 import { Button } from "@styles";
 import { SeatIndicator, TableStatus } from "@components/ui";
-import { formatDate } from "@utils";
+import { formatAge } from "@utils";
 
 interface TableRowProps {
   game: Game;
@@ -22,7 +22,7 @@ const TableRow: React.FC<TableRowProps> = ({ game, yours = false, onJoin }) => {
   return (
     <div className={clsx("blurtz-row", yours && "blurtz-row--mine", live && "blurtz-row--live")}>
       <div className="blurtz-row__main">
-        <div className="blurtz-row__name">{game.name}</div>
+        <h3 className="blurtz-row__name">{game.name}</h3>
         <div className="blurtz-row__meta">
           <TableStatus
             status={game.status}
@@ -38,7 +38,7 @@ const TableRow: React.FC<TableRowProps> = ({ game, yours = false, onJoin }) => {
             <span>{`Leader ${game.leaderScore}`}</span>
           )}
           {!yours && <span>{`First to ${game.targetScore}`}</span>}
-          {!yours && <span>{formatDate(game.createdAt)}</span>}
+          {!yours && <span>{formatAge(game.createdAt)}</span>}
           {!yours && game.hostUsername && <span>{game.hostUsername}</span>}
         </div>
       </div>

@@ -43,9 +43,9 @@ test.describe("Game lobby", () => {
 
     const listing = listingCard(joinerPage, game.name);
     await expect(listing).toBeVisible();
-    await expect(listing.getByText("Players: 1/2")).toBeVisible();
+    await expect(listing.getByText("1 of 2 seats taken")).toBeVisible();
 
-    await listing.getByRole("button", { name: "Join Game" }).click();
+    await listing.getByRole("button", { name: "Join", exact: true }).click();
 
     await expect(joinerPage).toHaveURL(new RegExp(`/game/${game.id}$`));
     // The host's page is told about the arrival over the socket, without a
@@ -95,7 +95,7 @@ test.describe("Game lobby", () => {
 
     // Refused: still on the dashboard, no game entered.
     await expect(page).toHaveURL(/\/dashboard$/);
-    await expect(page.getByRole("heading", { name: "Join Game by Code" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Join by code" })).toBeVisible();
   });
 
   /**
@@ -147,11 +147,11 @@ test.describe("Game lobby", () => {
     await authenticate(page, user);
 
     await page.goto("/dashboard");
-    await page.getByRole("button", { name: "New Game" }).click();
+    await page.getByRole("button", { name: "New table" }).click();
     await page.getByPlaceholder("Enter game name...").fill("e2e_never_created");
     await page.getByRole("button", { name: "Cancel" }).click();
 
-    await expect(page.getByRole("heading", { name: "Create New Game" })).toBeHidden();
+    await expect(page.getByRole("heading", { name: "New table" })).toBeHidden();
     await expect(page).toHaveURL(/\/dashboard$/);
     await expect(page.getByRole("heading", { name: "e2e_never_created" })).toBeHidden();
   });

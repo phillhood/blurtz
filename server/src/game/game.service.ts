@@ -187,9 +187,13 @@ export class GameService {
     return Object.fromEntries(users.map((u) => [u.id, u.username]));
   }
 
-  async getAvailableGames(): Promise<GameListing[]> {
+  async getAvailableGames(userId?: string): Promise<GameListing[]> {
     const games = await this.prisma.game.findMany({
-      where: { status: "waiting", isPrivate: false },
+      where: {
+        status: "waiting",
+        isPrivate: false,
+        ...(userId ? { players: { none: { userId } } } : {}),
+      },
       select: {
         id: true,
         name: true,

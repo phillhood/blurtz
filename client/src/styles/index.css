@@ -1,5 +1,10 @@
 @import "tailwindcss";
 
+/* Layered deliberately. Tailwind's preflight zeroes button padding, radius and
+   background; unlayered, whichever file loads last wins and one of the two is
+   always broken. `components` ranks above preflight and below utilities. */
+@import "@shychedelic/voidglass-react/style.css" layer(components);
+
 @theme {
   --color-void: #0a0a0f;
   --color-void-light: #12121a;

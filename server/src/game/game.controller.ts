@@ -32,8 +32,8 @@ export class GameController {
   @Get("listings")
   @ApiOperation({ summary: "Get available games to join" })
   @SwaggerResponse({ status: 200, description: "List of available games" })
-  async getGames(): Promise<ApiResponse> {
-    const games = await this.gameService.getAvailableGames();
+  async getGames(@Request() req): Promise<ApiResponse> {
+    const games = await this.gameService.getAvailableGames(req.user.sub);
     return {
       success: true,
       data: games,

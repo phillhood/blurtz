@@ -15,11 +15,11 @@ test.describe("Authentication", () => {
     const username = uniqueName("authuser");
 
     await page.goto("/register");
-    await expect(page.getByRole("heading", { name: "Create Account" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
 
-    await page.getByPlaceholder("Username").fill(username);
-    await page.getByPlaceholder("Password", { exact: true }).fill(E2E_PASSWORD);
-    await page.getByPlaceholder("Confirm Password").fill(E2E_PASSWORD);
+    await page.getByLabel("Username").fill(username);
+    await page.getByLabel("Password", { exact: true }).fill(E2E_PASSWORD);
+    await page.getByLabel("Confirm Password").fill(E2E_PASSWORD);
     await page.getByRole("button", { name: "Create Account" }).click();
 
     // Registration signs you in: the header only renders for a logged-in user.
@@ -34,8 +34,8 @@ test.describe("Authentication", () => {
     // and the socket handshake read.
     expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
 
-    await page.getByPlaceholder("Username").fill(username);
-    await page.getByPlaceholder("Password", { exact: true }).fill(E2E_PASSWORD);
+    await page.getByLabel("Username").fill(username);
+    await page.getByLabel("Password", { exact: true }).fill(E2E_PASSWORD);
     await page.getByRole("button", { name: "Sign In" }).click();
 
     await expect(page).toHaveURL(/\/dashboard$/);
@@ -47,8 +47,8 @@ test.describe("Authentication", () => {
     const user = await createUser("wrongpass");
 
     await page.goto("/login");
-    await page.getByPlaceholder("Username").fill(user.username);
-    await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
+    await page.getByLabel("Username").fill(user.username);
+    await page.getByLabel("Password", { exact: true }).fill("definitely-not-it");
 
     // `/api/auth/login` is throttled to 1/sec per IP and the test above just
     // posted one. Without this wait the API answers 429 and the assertions pass
@@ -69,7 +69,7 @@ test.describe("Authentication", () => {
     const response = await refused;
     expect(response.status(), await response.text()).toBe(401);
 
-    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     await expect(page).toHaveURL(/\/login$/);
     expect(await page.evaluate(() => localStorage.getItem("token"))).toBeNull();
   });
@@ -79,8 +79,8 @@ test.describe("Authentication", () => {
     const user = await createUser("noerror");
 
     await page.goto("/login");
-    await page.getByPlaceholder("Username").fill(user.username);
-    await page.getByPlaceholder("Password", { exact: true }).fill("definitely-not-it");
+    await page.getByLabel("Username").fill(user.username);
+    await page.getByLabel("Password", { exact: true }).fill("definitely-not-it");
 
     // Throttler window, as above. A 429 renders as an error too, so without
     // this wait the assertion below goes green on a login that was never
@@ -102,19 +102,19 @@ test.describe("Authentication", () => {
     await expect(page.getByText("Invalid credentials")).toBeVisible();
     // The form survived the round trip: a retry is a retype of the password and
     // not of everything.
-    await expect(page.getByPlaceholder("Username")).toHaveValue(user.username);
+    await expect(page.getByLabel("Username")).toHaveValue(user.username);
   });
 
   test("the login form links to register and back", async ({ page }) => {
     await page.goto("/login");
-    await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
-    await expect(page.getByPlaceholder("Username")).toBeVisible();
-    await expect(page.getByPlaceholder("Password", { exact: true })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
+    await expect(page.getByLabel("Username")).toBeVisible();
+    await expect(page.getByLabel("Password", { exact: true })).toBeVisible();
     await expect(page.getByRole("button", { name: "Sign In" })).toBeVisible();
 
     await page.getByRole("link", { name: "Sign up" }).click();
     await expect(page).toHaveURL(/\/register$/);
-    await expect(page.getByRole("heading", { name: "Create Account" })).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Create account" })).toBeVisible();
 
     await page.getByRole("link", { name: "Sign in" }).click();
     await expect(page).toHaveURL(/\/login$/);
@@ -124,7 +124,7 @@ test.describe("Authentication", () => {
     test("the dashboard is not reachable signed out", async ({ page }) => {
       await page.goto("/dashboard");
       await expect(page).toHaveURL(/\/login$/);
-      await expect(page.getByRole("heading", { name: "Welcome Back" })).toBeVisible();
+      await expect(page.getByRole("heading", { name: "Welcome back" })).toBeVisible();
     });
 
     test("a game page is not reachable signed out", async ({ page }) => {

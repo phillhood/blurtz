@@ -1,8 +1,16 @@
 import React from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthContext, useUserStats } from "@hooks";
-import { PageContainer, Card, Button } from "@styles";
+import { PageContainer, Card, Button, GameCard, CardNumber } from "@styles";
+import { CARD_HUES } from "@styles/tokens";
 import { CardSkinToggle } from "@components/ui/CardSkinToggle";
+
+const PREVIEW: Array<{ color: string; type: "a" | "b"; value: number }> = [
+  { color: "red", type: "a", value: 7 },
+  { color: "blue", type: "a", value: 4 },
+  { color: "yellow", type: "b", value: 9 },
+  { color: "green", type: "b", value: 2 },
+];
 
 const Profile: React.FC = () => {
   const { user } = useAuthContext();
@@ -41,6 +49,19 @@ const Profile: React.FC = () => {
       <Card style={{ marginTop: "16px" }}>
         <div className="blurtz-tables__label" style={{ marginTop: 0 }}>
           Card skin
+        </div>
+        <div className="blurtz-skinpreview" aria-hidden="true">
+          {PREVIEW.map(({ color, type, value }) => (
+            <GameCard
+              key={color}
+              hue={CARD_HUES[color]}
+              cardType={type}
+              size="foundation"
+              disableHoverEffect
+            >
+              <CardNumber>{value}</CardNumber>
+            </GameCard>
+          ))}
         </div>
         <CardSkinToggle />
       </Card>

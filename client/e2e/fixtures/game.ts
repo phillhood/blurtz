@@ -54,9 +54,9 @@ export async function createGameViaUi(
   await page.goto("/dashboard");
   await connected;
 
-  await page.getByRole("button", { name: "New Game" }).click();
+  await page.getByRole("button", { name: "New table" }).click();
 
-  await expect(page.getByRole("heading", { name: "Create New Game" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "New table" })).toBeVisible();
   await page.getByPlaceholder("Enter game name...").fill(name);
 
   if (options.maxPlayers !== undefined) {
@@ -68,9 +68,7 @@ export async function createGameViaUi(
   }
 
   if (options.isPrivate) {
-    // Located by role alone because it is the only checkbox in the modal: it
-    // has no accessible name to match on.
-    await page.getByRole("checkbox").check();
+    await page.getByRole("switch", { name: "Joinable by code only" }).click();
   }
 
   // Watch the create call itself: the Dashboard navigates `if (game?.id)` and
@@ -80,7 +78,7 @@ export async function createGameViaUi(
     (response) =>
       response.url().endsWith("/api/game") && response.request().method() === "POST"
   );
-  await page.getByRole("button", { name: "Create Game" }).click();
+  await page.getByRole("button", { name: "Create and deal" }).click();
   const response = await created;
   expect(response.status(), `POST /api/game: ${await response.text()}`).toBe(201);
 
@@ -108,19 +106,23 @@ async function setMaxPlayersViaUi(page: Page, maxPlayers: number): Promise<void>
   await expect(page.getByText(`${maxPlayers} players`)).toBeVisible();
 }
 
-/** The scores the Target Score select offers without typing one in. */
-const TARGET_SCORE_PRESETS = [25, 100, 150];
+/** The scores the target-score control offers without typing one in. */
+const TARGET_SCORE_PRESETS: Record<number, string> = {
+  25: "Quick",
+  100: "Standard",
+  150: "Long",
+};
 
 async function setTargetScoreViaUi(page: Page, targetScore: number): Promise<void> {
-  const select = page.getByLabel("Target Score", { exact: true });
+  const preset = TARGET_SCORE_PRESETS[targetScore];
 
-  if (TARGET_SCORE_PRESETS.includes(targetScore)) {
-    await select.selectOption(String(targetScore));
+  if (preset) {
+    await page.getByRole("radio", { name: new RegExp(preset) }).click();
     return;
   }
 
-  await select.selectOption("custom");
-  await page.getByLabel("Custom Target Score").fill(String(targetScore));
+  await page.getByRole("radio", { name: "Custom" }).click();
+  await page.getByLabel("Custom target score").fill(String(targetScore));
 }
 
 /** The invite code, as shown in the game header. */
@@ -130,13 +132,13 @@ export function gameCode(page: Page) {
 
 export async function joinByCodeViaUi(page: Page, alias: string): Promise<void> {
   await page.goto("/dashboard");
-  await page.getByRole("button", { name: "Join by Code" }).click();
-  await expect(page.getByRole("heading", { name: "Join Game by Code" })).toBeVisible();
+  await page.getByRole("button", { name: "Join by code" }).click();
+  await expect(page.getByRole("heading", { name: "Join by code" })).toBeVisible();
   await page.getByPlaceholder("e.g., happy-blue-lemur").fill(alias);
-  // Scoped to the dialog's form: every game in the listings behind it has a
-  // "Join Game" button too, so an unscoped locator matches a dozen things and
+  // Scoped to the dialog's form: every table in the listings behind it has a
+  // "Join" button too, so an unscoped locator matches a dozen things and
   // clicks whichever the DOM happened to put first.
-  await joinDialog(page).getByRole("button", { name: "Join Game" }).click();
+  await joinDialog(page).getByRole("button", { name: "Join", exact: true }).click();
 }
 
 /** The join-by-code dialog, identified by the only input it contains. */
